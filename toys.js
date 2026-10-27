@@ -2083,6 +2083,7 @@
     ...(typeof FROG_PART2 !== "undefined" ? FROG_PART2 : []),
     ...(typeof FROG_PART3 !== "undefined" ? FROG_PART3 : []),
     ...(typeof FROG_PART4 !== "undefined" ? FROG_PART4 : []),
+    ...(typeof FROG_PART5 !== "undefined" ? FROG_PART5 : []),
   ];
   $("frogHint").textContent = "共 " + FROG_STICKERS.length + " 张奶蛙表情包，点一下就能下载，发群里用。";
   const frogGrid = $("frogGrid");

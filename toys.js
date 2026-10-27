@@ -2530,5 +2530,257 @@
   });
   memeLoadAndDraw();
 
+  /* ---------- 37. 贪吃蛇 ---------- */
+  const SNAKE_KEY = "dorm-toybox-snake-best-v1";
+  const SNAKE_GRID = 16, SNAKE_CELL = 20; // 画布 320x320，16x16 格
+  let snakeBody = [], snakeDir = { x: 1, y: 0 }, snakeNextDir = null, snakeFood = null, snakeScore = 0, snakeTimer = null, snakeState = "idle", snakeFoodCount = 0;
+  function snakeBest() { try { return parseInt(localStorage.getItem(SNAKE_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
+  function snakeSaveBest() { try { if (snakeScore > snakeBest()) localStorage.setItem(SNAKE_KEY, String(snakeScore)); } catch (e) { /* 忽略 */ } }
+  const snakeCanvas = $("snakeCanvas");
+  const snakeCtx = snakeCanvas.getContext ? snakeCanvas.getContext("2d") : null;
+  function snakeDraw() {
+    if (!snakeCtx) return;
+    snakeCtx.fillStyle = "#10101f";
+    snakeCtx.fillRect(0, 0, 320, 320);
+    if (snakeFood) { snakeCtx.fillStyle = "#E5484D"; snakeCtx.fillRect(snakeFood.x * SNAKE_CELL + 2, snakeFood.y * SNAKE_CELL + 2, SNAKE_CELL - 4, SNAKE_CELL - 4); }
+    snakeBody.forEach((s, i) => {
+      snakeCtx.fillStyle = i === 0 ? "#7CFC9A" : "#30A46C";
+      snakeCtx.fillRect(s.x * SNAKE_CELL + 1, s.y * SNAKE_CELL + 1, SNAKE_CELL - 2, SNAKE_CELL - 2);
+    });
+  }
+  function snakePlaceFood() {
+    snakeFoodCount++;
+    if (snakeFoodCount === 1) { snakeFood = { x: 11, y: 8 }; return; } // 第一颗固定在正前方，上手先吃一口
+    if (snakeFoodCount === 2) { snakeFood = { x: 8, y: 11 }; return; } // 第二颗固定在正下方，转向后能吃到
+    let p;
+    do { p = { x: Math.floor(Math.random() * SNAKE_GRID), y: Math.floor(Math.random() * SNAKE_GRID) }; }
+    while (snakeBody.some((s) => s.x === p.x && s.y === p.y));
+    snakeFood = p;
+  }
+  function snakeReset() {
+    snakeBody = [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }];
+    snakeDir = { x: 1, y: 0 }; snakeNextDir = null; snakeScore = 0; snakeFoodCount = 0;
+    snakePlaceFood();
+    snakeUpdateScore();
+    snakeDraw();
+  }
+  function snakeUpdateScore() { $("snakeScore").textContent = "得分 " + snakeScore + " · 最高 " + Math.max(snakeBest(), snakeScore); }
+  function snakeStep() {
+    if (snakeNextDir) { snakeDir = snakeNextDir; snakeNextDir = null; }
+    const head = { x: snakeBody[0].x + snakeDir.x, y: snakeBody[0].y + snakeDir.y };
+    if (head.x < 0 || head.y < 0 || head.x >= SNAKE_GRID || head.y >= SNAKE_GRID || snakeBody.some((s) => s.x === head.x && s.y === head.y)) { snakeGameOver(); return; }
+    snakeBody.unshift(head);
+    if (snakeFood && head.x === snakeFood.x && head.y === snakeFood.y) {
+      snakeScore++;
+      snakeUpdateScore();
+      snakePlaceFood();
+      // 吃得越多越快，最快 80ms 一步
+      if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = setInterval(snakeStep, Math.max(80, 150 - snakeScore * 5)); }
+    } else {
+      snakeBody.pop();
+    }
+    snakeDraw();
+  }
+  function snakeGameOver() {
+    if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = null; }
+    snakeState = "over";
+    snakeSaveBest();
+    snakeUpdateScore();
+    $("snakeStatus").textContent = "💥 游戏结束！得分 " + snakeScore + "，最高 " + Math.max(snakeBest(), snakeScore) + "。点重新开始再来一局。";
+    $("snakeStartBtn").textContent = "开始 ▶";
+  }
+  function snakeStart() {
+    if (snakeState === "over" || snakeState === "idle") snakeReset();
+    if (snakeTimer) return;
+    snakeState = "running";
+    snakeTimer = setInterval(snakeStep, Math.max(80, 150 - snakeScore * 5));
+    $("snakeStatus").textContent = "游戏中，吃红点长一节，别撞墙。";
+    $("snakeStartBtn").textContent = "暂停 ⏸";
+  }
+  function snakePause() {
+    if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = null; }
+    if (snakeState === "running") { snakeState = "paused"; $("snakeStatus").textContent = "已暂停，点开始继续。"; $("snakeStartBtn").textContent = "继续 ▶"; }
+  }
+  $("snakeStartBtn").addEventListener("click", () => { if (snakeState === "running") snakePause(); else snakeStart(); });
+  $("snakeRestartBtn").addEventListener("click", () => { if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = null; } snakeState = "idle"; snakeReset(); $("snakeStatus").textContent = "点开始，蛇就动起来。"; $("snakeStartBtn").textContent = "开始 ▶"; });
+  function snakeTurn(dx, dy) {
+    if (snakeDir.x === -dx && snakeDir.y === -dy) return; // 不能直接掉头
+    snakeNextDir = { x: dx, y: dy };
+  }
+  $("snakeDirUp").addEventListener("click", () => snakeTurn(0, -1));
+  $("snakeDirDown").addEventListener("click", () => snakeTurn(0, 1));
+  $("snakeDirLeft").addEventListener("click", () => snakeTurn(-1, 0));
+  $("snakeDirRight").addEventListener("click", () => snakeTurn(1, 0));
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-snake").classList.contains("hidden")) return;
+      const k = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+      if (k) { snakeTurn(k[0], k[1]); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  // 手指在画布上滑动换方向
+  let snakeSwipe = null;
+  snakeCanvas.addEventListener("pointerdown", (e) => { snakeSwipe = { x: e.offsetX, y: e.offsetY }; });
+  snakeCanvas.addEventListener("pointerup", (e) => {
+    if (!snakeSwipe) return;
+    const dx = e.offsetX - snakeSwipe.x, dy = e.offsetY - snakeSwipe.y;
+    snakeSwipe = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) snakeTurn(dx > 0 ? 1 : -1, 0); else snakeTurn(0, dy > 0 ? 1 : -1);
+  });
+  snakeReset();
+  toyLeaveCleanup.snake = () => { snakePause(); }; // 退出就停，不然切走还在走
+
+  /* ---------- 38. 刮刮乐 ---------- */
+  const SCRATCH_PRIZES = [
+    { text: "免一次值日 🧹", weight: 3 },
+    { text: "奶茶一杯 🧋", weight: 3 },
+    { text: "帮取快递一次 📦", weight: 3 },
+    { text: "免一次打水 🪣", weight: 2 },
+    { text: "零食一包 🍪", weight: 3 },
+    { text: "帮占座一次 🪑", weight: 2 },
+    { text: "再来一次 🎰", weight: 2 },
+    { text: "谢谢参与 🙏", weight: 4 },
+  ];
+  const SCRATCH_W = 320, SCRATCH_H = 200, SCRATCH_COLS = 10, SCRATCH_ROWS = 6;
+  const SCRATCH_CELL_W = SCRATCH_W / SCRATCH_COLS, SCRATCH_CELL_H = SCRATCH_H / SCRATCH_ROWS;
+  let scratchGrid = [], scratchRevealed = false, scratchDrawing = false;
+  const scratchCanvas = $("scratchCanvas");
+  const scratchCtx = scratchCanvas.getContext ? scratchCanvas.getContext("2d") : null;
+  function scratchPickPrize() {
+    const bag = [];
+    SCRATCH_PRIZES.forEach((p) => { for (let i = 0; i < p.weight; i++) bag.push(p.text); });
+    return bag[Math.floor(Math.random() * bag.length)];
+  }
+  function scratchCover() {
+    scratchGrid = [];
+    for (let i = 0; i < SCRATCH_COLS * SCRATCH_ROWS; i++) scratchGrid.push(false);
+    scratchRevealed = false;
+    $("scratchPrize").textContent = "🎁 " + scratchPickPrize();
+    $("scratchResult").textContent = "刮开看看今天的手气。";
+    if (!scratchCtx) return;
+    scratchCtx.globalCompositeOperation = "source-over";
+    scratchCtx.fillStyle = "#c0c0c8";
+    scratchCtx.fillRect(0, 0, SCRATCH_W, SCRATCH_H);
+    scratchCtx.fillStyle = "#8a8a94";
+    scratchCtx.font = "bold 20px sans-serif";
+    scratchCtx.textAlign = "center";
+    scratchCtx.fillText("刮 开 看 看", SCRATCH_W / 2, SCRATCH_H / 2 + 7);
+  }
+  function scratchAt(e) {
+    if (!scratchCtx || scratchRevealed) return;
+    const scale = (scratchCanvas.clientWidth > 0) ? SCRATCH_W / scratchCanvas.clientWidth : 1;
+    const x = e.offsetX * scale, y = e.offsetY * scale;
+    scratchCtx.globalCompositeOperation = "destination-out";
+    scratchCtx.beginPath();
+    scratchCtx.arc(x, y, 22, 0, Math.PI * 2);
+    scratchCtx.fill();
+    const col = Math.floor(x / SCRATCH_CELL_W), row = Math.floor(y / SCRATCH_CELL_H);
+    if (col >= 0 && col < SCRATCH_COLS && row >= 0 && row < SCRATCH_ROWS) scratchGrid[row * SCRATCH_COLS + col] = true;
+    const done = scratchGrid.filter(Boolean).length;
+    if (done >= SCRATCH_COLS * SCRATCH_ROWS / 2) scratchReveal();
+  }
+  function scratchReveal() {
+    scratchRevealed = true;
+    if (scratchCtx) scratchCtx.clearRect(0, 0, SCRATCH_W, SCRATCH_H);
+    $("scratchResult").textContent = "🎉 刮出：" + $("scratchPrize").textContent.replace("🎁 ", "") + "！";
+  }
+  scratchCanvas.addEventListener("pointerdown", (e) => { scratchDrawing = true; scratchAt(e); });
+  scratchCanvas.addEventListener("pointermove", (e) => { if (scratchDrawing) scratchAt(e); });
+  scratchCanvas.addEventListener("pointerup", () => { scratchDrawing = false; });
+  scratchCanvas.addEventListener("pointerleave", () => { scratchDrawing = false; });
+  $("scratchAgainBtn").addEventListener("click", scratchCover);
+  scratchCover();
+
+  /* ---------- 39. 倒计时 ---------- */
+  const CD_KEY = "dorm-toybox-countdown-v1";
+  let cdEvents = [];
+  try { cdEvents = JSON.parse(localStorage.getItem(CD_KEY) || "[]") || []; } catch (e) { cdEvents = []; }
+  function cdSave() { try { localStorage.setItem(CD_KEY, JSON.stringify(cdEvents)); } catch (e) { /* 忽略 */ } }
+  function cdDays(dateStr) {
+    const t = new Date(dateStr + "T00:00:00");
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.round((t.getTime() - now.getTime()) / 86400000);
+  }
+  function cdRender() {
+    const list = $("cdList");
+    list.innerHTML = "";
+    const sorted = cdEvents.slice().sort((a, b) => cdDays(a.date) - cdDays(b.date));
+    sorted.forEach((ev) => {
+      const d = cdDays(ev.date);
+      const row = document.createElement("div");
+      row.className = "cd-row";
+      const name = document.createElement("span");
+      name.className = "cd-name";
+      name.textContent = ev.name;
+      const days = document.createElement("span");
+      days.className = "cd-days" + (d === 0 ? " today" : d < 0 ? " past" : "");
+      days.textContent = d === 0 ? "就是今天！" : d > 0 ? "还有 " + d + " 天" : "已经过了 " + (-d) + " 天";
+      const del = document.createElement("button");
+      del.className = "btn ghost-btn small";
+      del.textContent = "删掉";
+      del.addEventListener("click", () => {
+        cdEvents = cdEvents.filter((x) => x !== ev);
+        cdSave(); cdRender();
+      });
+      row.appendChild(name); row.appendChild(days); row.appendChild(del);
+      list.appendChild(row);
+    });
+    $("cdResult").textContent = cdEvents.length === 0 ? "还没加倒计时。" : "共 " + cdEvents.length + " 个倒计时，最近的在最前面。";
+  }
+  $("cdAddBtn").addEventListener("click", () => {
+    const name = $("cdName").value.trim();
+    const date = $("cdDate").value;
+    if (!name) { $("cdResult").textContent = "先写是什么事。"; return; }
+    if (!date) { $("cdResult").textContent = "再选个日子。"; return; }
+    cdEvents.push({ name, date });
+    cdSave(); cdRender();
+    $("cdName").value = "";
+    $("cdResult").textContent = "已加上「" + name + "」，还有 " + cdDays(date) + " 天。";
+  });
+  cdRender();
+
+  /* ---------- 40. 待办清单 ---------- */
+  const TODO_KEY = "dorm-toybox-todo-v1";
+  let todoItems = [];
+  try { todoItems = JSON.parse(localStorage.getItem(TODO_KEY) || "[]") || []; } catch (e) { todoItems = []; }
+  function todoSave() { try { localStorage.setItem(TODO_KEY, JSON.stringify(todoItems)); } catch (e) { /* 忽略 */ } }
+  function todoRender() {
+    const list = $("todoList");
+    list.innerHTML = "";
+    todoItems.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "todo-row" + (item.done ? " done" : "");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = item.done;
+      cb.setAttribute("aria-label", "完成 " + item.text);
+      cb.addEventListener("change", () => { item.done = cb.checked; todoSave(); todoRender(); });
+      const span = document.createElement("span");
+      span.className = "todo-text";
+      span.textContent = item.text;
+      const del = document.createElement("button");
+      del.className = "btn ghost-btn small";
+      del.textContent = "删掉";
+      del.addEventListener("click", () => { todoItems = todoItems.filter((x) => x !== item); todoSave(); todoRender(); });
+      row.appendChild(cb); row.appendChild(span); row.appendChild(del);
+      list.appendChild(row);
+    });
+    const done = todoItems.filter((i) => i.done).length;
+    $("todoStats").textContent = todoItems.length === 0 ? "还没写待办。" : "已完成 " + done + " / 共 " + todoItems.length + (done === todoItems.length ? "，全部搞定 🎉" : "。");
+    if (done > 0) $("todoClearBtn").classList.remove("hidden"); else $("todoClearBtn").classList.add("hidden");
+  }
+  function todoAdd() {
+    const text = $("todoInput").value.trim();
+    if (!text) return;
+    todoItems.push({ text, done: false });
+    todoSave(); todoRender();
+    $("todoInput").value = "";
+  }
+  $("todoAddBtn").addEventListener("click", todoAdd);
+  $("todoInput").addEventListener("keydown", (e) => { if (e.key === "Enter") todoAdd(); });
+  $("todoClearBtn").addEventListener("click", () => { todoItems = todoItems.filter((i) => !i.done); todoSave(); todoRender(); });
+  todoRender();
+
   renderTimer();
 })();

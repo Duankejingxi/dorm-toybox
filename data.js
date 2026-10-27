@@ -39,6 +39,10 @@ const TOYS = [
   { id: "aa", label: "🧾 AA 分摊" },
   { id: "doodle", label: "🎨 涂鸦板" },
   { id: "meme", label: "😂 奶蛙表情包制作" },
+  { id: "snake", label: "🐍 贪吃蛇" },
+  { id: "scratch", label: "🎰 刮刮乐" },
+  { id: "countdown", label: "📅 倒计时" },
+  { id: "todo", label: "✅ 待办清单" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

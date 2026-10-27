@@ -357,6 +357,29 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .meme-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; background: #fff; }
 .meme-thumb.active { border-color: var(--gold2); }
 #memeCanvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 12px; display: block; margin-top: 12px; }
+
+/* 贪吃蛇 */
+#snakeCanvas { width: 100%; max-width: 340px; aspect-ratio: 1; background: #10101f; border-radius: 12px; display: block; margin: 12px auto 0; touch-action: none; }
+.snake-dpad { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; justify-content: center; margin-top: 14px; }
+.snake-dpad .btn { width: 56px; height: 48px; font-size: 18px; padding: 0; }
+
+/* 刮刮乐 */
+.scratch-card { position: relative; width: 100%; max-width: 340px; aspect-ratio: 8 / 5; margin: 12px auto 0; }
+.scratch-prize { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: var(--gold2); background: #fff; border-radius: 12px; text-align: center; padding: 0 12px; }
+#scratchCanvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 12px; touch-action: none; }
+
+/* 倒计时 */
+.cd-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.cd-name { flex: 1; font-size: 16px; }
+.cd-days { font-size: 16px; font-weight: 800; color: var(--gold2); white-space: nowrap; }
+.cd-days.today { color: #ff6b81; }
+.cd-days.past { color: #8b81a3; font-weight: 400; }
+
+/* 待办清单 */
+.beads-controls input { flex: 1; min-width: 0; }
+.todo-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.todo-row.done .todo-text { text-decoration: line-through; color: #8b81a3; }
+.todo-text { flex: 1; font-size: 16px; }
 .frog-name { font-weight: 800; margin: 6px 0 8px; }
 
 /* v1.8：计时器 + BMI + 自拍补光灯 + 白噪音 */

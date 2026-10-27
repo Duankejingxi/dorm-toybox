@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、数字炸弹、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、白噪音、宿舍值日表、AA 分摊、涂鸦板、奶蛙表情包制作。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、数字炸弹、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、白噪音、宿舍值日表、AA 分摊、涂鸦板、奶蛙表情包制作、贪吃蛇、刮刮乐、倒计时、待办清单。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">三十四个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">三十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -573,8 +573,64 @@
     <p class="result-line" id="memeResult">字打完自动画好，点导出存成图片。</p>
   </section>
 
+  <!-- 贪吃蛇 -->
+  <section class="panel toy hidden" id="toy-snake">
+    <h2>🐍 贪吃蛇</h2>
+    <p class="hint">方向键、屏幕按钮或者手指滑动都能控制。吃到红点长一节，撞墙或者咬到自己就结束。第一颗红点就在你正前方，先吃一口找找感觉。</p>
+    <canvas id="snakeCanvas" width="320" height="320"></canvas>
+    <p class="result-line" id="snakeScore">得分 0 · 最高 0</p>
+    <p class="result-line" id="snakeStatus">点开始，蛇就动起来。</p>
+    <div class="beads-controls">
+      <button class="btn gold-btn small" id="snakeStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="snakeRestartBtn">重新开始</button>
+    </div>
+    <div class="snake-dpad">
+      <span></span><button class="btn ghost-btn" id="snakeDirUp" aria-label="向上">▲</button><span></span>
+      <button class="btn ghost-btn" id="snakeDirLeft" aria-label="向左">◀</button><span></span><button class="btn ghost-btn" id="snakeDirRight" aria-label="向右">▶</button>
+      <span></span><button class="btn ghost-btn" id="snakeDirDown" aria-label="向下">▼</button><span></span>
+    </div>
+  </section>
+
+  <!-- 刮刮乐 -->
+  <section class="panel toy hidden" id="toy-scratch">
+    <h2>🎰 刮刮乐</h2>
+    <p class="hint">手指在银色涂层上刮，刮掉一半就自动揭开。奖品是宿舍里真能用的东西：免值日、奶茶、帮取快递……当然，也可能谢谢参与。</p>
+    <div class="scratch-card">
+      <div class="scratch-prize" id="scratchPrize">🎁 ？？？</div>
+      <canvas id="scratchCanvas" width="320" height="200"></canvas>
+    </div>
+    <p class="result-line" id="scratchResult">刮开看看今天的手气。</p>
+    <button class="btn gold-btn" id="scratchAgainBtn">再刮一张 🎰</button>
+  </section>
+
+  <!-- 倒计时 -->
+  <section class="panel toy hidden" id="toy-countdown">
+    <h2>📅 倒计时</h2>
+    <p class="hint">考试、放假、生日、比赛……写个日子，每天打开就知道还有几天。存在本机，关掉页面也不丢。</p>
+    <p class="count-line">什么事</p>
+    <input id="cdName" type="text" maxlength="20" placeholder="比如：期末考试、四级、放假回家">
+    <p class="count-line">哪一天</p>
+    <input id="cdDate" type="date">
+    <button class="btn gold-btn" id="cdAddBtn">加一个倒计时 📅</button>
+    <div id="cdList"></div>
+    <p class="result-line" id="cdResult">还没加倒计时。</p>
+  </section>
+
+  <!-- 待办清单 -->
+  <section class="panel toy hidden" id="toy-todo">
+    <h2>✅ 待办清单</h2>
+    <p class="hint">今天要干的事写下来，做完打个勾。存在本机，关掉页面也不丢。</p>
+    <div class="beads-controls">
+      <input id="todoInput" type="text" maxlength="40" placeholder="比如：交实验报告、取快递、背 20 个单词">
+      <button class="btn gold-btn small" id="todoAddBtn">加上 ➕</button>
+    </div>
+    <div id="todoList"></div>
+    <p class="result-line" id="todoStats">还没写待办。</p>
+    <button class="btn ghost-btn small hidden" id="todoClearBtn">清除已完成 🧹</button>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.18 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.19 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

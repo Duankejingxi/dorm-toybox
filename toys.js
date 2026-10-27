@@ -1507,7 +1507,8 @@
   let beadsCols = 0, beadsRows = 0, beadsCells = [];
   let beadsCellPx = 22;
   function beadRingBg(hex) {
-    return "radial-gradient(circle, transparent 0 30%, " + hex + " 31% 100%)";
+    // 孔是白色的（像穿在白色拼板上），不是透出黑底：颜色才看得清
+    return "radial-gradient(circle, #ffffff 0 30%, " + hex + " 31% 100%)";
   }
   function beadsApplyCellSize() {
     const grid = $("beadsGrid");
@@ -1561,14 +1562,26 @@
   }
   function beadsFromImage(img) {
     try {
-      const size = parseInt($("beadsSize").value, 10) || 30;
+      const size = parseInt($("beadsSize").value, 10) || 48;
+      const targetH = Math.max(1, Math.round((size * img.height) / img.width));
+      // 分步缩：大图一次缩到底会丢细节、糊成一片；先对半缩到接近目标再定格，轮廓和五官保留得多
+      let src = img, w = img.width, h = img.height;
+      while (w / 2 > size && h / 2 > targetH) {
+        w = Math.floor(w / 2); h = Math.floor(h / 2);
+        const step = document.createElement("canvas");
+        step.width = w; step.height = h;
+        const sctx = step.getContext("2d");
+        if (!sctx) { $("beadsResult").textContent = "当前环境不支持作图。"; return; }
+        sctx.drawImage(src, 0, 0, w, h);
+        src = step;
+      }
       const canvas = document.createElement("canvas");
       if (typeof canvas.getContext !== "function") { $("beadsResult").textContent = "当前环境不支持作图。"; return; }
       canvas.width = size;
-      canvas.height = Math.max(1, Math.round((size * img.height) / img.width));
+      canvas.height = targetH;
       const ctx = canvas.getContext("2d");
       if (!ctx) { $("beadsResult").textContent = "当前环境不支持作图。"; return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       const pixels = [];
       for (let i = 0; i < data.length; i += 4) {
@@ -1630,9 +1643,9 @@
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#ffffff"; // 豆子中间的孔
+        ctx.fillStyle = "#ffffff"; // 豆子中间的孔（和屏幕上一样大）
         ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+        ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
         ctx.fill();
       });
       const a = document.createElement("a");

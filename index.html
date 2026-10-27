@@ -333,7 +333,7 @@
   <!-- 拼豆图纸生成 -->
   <section class="panel toy hidden" id="toy-beads">
     <h2>🧵 拼豆图纸生成</h2>
-    <p class="hint">传一张图，自动转成拼豆图纸：每格一个色号，照着拼就行。按 Hama Midi 5mm 色号匹配（70 多种颜色），图只在你手机里处理，不上传。</p>
+    <p class="hint">传一张图，自动转成拼豆图纸：每格一个色号，照着拼就行。格数越大越清楚：人脸、合照选 48 或 64 格；主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。图只在你手机里处理，不上传。</p>
     <label class="beads-upload">
       <input id="beadsFile" type="file" accept="image/*">
       <span class="btn gold-btn">选一张图 📷</span>
@@ -341,8 +341,10 @@
     <div class="beads-controls">
       <select id="beadsSize" aria-label="图纸格数">
         <option value="20">20 格 · 小挂件约 10cm</option>
-        <option value="30" selected>30 格 · 约 15cm</option>
+        <option value="30">30 格 · 约 15cm</option>
         <option value="40">40 格 · 约 20cm</option>
+        <option value="48" selected>48 格 · 约 24cm，清楚</option>
+        <option value="64">64 格 · 约 32cm，最清楚</option>
       </select>
       <button class="btn ghost-btn small" id="beadsSampleBtn">先看示例 ❤️</button>
     </div>
@@ -490,7 +492,7 @@
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.10 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.11 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

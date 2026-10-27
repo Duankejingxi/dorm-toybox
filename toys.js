@@ -6,7 +6,7 @@
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
   /* ---------- 侧边栏：置顶 7 个在最前面，其余按顺序，一行两个方块 ---------- */
-  const PINNED_IDS = ["wheel", "dice", "reaction", "guess", "score", "beads", "frog"];
+  const PINNED_IDS = ["wheel", "dice", "reaction", "guess", "score", "beads", "frog", "fortune"];
   const drawerNav = $("drawerNav");
   function splitLabel(label) {
     const i = label.indexOf(" ");
@@ -35,7 +35,7 @@
     return p;
   }
   drawerNav.appendChild(drawerLabel("📌 置顶"));
-  TOYS.filter((t) => PINNED_IDS.includes(t.id)).forEach((t) => drawerNav.appendChild(makeTile(t)));
+  PINNED_IDS.map((id) => TOYS.find((t) => t.id === id)).filter(Boolean).forEach((t) => drawerNav.appendChild(makeTile(t)));
   drawerNav.appendChild(drawerLabel("全部玩具"));
   TOYS.filter((t) => !PINNED_IDS.includes(t.id)).forEach((t) => drawerNav.appendChild(makeTile(t)));
   function allTiles() {
@@ -1970,39 +1970,37 @@
   // 退出就关麦克风：不然退出后还在录音
   toyLeaveCleanup.noise = () => { if (noiseRunning) noiseStop(); };
 
-  /* ---------- 28. 奶蛙表情包（网上找的真贴纸裁出来的，点一下下载 PNG） ---------- */
-  const FROG_MOODS = [
-    { id: "happy", name: "开心大笑", file: "奶蛙-开心大笑.jpg", src: FROG_IMAGES["frog-01"] },
-    { id: "wronged", name: "委屈巴巴", file: "奶蛙-委屈巴巴.png", src: FROG_IMAGES["frog-02"] },
-    { id: "melon", name: "吃瓜追剧", file: "奶蛙-吃瓜追剧.png", src: FROG_IMAGES["frog-03"] },
-    { id: "speechless", name: "一脸无语", file: "奶蛙-一脸无语.png", src: FROG_IMAGES["frog-04"] },
-    { id: "cheer", name: "加油打气", file: "奶蛙-加油打气.png", src: FROG_IMAGES["frog-05"] },
-    { id: "night", name: "晚安睡觉", file: "奶蛙-晚安睡觉.png", src: FROG_IMAGES["frog-06"] },
-    { id: "angry", name: "生气鼓腮", file: "奶蛙-生气鼓腮.png", src: FROG_IMAGES["frog-07"] },
-    { id: "daze", name: "发呆", file: "奶蛙-发呆.jpg", src: FROG_IMAGES["frog-08"] },
+  /* ---------- 28. 奶蛙表情包（真图表情墙，点一下下载；图片分批内嵌在 frog-data*.js） ---------- */
+  const FROG_STICKERS = [
+    ...(typeof FROG_PART1 !== "undefined" ? FROG_PART1 : []),
+    ...(typeof FROG_PART2 !== "undefined" ? FROG_PART2 : []),
+    ...(typeof FROG_PART3 !== "undefined" ? FROG_PART3 : []),
+    ...(typeof FROG_PART4 !== "undefined" ? FROG_PART4 : []),
   ];
+  $("frogHint").textContent = "共 " + FROG_STICKERS.length + " 张奶蛙表情包，点一下就能下载，发群里用。";
   const frogGrid = $("frogGrid");
-  FROG_MOODS.forEach((mood) => {
+  FROG_STICKERS.forEach((s, i) => {
+    const num = String(i + 1).padStart(3, "0");
     const card = document.createElement("div");
     card.className = "frog-card";
     const img = document.createElement("img");
-    img.src = mood.src;
-    img.alt = mood.name;
-    img.setAttribute("data-mood", mood.id);
+    img.src = s.src;
+    img.alt = "奶蛙-" + num;
+    img.loading = "lazy";
     card.appendChild(img);
     const label = document.createElement("p");
     label.className = "frog-name";
-    label.textContent = mood.name;
+    label.textContent = "奶蛙-" + num;
     card.appendChild(label);
     const btn = document.createElement("button");
     btn.className = "btn small gold-btn";
     btn.textContent = "下载 ⬇";
     btn.addEventListener("click", () => {
       const a = document.createElement("a");
-      a.href = mood.src;
-      a.download = mood.file;
+      a.href = s.src;
+      a.download = s.file;
       a.click();
-      $("frogResult").textContent = "已下载「" + mood.name + "」。";
+      $("frogResult").textContent = "已下载「奶蛙-" + num + "」。";
     });
     card.appendChild(btn);
     frogGrid.appendChild(card);

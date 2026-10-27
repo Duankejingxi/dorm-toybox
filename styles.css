@@ -327,7 +327,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .noise-meter { height: 100%; width: 0; background: linear-gradient(90deg, #7dff9b, #ffd94d, #ff5c5c); transition: width .15s ease; }
 .frog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
 .frog-card { border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; background: rgba(255, 255, 255, .03); }
-.frog-card img { width: 100%; height: auto; display: block; border-radius: 10px; }
+.frog-card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; border-radius: 10px; }
 .frog-name { font-weight: 800; margin: 6px 0 8px; }
 
 /* v1.8：计时器 + BMI + 自拍补光灯 + 白噪音 */

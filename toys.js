@@ -728,6 +728,7 @@
   let typingStartAt = 0;
   let typingTimerId = null;
   let typingDone = false;
+  let typingComposing = false; // 输入法正在拼字（composition）时不比对
   function loadTypingBest() {
     try { return parseInt(localStorage.getItem(TYPING_BEST_KEY) || "0", 10) || 0; }
     catch (e) { return 0; }
@@ -764,6 +765,7 @@
     renderTypingBest();
   }
   function typingTick() {
+    if (typingComposing) return; // 拼拼音的中间态不参与比对，等选字上屏再判
     const input = $("typingInput").value;
     const chars = $("typingTarget").children;
     let correct = 0;
@@ -794,12 +796,22 @@
       renderTypingBest();
     }
   }
-  $("typingInput").addEventListener("input", () => {
+  function typingOnInput() {
+    if (typingComposing) return;
     if (!typingStartAt && !typingDone) {
       typingStartAt = performance.now();
       typingTimerId = setInterval(typingTick, 200);
     }
     typingTick();
+  }
+  $("typingInput").addEventListener("input", (e) => {
+    if (e.isComposing) return;
+    typingOnInput();
+  });
+  $("typingInput").addEventListener("compositionstart", () => { typingComposing = true; });
+  $("typingInput").addEventListener("compositionend", () => {
+    typingComposing = false;
+    typingOnInput(); // 选字上屏后才比对
   });
   $("typingNextBtn").addEventListener("click", typingNewSentence);
   typingNewSentence();

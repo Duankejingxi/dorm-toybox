@@ -338,7 +338,8 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .compass-label.south { bottom: 8px; left: 50%; transform: translateX(-50%); }
 .compass-label.east { right: 12px; top: 50%; transform: translateY(-50%); }
 .compass-label.west { left: 12px; top: 50%; transform: translateY(-50%); }
-.compass-needle { position: absolute; inset: 0; display: flex; justify-content: center; padding-top: 26px; font-size: 30px; color: #ff5c5c; transition: transform .2s ease; }
+.compass-card { position: absolute; inset: 0; transition: transform .2s ease; }
+.compass-needle { position: absolute; inset: 0; display: flex; justify-content: center; padding-top: 26px; font-size: 30px; color: #ff5c5c; }
 .compass-center { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); transform: translate(-50%, -50%); }
 .noise-db { font-size: 52px; font-weight: 900; color: var(--gold); text-align: center; margin: 12px 0 4px; }
 .noise-meter-wrap { height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; margin-top: 10px; }
@@ -359,3 +360,17 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .light-slider-label { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .light-slider-label input { flex: 1; accent-color: var(--gold); }
 .wn-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* v1.9：老虎机双机对战 + 拼豆环形豆子 + 奶蛙重画 */
+.slots-duel { display: flex; gap: 10px; margin-top: 12px; }
+.slots-machine { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 14px; padding: 10px 8px; text-align: center; }
+.slots-machine.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.slots-player { font-weight: 800; margin: 0 0 8px; font-size: 15px; }
+.slots-score { color: var(--gold); }
+.slots-machine .slots-reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: none; margin: 0 0 8px; }
+.slots-machine .slots-reels span { font-size: 30px; text-align: center; padding: 6px 0; }
+.slots-machine .btn { width: 100%; }
+.slots-machine .result-line { margin: 8px 0 0; font-size: 13px; }
+.btn:disabled { opacity: .45; }
+.beads-grid { overflow-x: auto; gap: 2px; }
+.beads-controls { flex-wrap: wrap; }

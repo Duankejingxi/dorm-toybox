@@ -930,34 +930,46 @@
   $("puzzleResetBtn").addEventListener("click", puzzleShuffle);
   puzzleShuffle();
 
-  /* ---------- 14. 老虎机：3 行九格，双人轮流拉，回合制记分 ---------- */
-  const SLOTS_KEY = "dorm-toybox-slots-v1";
+  /* ---------- 14. 老虎机：左右两台独立机器，一人一台，轮流拉，回合制记分 ---------- */
+  const SLOTS_KEY = "dorm-toybox-slots-v2";
   const SLOTS_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 4, 8], [2, 4, 6]];
   let slotsSpinning = false;
   function loadSlotsStats() {
     try {
       const s = JSON.parse(localStorage.getItem(SLOTS_KEY) || "null");
-      if (s && typeof s.p1 === "number" && typeof s.p2 === "number") return s;
+      if (s && typeof s.a === "number" && typeof s.b === "number") return s;
     } catch (e) { /* 忽略 */ }
-    return { p1: 0, p2: 0, round: 1, turn: "p1" };
+    return { a: 0, b: 0, round: 1, turn: "a" };
   }
   let slotsStats = loadSlotsStats();
-  function slotsPlayerName(t) { return t === "p1" ? "玩家一" : "玩家二"; }
+  function slotsPlayerName(t) { return t === "a" ? "玩家一" : "玩家二"; }
+  function slotsReelsEl(who) { return who === "a" ? $("slotsReelsA") : $("slotsReelsB"); }
+  function slotsSpinEl(who) { return who === "a" ? $("slotsSpinA") : $("slotsSpinB"); }
+  function slotsResultEl(who) { return who === "a" ? $("slotsResultA") : $("slotsResultB"); }
+  function slotsScoreEl(who) { return who === "a" ? $("slotsScoreA") : $("slotsScoreB"); }
   function renderSlotsStats() {
-    $("slotsStats").textContent = "玩家一 " + slotsStats.p1 + " 分 · 玩家二 " + slotsStats.p2 + " 分 · 第 " + slotsStats.round + " 轮 · 轮到" + slotsPlayerName(slotsStats.turn);
+    $("slotsStats").textContent = "第 " + slotsStats.round + " 轮 · 轮到" + slotsPlayerName(slotsStats.turn);
+    slotsScoreEl("a").textContent = slotsStats.a + " 分";
+    slotsScoreEl("b").textContent = slotsStats.b + " 分";
+    $("slotsMachineA").classList.toggle("active", slotsStats.turn === "a");
+    $("slotsMachineB").classList.toggle("active", slotsStats.turn === "b");
+    slotsSpinEl("a").disabled = slotsSpinning || slotsStats.turn !== "a";
+    slotsSpinEl("b").disabled = slotsSpinning || slotsStats.turn !== "b";
   }
   function saveSlotsStats() {
     try { localStorage.setItem(SLOTS_KEY, JSON.stringify(slotsStats)); } catch (e) { /* 忽略 */ }
   }
-  const reelsBox = $("slotsReels");
-  reelsBox.innerHTML = "";
-  for (let i = 0; i < 9; i++) {
-    const s = document.createElement("span");
-    s.textContent = "🍒";
-    reelsBox.appendChild(s);
-  }
-  function renderSlotsReels(symbols) {
-    const reels = $("slotsReels").children;
+  ["a", "b"].forEach((who) => {
+    const box = slotsReelsEl(who);
+    box.innerHTML = "";
+    for (let i = 0; i < 9; i++) {
+      const s = document.createElement("span");
+      s.textContent = "🍒";
+      box.appendChild(s);
+    }
+  });
+  function renderSlotsReels(who, symbols) {
+    const reels = slotsReelsEl(who).children;
     for (let i = 0; i < 9; i++) reels[i].textContent = symbols[i];
   }
   function slotsScoreLines(final) {
@@ -970,43 +982,46 @@
     });
     return { points, lines };
   }
-  $("slotsSpinBtn").addEventListener("click", () => {
-    if (slotsSpinning) return;
+  function slotsSpin(who) {
+    if (slotsSpinning || slotsStats.turn !== who) return;
     slotsSpinning = true;
-    $("slotsSpinBtn").disabled = true;
-    $("slotsResult").textContent = slotsPlayerName(slotsStats.turn) + "拉着呢……";
+    renderSlotsStats();
+    slotsResultEl(who).textContent = slotsPlayerName(who) + "拉着呢……";
     let ticks = 0;
     const timer = setInterval(() => {
       const roll = [];
       for (let i = 0; i < 9; i++) roll.push(pick(SLOTS_SYMBOLS));
-      renderSlotsReels(roll);
+      renderSlotsReels(who, roll);
       ticks++;
       if (ticks >= 12) {
         clearInterval(timer);
         const final = [];
         for (let i = 0; i < 9; i++) final.push(pick(SLOTS_SYMBOLS));
-        renderSlotsReels(final);
+        renderSlotsReels(who, final);
         slotsSpinning = false;
-        $("slotsSpinBtn").disabled = false;
-        const who = slotsStats.turn;
         const { points, lines } = slotsScoreLines(final);
         slotsStats[who] += points;
-        let msg = slotsPlayerName(who) + "本局 +" + points + " 分" + (lines > 0 ? "（" + lines + " 条线中奖）" : "（没中奖）") + "。";
-        if (who === "p1") { slotsStats.turn = "p2"; }
-        else { slotsStats.turn = "p1"; slotsStats.round++; }
-        msg += "轮到" + slotsPlayerName(slotsStats.turn) + "。";
-        $("slotsResult").textContent = msg;
+        slotsResultEl(who).textContent = "本局 +" + points + " 分" + (lines > 0 ? "（" + lines + " 条线中奖）" : "（没中奖）") + "。";
+        if (who === "a") { slotsStats.turn = "b"; }
+        else { slotsStats.turn = "a"; slotsStats.round++; }
         renderSlotsStats();
         saveSlotsStats();
       }
     }, 80);
-  });
+  }
+  $("slotsSpinA").addEventListener("click", () => slotsSpin("a"));
+  $("slotsSpinB").addEventListener("click", () => slotsSpin("b"));
   $("slotsResetBtn").addEventListener("click", () => {
-    slotsStats = { p1: 0, p2: 0, round: 1, turn: "p1" };
+    slotsStats = { a: 0, b: 0, round: 1, turn: "a" };
     saveSlotsStats();
+    renderSlotsReels("a", Array(9).fill("🍒"));
+    renderSlotsReels("b", Array(9).fill("🍒"));
+    slotsResultEl("a").textContent = "等你拉。";
+    slotsResultEl("b").textContent = "等你拉。";
     renderSlotsStats();
-    $("slotsResult").textContent = "重新开始，轮到玩家一。";
   });
+  slotsResultEl("a").textContent = "等你拉。";
+  slotsResultEl("b").textContent = "等你拉。";
   renderSlotsStats();
 
   /* ---------- 玩具搜索（小优化：玩具多了，搜名字直达） ---------- */
@@ -1516,6 +1531,15 @@
 
   /* ---------- 22. 拼豆图纸生成 ---------- */
   let beadsCols = 0, beadsRows = 0, beadsCells = [];
+  let beadsCellPx = 22;
+  function beadRingBg(hex) {
+    return "radial-gradient(circle, transparent 0 30%, " + hex + " 31% 100%)";
+  }
+  function beadsApplyCellSize() {
+    const grid = $("beadsGrid");
+    if (beadsCols > 0) grid.style.gridTemplateColumns = "repeat(" + beadsCols + ", " + beadsCellPx + "px)";
+    $("beadsZoomLabel").textContent = "每颗 " + beadsCellPx + "px，左右滑着看";
+  }
   function beadNearest(hex) {
     const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     let best = BEAD_COLORS[0], bestD = Infinity;
@@ -1531,7 +1555,7 @@
     beadsCells = pixels.map((hex) => beadNearest(hex));
     const grid = $("beadsGrid");
     grid.innerHTML = "";
-    grid.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+    beadsApplyCellSize();
     const counts = {};
     const order = [];
     beadsCells.forEach((bead) => {
@@ -1539,7 +1563,7 @@
       counts[bead.n].count++;
       const cell = document.createElement("div");
       cell.className = "beads-cell";
-      cell.style.background = bead.hex;
+      cell.style.background = beadRingBg(bead.hex);
       cell.title = bead.n + " " + bead.name;
       grid.appendChild(cell);
     });
@@ -1551,7 +1575,7 @@
       item.className = "beads-legend-item";
       const sw = document.createElement("span");
       sw.className = "beads-swatch";
-      sw.style.background = bead.hex;
+      sw.style.background = beadRingBg(bead.hex);
       const label = document.createElement("span");
       label.textContent = bead.n + " " + bead.name + " × " + count + " 颗";
       item.appendChild(sw);
@@ -1605,6 +1629,14 @@
     BEADS_SAMPLE.forEach((row) => { for (const ch of row) pixels.push(charHex[ch] || "#E5ECF1"); });
     beadsRender(pixels, 16, 16);
   });
+  $("beadsZoomInBtn").addEventListener("click", () => {
+    beadsCellPx = Math.min(40, beadsCellPx + 6);
+    beadsApplyCellSize();
+  });
+  $("beadsZoomOutBtn").addEventListener("click", () => {
+    beadsCellPx = Math.max(14, beadsCellPx - 6);
+    beadsApplyCellSize();
+  });
   $("beadsExportBtn").addEventListener("click", () => {
     if (!beadsCells.length) { $("beadsResult").textContent = "先传图或点示例，生成图纸再导出。"; return; }
     try {
@@ -1619,9 +1651,14 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       beadsCells.forEach((bead, i) => {
         const x = (i % beadsCols) * cell, y = Math.floor(i / beadsCols) * cell;
+        const cx = x + cell / 2, cy = y + cell / 2, r = cell / 2 - 2;
         ctx.fillStyle = bead.hex;
         ctx.beginPath();
-        ctx.arc(x + cell / 2, y + cell / 2, cell / 2 - 2, 0, Math.PI * 2);
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff"; // 豆子中间的孔
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
         ctx.fill();
       });
       const a = document.createElement("a");
@@ -1772,7 +1809,7 @@
     return dirs[Math.round(deg / 45) % 8];
   }
   function compassUpdate(deg) {
-    $("compassNeedle").style.transform = "rotate(" + deg + "deg)";
+    $("compassCard").style.transform = "rotate(" + (-deg) + "deg)"; // 指针不动，表盘转
     $("compassDeg").textContent = Math.round(deg) + "° · " + compassDir(deg);
   }
   function compassHandler(e) {
@@ -1882,72 +1919,108 @@
       const ctx = canvas.getContext("2d");
       if (!ctx) return false;
       const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2 + 8;
-      const green = "#7ed957", light = "#a8e88a", dark = "#3d8b2f";
+      const cx = W / 2;
+      const green = "#8bd07f", greenDark = "#6fbf68", cream = "#f2f9e8", dark = "#2f6b33";
       ctx.clearRect(0, 0, W, H);
       const circle = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
-      circle(cx, cy, 62, green); // 身体
-      ctx.fillStyle = light; // 肚皮
-      ctx.beginPath(); ctx.ellipse(cx, cy + 26, 34, 24, 0, 0, Math.PI * 2); ctx.fill();
-      circle(cx - 34, cy - 56, 22, green); // 头顶眼包
-      circle(cx + 34, cy - 56, 22, green);
-      circle(cx - 42, cy + 18, 10, "rgba(255,120,140,0.55)"); // 腮红
-      circle(cx + 42, cy + 18, 10, "rgba(255,120,140,0.55)");
-      const eyeY = cy - 56;
-      ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = "round";
-      if (mood === "happy" || mood === "night") {
-        ctx.beginPath(); ctx.arc(cx - 34, eyeY, 12, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx + 34, eyeY, 12, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      const ellipse = (x, y, rx, ry, color, rot) => { ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); };
+      // 小短手（加油时举起来）
+      if (mood === "cheer") {
+        ellipse(cx - 52, 78, 10, 18, green, -0.5);
+        ellipse(cx + 52, 78, 10, 18, green, 0.5);
       } else {
-        circle(cx - 34, eyeY, 14, "#ffffff");
-        circle(cx + 34, eyeY, 14, "#ffffff");
-        let py = 0;
-        if (mood === "speechless") py = -5;
-        else if (mood === "wronged") py = 4;
-        circle(cx - 34, eyeY + py, 6, "#222222");
-        circle(cx + 34, eyeY + py, 6, "#222222");
-        if (mood === "angry") {
-          ctx.beginPath(); ctx.moveTo(cx - 48, eyeY - 18); ctx.lineTo(cx - 22, eyeY - 10); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(cx + 48, eyeY - 18); ctx.lineTo(cx + 22, eyeY - 10); ctx.stroke();
-        }
+        ellipse(cx - 58, 128, 9, 16, green, 0.25);
+        ellipse(cx + 58, 128, 9, 16, green, -0.25);
       }
+      // 小短脚
+      ellipse(cx - 26, 172, 15, 8, greenDark);
+      ellipse(cx + 26, 172, 15, 8, greenDark);
+      // 胖身子（头身一体）+ 头顶两个小鼓包
+      circle(cx - 26, 62, 16, green);
+      circle(cx + 26, 62, 16, green);
+      ellipse(cx, 118, 62, 56, green);
+      // 奶白大肚皮
+      ellipse(cx, 140, 38, 30, cream);
+      // 腮红
+      ellipse(cx - 44, 116, 9, 5, "rgba(255,120,140,0.55)");
+      ellipse(cx + 44, 116, 9, 5, "rgba(255,120,140,0.55)");
+      // 眼睛
+      const eyeY = 96;
+      ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = "round";
+      const eyeX = [cx - 26, cx + 26];
+      if (mood === "happy" || mood === "night") {
+        eyeX.forEach((x) => { ctx.beginPath(); ctx.arc(x, eyeY, 11, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); });
+      } else if (mood === "love") {
+        ctx.fillStyle = "#ff5c8a";
+        eyeX.forEach((x) => {
+          ctx.beginPath();
+          ctx.moveTo(x, eyeY + 8);
+          ctx.bezierCurveTo(x - 11, eyeY - 4, x - 6, eyeY - 12, x, eyeY - 5);
+          ctx.bezierCurveTo(x + 6, eyeY - 12, x + 11, eyeY - 4, x, eyeY + 8);
+          ctx.fill();
+        });
+      } else {
+        eyeX.forEach((x, i) => {
+          circle(x, eyeY, 13, "#ffffff");
+          let px = x, py = eyeY;
+          if (mood === "speechless") py = eyeY - 6;
+          else if (mood === "wronged") py = eyeY + 4;
+          else if (mood === "melon") px = x + (i === 0 ? 4 : -4);
+          circle(px, py, 6.5, "#1e6b34");
+          circle(px - 2, py - 2, 3, "#222222");
+          circle(px - 3, py - 3, 2, "#ffffff");
+          if (mood === "angry") {
+            ctx.beginPath(); ctx.moveTo(x - 13, eyeY - 17); ctx.lineTo(x + 11, eyeY - 10); ctx.stroke();
+          }
+        });
+      }
+      // 嘴
+      const mouthY = 122;
       if (mood === "happy") {
         ctx.fillStyle = "#c0392b";
-        ctx.beginPath(); ctx.arc(cx, cy - 2, 20, 0, Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, mouthY - 4, 18, 0, Math.PI); ctx.fill();
+        ctx.fillStyle = "#ff8a80";
+        ctx.beginPath(); ctx.arc(cx, mouthY + 2, 9, 0, Math.PI); ctx.fill();
       } else if (mood === "wronged") {
-        ctx.beginPath(); ctx.arc(cx, cy + 8, 10, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-        circle(cx - 48, eyeY + 16, 4, "#7ab8ff");
-        circle(cx + 48, eyeY + 16, 4, "#7ab8ff");
+        ctx.beginPath(); ctx.arc(cx, mouthY + 8, 9, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        circle(cx - 40, eyeY + 18, 4, "#7ab8ff");
+        circle(cx + 40, eyeY + 18, 4, "#7ab8ff");
       } else if (mood === "speechless") {
-        ctx.beginPath(); ctx.moveTo(cx - 12, cy + 4); ctx.lineTo(cx + 12, cy + 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx - 12, mouthY); ctx.lineTo(cx + 12, mouthY); ctx.stroke();
       } else if (mood === "melon") {
         ctx.fillStyle = "#c0392b";
-        ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, mouthY, 14, 0, Math.PI); ctx.fill();
+        // 肚皮前捧一块西瓜
         ctx.fillStyle = "#2fae4e";
-        ctx.beginPath(); ctx.arc(cx + 40, cy + 42, 14, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, 158, 20, Math.PI, 0); ctx.fill();
         ctx.fillStyle = "#ff5c5c";
-        ctx.beginPath(); ctx.arc(cx + 40, cy + 42, 10, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, 158, 15, Math.PI, 0); ctx.fill();
+        circle(cx - 6, 152, 1.5, "#222222");
+        circle(cx + 5, 150, 1.5, "#222222");
       } else if (mood === "cheer") {
-        ctx.beginPath(); ctx.arc(cx, cy - 2, 14, 0, Math.PI); ctx.stroke();
-        circle(cx + 48, cy - 34, 8, "#ffd94d");
+        ctx.beginPath(); ctx.arc(cx, mouthY - 2, 13, 0, Math.PI); ctx.stroke();
+        circle(cx + 46, mouthY - 34, 7, "#ffd94d");
       } else if (mood === "night") {
-        ctx.beginPath(); ctx.arc(cx, cy + 2, 8, 0, Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, mouthY + 2, 7, 0, Math.PI); ctx.stroke();
         ctx.fillStyle = "#7ab8ff";
         ctx.font = "bold 20px sans-serif";
-        ctx.fillText("Z", cx + 42, cy - 30);
+        ctx.fillText("Z", cx + 42, mouthY - 26);
         ctx.font = "bold 14px sans-serif";
-        ctx.fillText("z", cx + 56, cy - 44);
+        ctx.fillText("z", cx + 56, mouthY - 40);
+        ctx.fillStyle = "#5b8def";
+        ctx.beginPath(); ctx.moveTo(cx - 20, 62); ctx.lineTo(cx + 8, 34); ctx.lineTo(cx + 30, 58); ctx.closePath(); ctx.fill();
+        circle(cx + 8, 34, 6, "#ffffff");
       } else if (mood === "angry") {
-        circle(cx - 44, cy + 22, 12, "rgba(255,120,140,0.7)");
-        circle(cx + 44, cy + 22, 12, "rgba(255,120,140,0.7)");
-        ctx.beginPath(); ctx.moveTo(cx - 10, cy + 6); ctx.lineTo(cx + 10, cy + 6); ctx.stroke();
+        ellipse(cx - 44, 122, 12, 8, "rgba(255,120,140,0.7)");
+        ellipse(cx + 44, 122, 12, 8, "rgba(255,120,140,0.7)");
+        ctx.beginPath(); ctx.moveTo(cx - 9, mouthY + 2); ctx.lineTo(cx + 9, mouthY + 2); ctx.stroke();
       } else if (mood === "love") {
-        ctx.beginPath(); ctx.arc(cx, cy - 2, 14, 0, Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, mouthY - 2, 13, 0, Math.PI); ctx.stroke();
         ctx.fillStyle = "#ff5c8a";
         ctx.beginPath();
-        ctx.moveTo(cx + 44, cy - 40);
-        ctx.bezierCurveTo(cx + 30, cy - 54, cx + 22, cy - 40, cx + 44, cy - 24);
-        ctx.bezierCurveTo(cx + 66, cy - 40, cx + 58, cy - 54, cx + 44, cy - 40);
+        ctx.moveTo(cx, 152);
+        ctx.bezierCurveTo(cx - 18, 136, cx - 10, 124, cx, 132);
+        ctx.bezierCurveTo(cx + 10, 124, cx + 18, 136, cx, 152);
         ctx.fill();
       }
       return true;

@@ -223,11 +223,22 @@
   <!-- 老虎机 -->
   <section class="panel toy hidden" id="toy-slots">
     <h2>🎰 老虎机</h2>
-    <p class="hint">三行九格，两个人轮流拉，每轮比谁分高。三条横线加两条斜线，一条线三个一样得 10 分，三个💎得 30 分。纯属娱乐，不花钱。</p>
-    <div class="slots-reels" id="slotsReels"></div>
-    <p class="result-line" id="slotsResult">拉一下试试手气。</p>
-    <p class="count-line" id="slotsStats">玩家一 0 分 · 玩家二 0 分 · 第 1 轮</p>
-    <button class="btn gold-btn" id="slotsSpinBtn">拉一下 🎰</button>
+    <p class="hint">左右两台机器，一人一台，轮流拉。每轮每人拉一次，比谁分高。三条横线加两条斜线，一条线三个一样得 10 分，三个💎得 30 分。纯属娱乐，不花钱。</p>
+    <div class="slots-duel">
+      <div class="slots-machine active" id="slotsMachineA">
+        <p class="slots-player">🅰️ 玩家一 <span class="slots-score" id="slotsScoreA">0 分</span></p>
+        <div class="slots-reels" id="slotsReelsA"></div>
+        <button class="btn gold-btn" id="slotsSpinA">拉一下 🎰</button>
+        <p class="result-line" id="slotsResultA">等你拉。</p>
+      </div>
+      <div class="slots-machine" id="slotsMachineB">
+        <p class="slots-player">🅱️ 玩家二 <span class="slots-score" id="slotsScoreB">0 分</span></p>
+        <div class="slots-reels" id="slotsReelsB"></div>
+        <button class="btn gold-btn" id="slotsSpinB">拉一下 🎰</button>
+        <p class="result-line" id="slotsResultB">等你拉。</p>
+      </div>
+    </div>
+    <p class="count-line" id="slotsStats">第 1 轮 · 轮到玩家一</p>
     <button class="btn ghost-btn small" id="slotsResetBtn">重新开始 ↺</button>
   </section>
 
@@ -364,6 +375,11 @@
       </select>
       <button class="btn ghost-btn small" id="beadsSampleBtn">先看示例 ❤️</button>
     </div>
+    <div class="beads-controls">
+      <button class="btn ghost-btn small" id="beadsZoomOutBtn">缩小 －</button>
+      <button class="btn ghost-btn small" id="beadsZoomInBtn">放大 ＋</button>
+      <span class="count-line" id="beadsZoomLabel">每颗 22px，左右滑着看</span>
+    </div>
     <div class="beads-grid" id="beadsGrid"></div>
     <p class="result-line" id="beadsStats">还没生成图纸。</p>
     <div class="beads-legend" id="beadsLegend"></div>
@@ -416,12 +432,14 @@
   <!-- 指南针 -->
   <section class="panel toy hidden" id="toy-compass">
     <h2>🧭 指南针</h2>
-    <p class="hint">手机自带方向传感器才能用，电脑上没有。打开后把手机平放，慢慢转一圈校准。</p>
+    <p class="hint">手机自带方向传感器才能用，电脑上没有。红色指针永远指北不动，表盘跟着你转。打开后把手机平放，慢慢转一圈校准。</p>
     <div class="compass-dial" id="compassDial">
-      <span class="compass-label north" id="compassN">北</span>
-      <span class="compass-label east" id="compassE">东</span>
-      <span class="compass-label south" id="compassS">南</span>
-      <span class="compass-label west" id="compassW">西</span>
+      <div class="compass-card" id="compassCard">
+        <span class="compass-label north" id="compassN">北</span>
+        <span class="compass-label east" id="compassE">东</span>
+        <span class="compass-label south" id="compassS">南</span>
+        <span class="compass-label west" id="compassW">西</span>
+      </div>
       <div class="compass-needle" id="compassNeedle">▲</div>
       <div class="compass-center"></div>
     </div>
@@ -444,7 +462,7 @@
   <!-- 奶蛙表情包 -->
   <section class="panel toy hidden" id="toy-frog">
     <h2>🐸 奶蛙表情包</h2>
-    <p class="hint">最近很火的奶呼呼小青蛙，8 张原画表情，点一下就能下载 PNG，发群里用。图是现画的，不是网上搬的。</p>
+    <p class="hint">网上火的奶蛙，奶龙家族同款奶呼呼画风：胖身子、奶白大肚皮、小短手小短脚。8 张原画表情，点一下就能下载 PNG，发群里用。图是现画的，不是网上搬的。</p>
     <div class="frog-grid" id="frogGrid"></div>
     <p class="result-line" id="frogResult">喜欢哪张就下载哪张。</p>
   </section>
@@ -501,7 +519,7 @@
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.8 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.9 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -247,3 +247,34 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .puzzle-tile.blank { background: transparent; border-color: transparent; cursor: default; }
 .slots-reels { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
 .slots-reels span { font-size: 44px; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+
+/* v1.5：搜索框 + 数独 + 舒尔特方格 + 记分牌 + 手持弹幕 */
+#toySearch { width: 100%; padding: 12px 14px; border-radius: 999px; font-size: 15px; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink); margin: 10px 0 12px; }
+#toySearch::placeholder { color: rgba(255, 255, 255, .45); }
+.sudoku-grid { display: grid; grid-template-columns: repeat(9, 1fr); margin-top: 12px; border: 2px solid var(--gold); border-radius: 8px; overflow: hidden; }
+.sudoku-cell { aspect-ratio: 1; font-size: 18px; font-weight: 700; border: 1px solid rgba(255, 255, 255, .12); background: rgba(255, 255, 255, .04); color: var(--ink); cursor: pointer; padding: 0; }
+.sudoku-cell.given { color: var(--gold); cursor: default; }
+.sudoku-cell.selected { background: rgba(245, 197, 66, .25); }
+.sudoku-cell.wrong { color: #ff8f8f; background: rgba(255, 122, 107, .18); }
+.sudoku-cell.br { border-right: 2px solid var(--gold); }
+.sudoku-cell.bb { border-bottom: 2px solid var(--gold); }
+.sudoku-numbers { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+.sudoku-num { width: 34px; height: 40px; font-size: 18px; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 197, 66, .14); color: var(--ink); cursor: pointer; }
+.schulte-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+.schulte-cell { aspect-ratio: 1; font-size: 22px; font-weight: 700; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); cursor: pointer; }
+.schulte-cell.done { background: rgba(245, 197, 66, .25); border-color: var(--gold); color: var(--gold); }
+.score-board { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.score-team { flex: 1; text-align: center; }
+.score-team input { width: 100%; text-align: center; padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 16px; font-weight: 700; }
+.score-num { font-size: 56px; font-weight: 800; color: var(--gold); line-height: 1.2; }
+.score-vs { font-size: 18px; font-weight: 800; color: rgba(255, 255, 255, .5); }
+.score-btns { display: flex; gap: 6px; justify-content: center; }
+.led-colors { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.led-color { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.led-color.active { border-color: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, .5); }
+.led-speeds { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+.led-display { margin-top: 12px; background: #000; border: 1px solid var(--line); border-radius: 12px; padding: 18px 0; overflow: hidden; }
+#ledText { display: inline-block; white-space: nowrap; font-size: 44px; font-weight: 900; }
+#ledText.scrolling { animation: led-scroll 7s linear infinite; }
+@keyframes led-scroll { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+#ledInput { width: 100%; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin-top: 12px; }

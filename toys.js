@@ -954,5 +954,366 @@
   });
   renderSlotsStats();
 
+  /* ---------- 玩具搜索（小优化：玩具多了，搜名字直达） ---------- */
+  $("toySearch").addEventListener("input", () => {
+    const q = $("toySearch").value.trim();
+    nav.querySelectorAll(".pill").forEach((b, i) => {
+      b.classList.toggle("hidden", q !== "" && !TOYS[i].label.includes(q));
+    });
+  });
+
+  /* ---------- 15. 数独 ---------- */
+  const SUDOKU_BEST_KEY = "dorm-toybox-sudoku-best-v1";
+  function sudokuCandidates(grid, idx) {
+    const r = Math.floor(idx / 9), c = idx % 9;
+    const used = new Set();
+    for (let i = 0; i < 9; i++) { used.add(grid[r * 9 + i]); used.add(grid[i * 9 + c]); }
+    const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) used.add(grid[(br + i) * 9 + bc + j]);
+    const out = [];
+    for (let n = 1; n <= 9; n++) if (!used.has(n)) out.push(n);
+    return out;
+  }
+  function sudokuSolveCount(grid, limit) {
+    let best = -1, bestCands = null;
+    for (let i = 0; i < 81; i++) {
+      if (grid[i] === 0) {
+        const cs = sudokuCandidates(grid, i);
+        if (cs.length === 0) return 0;
+        if (bestCands === null || cs.length < bestCands.length) { best = i; bestCands = cs; if (cs.length === 1) break; }
+      }
+    }
+    if (best === -1) return 1;
+    let count = 0;
+    for (const n of bestCands) {
+      grid[best] = n;
+      count += sudokuSolveCount(grid, limit);
+      grid[best] = 0;
+      if (count >= limit) return count;
+    }
+    return count;
+  }
+  function sudokuFullGrid() {
+    const grid = new Array(81).fill(0);
+    function fill() {
+      let best = -1, bestCands = null;
+      for (let i = 0; i < 81; i++) {
+        if (grid[i] === 0) {
+          const cs = shuffle(sudokuCandidates(grid, i));
+          if (cs.length === 0) return false;
+          if (bestCands === null || cs.length < bestCands.length) { best = i; bestCands = cs; if (cs.length === 1) break; }
+        }
+      }
+      if (best === -1) return true;
+      for (const n of bestCands) { grid[best] = n; if (fill()) return true; grid[best] = 0; }
+      return false;
+    }
+    fill();
+    return grid;
+  }
+  function sudokuGenerate() {
+    try {
+      const solution = sudokuFullGrid();
+      const puzzle = solution.slice();
+      const order = shuffle(Array.from({ length: 81 }, (_, i) => i));
+      let givens = 81;
+      for (const idx of order) {
+        if (givens <= 30) break;
+        const backup = puzzle[idx];
+        puzzle[idx] = 0;
+        if (sudokuSolveCount(puzzle.slice(), 2) !== 1) puzzle[idx] = backup;
+        else givens--;
+      }
+      return { puzzle, solution };
+    } catch (e) { return null; }
+  }
+  let sudokuPuzzle = [];
+  let sudokuSolution = [];
+  let sudokuEntries = [];
+  let sudokuSelected = -1;
+  let sudokuMistakes = 0;
+  let sudokuStartAt = 0;
+  let sudokuTimerId = null;
+  let sudokuWon = false;
+  function loadSudokuBest() {
+    try { return parseInt(localStorage.getItem(SUDOKU_BEST_KEY) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  let sudokuBest = loadSudokuBest();
+  function sudokuElapsedSec() { return sudokuStartAt ? (performance.now() - sudokuStartAt) / 1000 : 0; }
+  function renderSudokuBest() {
+    $("sudokuBest").textContent = sudokuBest > 0
+      ? "宿舍纪录：" + sudokuBest + " 秒通关"
+      : "还没人通关。第一个通关的就是纪录。";
+  }
+  function renderSudokuStats() {
+    const filled = sudokuEntries.filter((n) => n !== 0).length;
+    $("sudokuStats").textContent = "已填 " + filled + " 格 · 错 " + sudokuMistakes + " 次 · 用时 " + Math.floor(sudokuElapsedSec()) + " 秒";
+  }
+  function renderSudokuGrid() {
+    const grid = $("sudokuGrid");
+    grid.innerHTML = "";
+    for (let i = 0; i < 81; i++) {
+      const cell = document.createElement("button");
+      const given = sudokuPuzzle[i] !== 0;
+      cell.className = "sudoku-cell" + (given ? " given" : "") + (i === sudokuSelected ? " selected" : "");
+      if (i % 9 === 2 || i % 9 === 5) cell.classList.add("br");
+      if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) cell.classList.add("bb");
+      if (!given && sudokuEntries[i] !== 0 && sudokuEntries[i] !== sudokuSolution[i]) cell.classList.add("wrong");
+      cell.textContent = given ? String(sudokuPuzzle[i]) : (sudokuEntries[i] !== 0 ? String(sudokuEntries[i]) : "");
+      cell.setAttribute("data-idx", String(i));
+      if (!given) cell.addEventListener("click", () => sudokuSelect(i));
+      grid.appendChild(cell);
+    }
+  }
+  function sudokuSelect(i) {
+    if (sudokuWon || sudokuPuzzle[i] !== 0) return;
+    sudokuSelected = i;
+    renderSudokuGrid();
+  }
+  function sudokuCheckWin() {
+    if (sudokuWon) return;
+    for (let i = 0; i < 81; i++) {
+      if (sudokuPuzzle[i] === 0 && sudokuEntries[i] !== sudokuSolution[i]) return;
+    }
+    sudokuWon = true;
+    if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; }
+    const seconds = Math.max(Math.round(sudokuElapsedSec()), 1);
+    let msg = "🎉 通关！用了 " + seconds + " 秒 · 错 " + sudokuMistakes + " 次。";
+    if (sudokuBest === 0 || seconds < sudokuBest) {
+      sudokuBest = seconds;
+      try { localStorage.setItem(SUDOKU_BEST_KEY, String(seconds)); } catch (e) { /* 忽略 */ }
+      msg += "新纪录！";
+    }
+    $("sudokuResult").textContent = msg;
+    renderSudokuBest();
+  }
+  function sudokuFill(n) {
+    if (sudokuWon || sudokuSelected < 0 || sudokuPuzzle[sudokuSelected] !== 0) return;
+    if (!sudokuStartAt) {
+      sudokuStartAt = performance.now();
+      sudokuTimerId = setInterval(renderSudokuStats, 1000);
+    }
+    const i = sudokuSelected;
+    sudokuEntries[i] = n;
+    if (n !== sudokuSolution[i]) {
+      sudokuMistakes++;
+      $("sudokuResult").textContent = "这个位置不是 " + n + "，再想想。";
+    } else {
+      $("sudokuResult").textContent = "对了，继续。";
+    }
+    renderSudokuGrid();
+    renderSudokuStats();
+    sudokuCheckWin();
+  }
+  const sudokuNumPad = $("sudokuNumbers");
+  for (let n = 1; n <= 9; n++) {
+    const b = document.createElement("button");
+    b.className = "sudoku-num";
+    b.textContent = String(n);
+    b.addEventListener("click", () => sudokuFill(n));
+    sudokuNumPad.appendChild(b);
+  }
+  function sudokuNewGame() {
+    const g = sudokuGenerate();
+    if (g && g.puzzle && sudokuSolveCount(g.puzzle.slice(), 2) === 1) {
+      sudokuPuzzle = g.puzzle; sudokuSolution = g.solution;
+    } else {
+      sudokuPuzzle = SUDOKU_FALLBACK.puzzle.slice(); sudokuSolution = SUDOKU_FALLBACK.solution.slice();
+    }
+    sudokuEntries = new Array(81).fill(0);
+    sudokuSelected = -1;
+    sudokuMistakes = 0;
+    sudokuStartAt = 0;
+    sudokuWon = false;
+    if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; }
+    $("sudokuResult").textContent = "点一个空格开始填。";
+    renderSudokuGrid();
+    renderSudokuStats();
+    renderSudokuBest();
+  }
+  $("sudokuEraseBtn").addEventListener("click", () => {
+    if (sudokuWon || sudokuSelected < 0) return;
+    sudokuEntries[sudokuSelected] = 0;
+    renderSudokuGrid();
+    renderSudokuStats();
+  });
+  $("sudokuCheckBtn").addEventListener("click", () => {
+    let wrong = 0;
+    for (let i = 0; i < 81; i++) if (sudokuPuzzle[i] === 0 && sudokuEntries[i] !== 0 && sudokuEntries[i] !== sudokuSolution[i]) wrong++;
+    $("sudokuResult").textContent = wrong === 0 ? "目前填的都对，继续。" : "有 " + wrong + " 格填错了，已标红。";
+    renderSudokuGrid();
+  });
+  $("sudokuNewBtn").addEventListener("click", sudokuNewGame);
+  sudokuNewGame();
+
+  /* ---------- 16. 舒尔特方格 ---------- */
+  const SCHULTE_BEST_KEY = "dorm-toybox-schulte-best-v1";
+  let schulteNext = 1;
+  let schulteStartAt = 0;
+  let schulteTimerId = null;
+  let schulteDone = false;
+  function loadSchulteBest() {
+    try { return parseFloat(localStorage.getItem(SCHULTE_BEST_KEY) || "0") || 0; }
+    catch (e) { return 0; }
+  }
+  let schulteBest = loadSchulteBest();
+  function renderSchulteBest() {
+    $("schulteBest").textContent = schulteBest > 0
+      ? "宿舍纪录：" + schulteBest.toFixed(1) + " 秒"
+      : "还没人通关。第一个通关的就是纪录。";
+  }
+  function schulteElapsed() { return schulteStartAt ? (performance.now() - schulteStartAt) / 1000 : 0; }
+  function renderSchulteStats() { $("schulteStats").textContent = "用时 " + schulteElapsed().toFixed(1) + " 秒"; }
+  function schulteNewGame() {
+    const numbers = shuffle(Array.from({ length: 25 }, (_, i) => i + 1));
+    schulteNext = 1;
+    schulteStartAt = 0;
+    schulteDone = false;
+    if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
+    const grid = $("schulteGrid");
+    grid.innerHTML = "";
+    numbers.forEach((n) => {
+      const cell = document.createElement("button");
+      cell.className = "schulte-cell";
+      cell.textContent = String(n);
+      cell.setAttribute("data-num", String(n));
+      cell.addEventListener("click", () => schulteTap(cell, n));
+      grid.appendChild(cell);
+    });
+    $("schulteTarget").textContent = "下一个点：1";
+    $("schulteResult").textContent = "点 1 开始计时。";
+    renderSchulteStats();
+    renderSchulteBest();
+  }
+  function schulteTap(cell, n) {
+    if (schulteDone) return;
+    if (n !== schulteNext) {
+      $("schulteResult").textContent = "点错了，要点的是 " + schulteNext + "。";
+      return;
+    }
+    if (!schulteStartAt) {
+      schulteStartAt = performance.now();
+      schulteTimerId = setInterval(renderSchulteStats, 100);
+    }
+    cell.classList.add("done");
+    schulteNext++;
+    if (schulteNext > 25) {
+      schulteDone = true;
+      if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
+      const seconds = schulteElapsed();
+      let msg = "🎉 完成！用时 " + seconds.toFixed(1) + " 秒。";
+      if (schulteBest === 0 || seconds < schulteBest) {
+        schulteBest = seconds;
+        try { localStorage.setItem(SCHULTE_BEST_KEY, String(seconds)); } catch (e) { /* 忽略 */ }
+        msg += "新纪录！";
+      }
+      $("schulteResult").textContent = msg;
+      $("schulteTarget").textContent = "已完成";
+      renderSchulteStats();
+      renderSchulteBest();
+    } else {
+      $("schulteTarget").textContent = "下一个点：" + schulteNext;
+      $("schulteResult").textContent = "对了，继续点 " + schulteNext + "。";
+    }
+  }
+  $("schulteResetBtn").addEventListener("click", schulteNewGame);
+  schulteNewGame();
+
+  /* ---------- 17. 记分牌 ---------- */
+  const SCORE_KEY = "dorm-toybox-score-v1";
+  const SCORE_TARGET = 21;
+  function loadScore() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SCORE_KEY) || "null");
+      return s && typeof s.a === "number" ? s : { a: 0, b: 0, nameA: "红队", nameB: "蓝队" };
+    } catch (e) { return { a: 0, b: 0, nameA: "红队", nameB: "蓝队" }; }
+  }
+  let score = loadScore();
+  function renderScore() {
+    $("scoreA").textContent = String(score.a);
+    $("scoreB").textContent = String(score.b);
+    $("scoreNameA").value = score.nameA;
+    $("scoreNameB").value = score.nameB;
+    if (score.a >= SCORE_TARGET) $("scoreResult").textContent = "🏆 " + score.nameA + " 赢了！";
+    else if (score.b >= SCORE_TARGET) $("scoreResult").textContent = "🏆 " + score.nameB + " 赢了！";
+    else $("scoreResult").textContent = "先到 " + SCORE_TARGET + " 分获胜。";
+  }
+  function saveScore() {
+    try { localStorage.setItem(SCORE_KEY, JSON.stringify(score)); } catch (e) { /* 忽略 */ }
+  }
+  function scoreAdd(team, n) {
+    if (score.a >= SCORE_TARGET || score.b >= SCORE_TARGET) return;
+    if (team === "a") score.a += n; else score.b += n;
+    saveScore();
+    renderScore();
+  }
+  $("scoreA1").addEventListener("click", () => scoreAdd("a", 1));
+  $("scoreA2").addEventListener("click", () => scoreAdd("a", 2));
+  $("scoreA3").addEventListener("click", () => scoreAdd("a", 3));
+  $("scoreB1").addEventListener("click", () => scoreAdd("b", 1));
+  $("scoreB2").addEventListener("click", () => scoreAdd("b", 2));
+  $("scoreB3").addEventListener("click", () => scoreAdd("b", 3));
+  $("scoreNameA").addEventListener("change", () => {
+    score.nameA = $("scoreNameA").value.trim() || "红队";
+    saveScore();
+    renderScore();
+  });
+  $("scoreNameB").addEventListener("change", () => {
+    score.nameB = $("scoreNameB").value.trim() || "蓝队";
+    saveScore();
+    renderScore();
+  });
+  $("scoreResetBtn").addEventListener("click", () => {
+    score = { a: 0, b: 0, nameA: score.nameA, nameB: score.nameB };
+    saveScore();
+    renderScore();
+  });
+  renderScore();
+
+  /* ---------- 18. 手持弹幕 ---------- */
+  const LED_COLORS = ["#ffd94d", "#ff5c5c", "#7dff9b", "#7ab8ff", "#e58cff", "#ffffff"];
+  const LED_SPEEDS = [{ label: "慢", dur: "12s" }, { label: "中", dur: "7s" }, { label: "快", dur: "4s" }];
+  let ledRunning = false;
+  let ledDuration = "7s";
+  const ledColorsBox = $("ledColors");
+  LED_COLORS.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "led-color" + (i === 0 ? " active" : "");
+    b.style.background = c;
+    b.setAttribute("data-color", c);
+    b.setAttribute("aria-label", "弹幕颜色 " + c);
+    b.addEventListener("click", () => {
+      $("ledText").style.color = c;
+      ledColorsBox.querySelectorAll(".led-color").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+    });
+    ledColorsBox.appendChild(b);
+  });
+  const ledSpeedsBox = $("ledSpeeds");
+  LED_SPEEDS.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "btn small" + (i === 1 ? " gold-btn" : " ghost-btn");
+    b.textContent = s.label;
+    b.addEventListener("click", () => {
+      ledDuration = s.dur;
+      $("ledText").style.animationDuration = ledDuration;
+      ledSpeedsBox.querySelectorAll("button").forEach((x) => { x.className = "btn small ghost-btn"; });
+      b.className = "btn small gold-btn";
+    });
+    ledSpeedsBox.appendChild(b);
+  });
+  $("ledText").style.color = LED_COLORS[0];
+  $("ledText").style.animationDuration = ledDuration;
+  $("ledInput").addEventListener("input", () => {
+    $("ledText").textContent = $("ledInput").value.trim() || "我在这里！";
+  });
+  $("ledStartBtn").addEventListener("click", () => {
+    ledRunning = !ledRunning;
+    $("ledText").classList.toggle("scrolling", ledRunning);
+    $("ledStartBtn").textContent = ledRunning ? "停下来 ⏸" : "开始滚动 ▶";
+    $("ledResult").textContent = ledRunning ? "滚动中，举起手机给大家看。" : "已暂停。";
+  });
+
   renderTimer();
 })();

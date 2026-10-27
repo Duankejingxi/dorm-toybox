@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、数字炸弹、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、数字炸弹、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、白噪音、宿舍值日表、AA 分摊、涂鸦板、奶蛙表情包制作。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">三十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">三十四个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -498,8 +498,83 @@
   </section>
 </main>
 
+  <!-- 宿舍值日表 -->
+  <section class="panel toy hidden" id="toy-duty">
+    <h2>🧹 宿舍值日表</h2>
+    <p class="hint">写上室友名字，一键排好这周的值日表：每天一个人，轮着来。今天那行会标亮，排完点复制发群里。</p>
+    <p class="count-line">室友名字（一行一个）</p>
+    <textarea id="dutyNames" rows="3" placeholder="阿伟&#10;小明&#10;阿强&#10;老陈"></textarea>
+    <div class="duty-tasks" id="dutyTasks"></div>
+    <div class="beads-controls">
+      <select id="dutyWeeks" aria-label="排几周">
+        <option value="1" selected>排 1 周</option>
+        <option value="2">排 2 周</option>
+        <option value="4">排 4 周</option>
+      </select>
+      <button class="btn gold-btn small" id="dutyGenBtn">排值日表 🧹</button>
+    </div>
+    <p class="result-line" id="dutyStartLabel"></p>
+    <div class="duty-wrap"><table class="duty-table">
+      <thead><tr><th>日期</th><th>值日生</th><th>任务</th></tr></thead>
+      <tbody id="dutyTable"></tbody>
+    </table></div>
+    <p class="result-line" id="dutyResult">先写名字，再点排值日表。</p>
+    <button class="btn ghost-btn small hidden" id="dutyCopyBtn">复制值日表 📋</button>
+  </section>
+
+  <!-- AA 分摊 -->
+  <section class="panel toy hidden" id="toy-aa">
+    <h2>🧾 AA 分摊</h2>
+    <p class="hint">一顿饭、一单外卖、一笔宿舍开销，总额一填，人均马上算出来。分到分绝不差一分钱：多出来的几分钱按顺序分给前面的人。选个垫付人，还能算出谁该给谁转多少钱。</p>
+    <p class="count-line">总金额（元）</p>
+    <input id="aaTotal" type="number" inputmode="decimal" min="0" step="0.01" placeholder="比如 88.5">
+    <p class="count-line">参与的人（一行一个）</p>
+    <textarea id="aaNames" rows="3" placeholder="阿伟&#10;小明&#10;阿强"></textarea>
+    <p class="count-line">谁先垫付的（可选）</p>
+    <select id="aaPayer" aria-label="垫付人"><option value="">没人垫付，只算人均</option></select>
+    <button class="btn gold-btn" id="aaCalcBtn">算一下 🧾</button>
+    <div id="aaResult"></div>
+  </section>
+
+  <!-- 涂鸦板 -->
+  <section class="panel toy hidden" id="toy-doodle">
+    <h2>🎨 涂鸦板</h2>
+    <p class="hint">手指直接在白板上画，画完点保存存成图片。发群里当表情包也行。</p>
+    <canvas id="doodleCanvas" width="680" height="680"></canvas>
+    <div class="doodle-colors" id="doodleColors"></div>
+    <div class="beads-controls">
+      <select id="doodleSize" aria-label="画笔粗细">
+        <option value="4">细笔</option>
+        <option value="8" selected>中笔</option>
+        <option value="14">粗笔</option>
+      </select>
+      <button class="btn ghost-btn small" id="doodleEraserBtn">橡皮擦</button>
+      <button class="btn ghost-btn small" id="doodleClearBtn">清空</button>
+    </div>
+    <p class="result-line" id="doodleResult">还没画。选个颜色，直接上手画。</p>
+    <button class="btn gold-btn" id="doodleSaveBtn">保存涂鸦 ⬇</button>
+  </section>
+
+  <!-- 奶蛙表情包制作 -->
+  <section class="panel toy hidden" id="toy-meme">
+    <h2>😂 奶蛙表情包制作</h2>
+    <p class="hint">选一张奶蛙，上下各加一行字，就是一张新的表情包。字是经典表情包样式：白字黑边，导出就是图片。</p>
+    <div class="meme-strip" id="memeStrip"></div>
+    <p class="result-line" id="memeSelected">已选 奶蛙-001</p>
+    <canvas id="memeCanvas" width="480" height="480"></canvas>
+    <p class="count-line">上面一行字</p>
+    <input id="memeTop" type="text" maxlength="24" placeholder="比如：我不管">
+    <p class="count-line">下面一行字</p>
+    <input id="memeBottom" type="text" maxlength="24" placeholder="比如：你先哄我">
+    <div class="beads-controls">
+      <button class="btn ghost-btn small" id="memeRandomBtn">随机换一张 🎲</button>
+      <button class="btn gold-btn small" id="memeExportBtn">导出表情包 ⬇</button>
+    </div>
+    <p class="result-line" id="memeResult">字打完自动画好，点导出存成图片。</p>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.17 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.18 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -395,7 +395,7 @@
       $("timerDurations").querySelectorAll("button").forEach((x) => {
         x.className = "btn small " + (x === b ? "gold-btn" : "ghost-btn");
       });
-      renderTimer();
+  renderTimer();
     });
     $("timerDurations").appendChild(b);
   });
@@ -2244,6 +2244,291 @@
 
   // 退出就停：不然退出后还在放（就是这次报的 bug）
   toyLeaveCleanup.whitenoise = () => { if (wnCurrent) wnStopAll(false); };
+
+  /* ---------- 33. 宿舍值日表 ---------- */
+  const DUTY_KEY = "dorm-toybox-duty-v1";
+  const DUTY_TASKS = ["扫地", "拖地", "倒垃圾", "擦桌子", "卫生间"];
+  let dutyChecked = {};
+  try {
+    const savedDuty = JSON.parse(localStorage.getItem(DUTY_KEY) || "null");
+    if (savedDuty) {
+      if (savedDuty.names) $("dutyNames").value = savedDuty.names;
+      if (savedDuty.tasks) dutyChecked = savedDuty.tasks;
+    }
+  } catch (e) { /* 忽略 */ }
+  DUTY_TASKS.forEach((t) => {
+    const lab = document.createElement("label");
+    lab.className = "duty-task";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = dutyChecked[t] !== false;
+    cb.addEventListener("change", () => { dutyChecked[t] = cb.checked; saveDuty(); });
+    lab.appendChild(cb);
+    const span = document.createElement("span");
+    span.textContent = t;
+    lab.appendChild(span);
+    $("dutyTasks").appendChild(lab);
+  });
+  function saveDuty() {
+    try { localStorage.setItem(DUTY_KEY, JSON.stringify({ names: $("dutyNames").value, tasks: dutyChecked })); } catch (e) { /* 忽略 */ }
+  }
+  function dutyMonday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // 本周一（含今天就是周日时，也是本周一）
+    return d;
+  }
+  function dutyFmt(d) {
+    const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日 周" + week;
+  }
+  let lastDutyText = "";
+  $("dutyGenBtn").addEventListener("click", () => {
+    const names = $("dutyNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (names.length < 2) { $("dutyResult").textContent = "至少写 2 个名字才能排表。"; return; }
+    const tasks = DUTY_TASKS.filter((t) => dutyChecked[t] !== false);
+    if (tasks.length === 0) { $("dutyResult").textContent = "至少勾 1 个任务。"; return; }
+    saveDuty();
+    const weeks = parseInt($("dutyWeeks").value, 10) || 1;
+    const monday = dutyMonday();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tbody = $("dutyTable");
+    tbody.innerHTML = "";
+    const lines = [];
+    for (let w = 0; w < weeks; w++) {
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday); d.setDate(monday.getDate() + w * 7 + i);
+        const person = names[(w * 7 + i) % names.length];
+        const tr = document.createElement("tr");
+        if (d.getTime() === today.getTime()) tr.className = "today";
+        const c1 = document.createElement("td"); c1.textContent = dutyFmt(d);
+        const c2 = document.createElement("td"); c2.textContent = person;
+        const c3 = document.createElement("td"); c3.textContent = tasks.join("、");
+        tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3);
+        tbody.appendChild(tr);
+        lines.push(dutyFmt(d) + " " + person + "：" + tasks.join("、"));
+      }
+    }
+    lastDutyText = lines.join("\n");
+    const end = new Date(monday); end.setDate(monday.getDate() + weeks * 7 - 1);
+    $("dutyStartLabel").textContent = "值日表（" + dutyFmt(monday) + " – " + dutyFmt(end) + "），每天一人轮着来。";
+    $("dutyResult").textContent = "已排好 " + (weeks * 7) + " 天，点复制发群里。";
+    $("dutyCopyBtn").classList.remove("hidden");
+  });
+  $("dutyCopyBtn").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText("🧹 宿舍值日表\n" + lastDutyText);
+      $("dutyCopyBtn").textContent = "已复制 ✅";
+      setTimeout(() => { $("dutyCopyBtn").textContent = "复制值日表 📋"; }, 2000);
+    } catch (e) {
+      $("dutyResult").textContent = lastDutyText;
+    }
+  });
+
+  /* ---------- 34. AA 分摊 ---------- */
+  function aaParseNames() {
+    return $("aaNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  }
+  function aaRefreshPayer() {
+    const names = aaParseNames();
+    const cur = $("aaPayer").value;
+    const sel = $("aaPayer");
+    sel.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = ""; opt0.textContent = "没人垫付，只算人均";
+    sel.appendChild(opt0);
+    names.forEach((n) => {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = n + " 先垫付了";
+      sel.appendChild(o);
+    });
+    if (names.indexOf(cur) !== -1) sel.value = cur;
+  }
+  $("aaNames").addEventListener("input", aaRefreshPayer);
+  $("aaCalcBtn").addEventListener("click", () => {
+    const total = Math.round(parseFloat($("aaTotal").value || "0") * 100);
+    const names = aaParseNames();
+    if (!(total > 0)) { $("aaResult").textContent = "先填总金额（要大于 0）。"; return; }
+    if (names.length < 2) { $("aaResult").textContent = "至少写 2 个人才能分摊。"; return; }
+    aaRefreshPayer();
+    // 分到分：先每人取整，剩下的几分钱按顺序分给前面的人，总数一分不差
+    const base = Math.floor(total / names.length);
+    let rest = total - base * names.length;
+    const shares = names.map(() => { const s = base + (rest > 0 ? 1 : 0); if (rest > 0) rest--; return s; });
+    const fmt = (cents) => "¥" + (cents / 100).toFixed(2);
+    const box = $("aaResult");
+    box.innerHTML = "";
+    const head = document.createElement("p");
+    head.className = "result-line";
+    head.textContent = "总额 " + fmt(total) + " · " + names.length + " 人 · 人均 " + fmt(Math.round(total / names.length));
+    box.appendChild(head);
+    names.forEach((n, i) => {
+      const line = document.createElement("div");
+      line.className = "aa-line";
+      line.textContent = n + " 出 " + fmt(shares[i]);
+      box.appendChild(line);
+    });
+    const payer = $("aaPayer").value;
+    if (payer && names.indexOf(payer) !== -1) {
+      const title = document.createElement("p");
+      title.className = "result-line";
+      title.textContent = "💸 结算：" + payer + " 先垫了全款，每人把自己那份转给他：";
+      box.appendChild(title);
+      names.forEach((n, i) => {
+        if (n === payer) return;
+        const line = document.createElement("div");
+        line.className = "aa-line";
+        line.textContent = n + " → " + payer + " " + fmt(shares[i]);
+        box.appendChild(line);
+      });
+    }
+  });
+
+  /* ---------- 35. 涂鸦板 ---------- */
+  const DOODLE_COLORS = ["#222222", "#E5484D", "#F76B15", "#FFD60A", "#30A46C", "#0090FF", "#8E4EC6", "#FF8FAB"];
+  let doodleColor = "#222222", doodleDrawing = false, doodleLast = null, doodleStrokes = 0;
+  const doodleColorBtns = [];
+  const doodleCanvas = $("doodleCanvas");
+  const doodleCtx = doodleCanvas.getContext ? doodleCanvas.getContext("2d") : null;
+  if (doodleCtx) { doodleCtx.fillStyle = "#ffffff"; doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height); }
+  DOODLE_COLORS.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "doodle-color" + (i === 0 ? " active" : "");
+    b.style.background = c;
+    b.setAttribute("aria-label", "颜色 " + c);
+    b.addEventListener("click", () => {
+      doodleColor = c;
+      doodleColorBtns.forEach((el) => el.classList.remove("active"));
+      $("doodleEraserBtn").classList.remove("active");
+      b.classList.add("active");
+    });
+    doodleColorBtns.push(b);
+    $("doodleColors").appendChild(b);
+  });
+  function doodleScale() {
+    // 显示尺寸和画布尺寸不一样（CSS 缩放过），按比例换算坐标；取不到显示尺寸时按 1:1
+    return (doodleCanvas.clientWidth > 0) ? doodleCanvas.width / doodleCanvas.clientWidth : 1;
+  }
+  doodleCanvas.addEventListener("pointerdown", (e) => {
+    if (!doodleCtx) return;
+    if (e.preventDefault) e.preventDefault();
+    doodleDrawing = true;
+    const s = doodleScale();
+    doodleLast = { x: e.offsetX * s, y: e.offsetY * s };
+    doodleStrokes++;
+    $("doodleResult").textContent = "已画 " + doodleStrokes + " 笔，点保存存成图片。";
+  });
+  doodleCanvas.addEventListener("pointermove", (e) => {
+    if (!doodleDrawing || !doodleCtx) return;
+    const s = doodleScale();
+    const p = { x: e.offsetX * s, y: e.offsetY * s };
+    doodleCtx.strokeStyle = doodleColor;
+    doodleCtx.lineWidth = parseInt($("doodleSize").value, 10) || 8;
+    doodleCtx.lineCap = "round";
+    doodleCtx.beginPath();
+    doodleCtx.moveTo(doodleLast.x, doodleLast.y);
+    doodleCtx.lineTo(p.x, p.y);
+    doodleCtx.stroke();
+    doodleLast = p;
+  });
+  const doodleStop = () => { doodleDrawing = false; doodleLast = null; };
+  doodleCanvas.addEventListener("pointerup", doodleStop);
+  doodleCanvas.addEventListener("pointerleave", doodleStop);
+  $("doodleEraserBtn").addEventListener("click", () => {
+    doodleColor = "#ffffff";
+    doodleColorBtns.forEach((el) => el.classList.remove("active"));
+    $("doodleEraserBtn").classList.add("active");
+    $("doodleResult").textContent = "橡皮擦：涂掉不要的部分。";
+  });
+  $("doodleClearBtn").addEventListener("click", () => {
+    if (doodleCtx) { doodleCtx.fillStyle = "#ffffff"; doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height); }
+    doodleStrokes = 0;
+    $("doodleResult").textContent = "已清空，重新画吧。";
+  });
+  $("doodleSaveBtn").addEventListener("click", () => {
+    if (doodleStrokes === 0) { $("doodleResult").textContent = "先画点什么再保存。"; return; }
+    if (typeof doodleCanvas.toDataURL !== "function") { $("doodleResult").textContent = "当前环境不支持保存。"; return; }
+    const a = document.createElement("a");
+    a.href = doodleCanvas.toDataURL("image/png");
+    a.download = "涂鸦.png";
+    a.click();
+    $("doodleResult").textContent = "涂鸦已保存为图片。";
+  });
+
+  /* ---------- 36. 奶蛙表情包制作 ---------- */
+  let memeIndex = 0;
+  let memeImg = null;
+  const memeCanvas = $("memeCanvas");
+  const memeCtx = memeCanvas.getContext ? memeCanvas.getContext("2d") : null;
+  FROG_STICKERS.forEach((s, i) => {
+    const thumb = document.createElement("img");
+    thumb.src = s.src;
+    thumb.alt = "奶蛙-" + String(i + 1).padStart(3, "0");
+    thumb.className = "meme-thumb" + (i === 0 ? " active" : "");
+    thumb.loading = "lazy";
+    thumb.addEventListener("click", () => { memeSelect(i); });
+    $("memeStrip").appendChild(thumb);
+  });
+  function memeSelect(i) {
+    memeIndex = i;
+    const thumbs = $("memeStrip").children;
+    for (let k = 0; k < thumbs.length; k++) thumbs[k].classList.toggle("active", k === i);
+    $("memeSelected").textContent = "已选 奶蛙-" + String(i + 1).padStart(3, "0");
+    memeLoadAndDraw();
+  }
+  function memeLoadAndDraw() {
+    const src = FROG_STICKERS[memeIndex].src;
+    if (typeof Image === "undefined") { memeDraw(null); return; } // 测试环境没有 Image，只画字
+    if (!memeImg) memeImg = new Image();
+    memeImg.onload = () => memeDraw(memeImg);
+    memeImg.src = src;
+    if (memeImg.complete && memeImg.naturalWidth > 0) memeDraw(memeImg); // 数据图可能已经在了
+  }
+  function memeText(text, cx, cy) {
+    if (!text || !memeCtx) return;
+    // 超过 12 个字换行，最多两行
+    const lines = text.length > 12 ? [text.slice(0, 12), text.slice(12, 24)] : [text];
+    lines.forEach((line, i) => {
+      const y = cy + (i - (lines.length - 1) / 2) * 52;
+      memeCtx.strokeText(line, cx, y);
+      memeCtx.fillText(line, cx, y);
+    });
+  }
+  function memeDraw(img) {
+    if (!memeCtx) return;
+    const W = 480, H = 480;
+    memeCtx.fillStyle = "#ffffff";
+    memeCtx.fillRect(0, 0, W, H);
+    if (img) {
+      const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+      const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+      memeCtx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    }
+    memeCtx.font = "bold 44px sans-serif";
+    memeCtx.textAlign = "center";
+    memeCtx.textBaseline = "middle";
+    memeCtx.lineWidth = 8;
+    memeCtx.strokeStyle = "#000000";
+    memeCtx.fillStyle = "#ffffff";
+    memeText($("memeTop").value.trim(), W / 2, 52);
+    memeText($("memeBottom").value.trim(), W / 2, H - 52);
+  }
+  $("memeTop").addEventListener("input", () => memeDraw(memeImg && memeImg.complete ? memeImg : null));
+  $("memeBottom").addEventListener("input", () => memeDraw(memeImg && memeImg.complete ? memeImg : null));
+  $("memeRandomBtn").addEventListener("click", () => {
+    let next = Math.floor(Math.random() * FROG_STICKERS.length);
+    if (FROG_STICKERS.length > 1 && next === memeIndex) next = (next + 1) % FROG_STICKERS.length;
+    memeSelect(next);
+  });
+  $("memeExportBtn").addEventListener("click", () => {
+    if (typeof memeCanvas.toDataURL !== "function") { $("memeResult").textContent = "当前环境不支持导出。"; return; }
+    const a = document.createElement("a");
+    a.href = memeCanvas.toDataURL("image/png");
+    a.download = "奶蛙表情包.png";
+    a.click();
+    $("memeResult").textContent = "表情包已导出为图片，发群里用。";
+  });
+  memeLoadAndDraw();
 
   renderTimer();
 })();

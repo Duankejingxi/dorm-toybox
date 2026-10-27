@@ -35,6 +35,10 @@ const TOYS = [
   { id: "stopwatch", label: "⏱ 计时器" },
   { id: "bmi", label: "⚖️ BMI 体重管理" },
   { id: "whitenoise", label: "🌧 白噪音" },
+  { id: "duty", label: "🧹 宿舍值日表" },
+  { id: "aa", label: "🧾 AA 分摊" },
+  { id: "doodle", label: "🎨 涂鸦板" },
+  { id: "meme", label: "😂 奶蛙表情包制作" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

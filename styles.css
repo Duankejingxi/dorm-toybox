@@ -333,6 +333,30 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .frog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
 .frog-card { border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; background: rgba(255, 255, 255, .03); }
 .frog-card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; border-radius: 10px; }
+
+/* 宿舍值日表 */
+.duty-tasks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.duty-task { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; cursor: pointer; }
+.duty-wrap { overflow-x: auto; margin-top: 12px; }
+.duty-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.duty-table th, .duty-table td { padding: 8px 6px; border-bottom: 1px solid rgba(255, 255, 255, .08); text-align: left; }
+.duty-table tr.today { background: rgba(255, 215, 0, .14); }
+.duty-table tr.today td:first-child::before { content: "👉 "; }
+
+/* AA 分摊 */
+.aa-line { text-align: center; font-size: 16px; padding: 4px 0; }
+
+/* 涂鸦板 */
+#doodleCanvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 12px; touch-action: none; display: block; margin-top: 12px; }
+.doodle-colors { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.doodle-color { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.doodle-color.active { border-color: #fff; box-shadow: 0 0 0 2px var(--gold2); }
+
+/* 奶蛙表情包制作 */
+.meme-strip { display: flex; gap: 6px; overflow-x: auto; margin-top: 12px; padding-bottom: 4px; }
+.meme-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; background: #fff; }
+.meme-thumb.active { border-color: var(--gold2); }
+#memeCanvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 12px; display: block; margin-top: 12px; }
 .frog-name { font-weight: 800; margin: 6px 0 8px; }
 
 /* v1.8：计时器 + BMI + 自拍补光灯 + 白噪音 */

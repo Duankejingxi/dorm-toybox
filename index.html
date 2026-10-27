@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>宿舍玩具盒 · 打开就能玩</title>
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟。纯前端，打开就能玩，不用下载，不用真实数据。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="glitter" aria-hidden="true"></div>
+
+<header class="hero">
+  <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
+  <h1>宿舍<span class="gold">玩具盒</span></h1>
+  <p class="subtitle">六个小玩意，宿舍夜话、社团破冰、上课摸鱼（不是）都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
+</header>
+
+<main class="wrap">
+  <!-- 命运大转盘 -->
+  <section class="panel toy" id="toy-wheel">
+    <h2>🎡 命运大转盘</h2>
+    <p class="hint">纠结的时候就转它：去哪玩、谁请客、晚上干什么，写上去，转一下，命运说了算。</p>
+    <textarea id="wheelOptions" rows="4" aria-label="转盘选项，每行一个"></textarea>
+    <p class="hint">每行一个选项，最多 8 个。改完点「更新转盘」。</p>
+    <div class="wheel-stage">
+      <canvas id="wheelCanvas" width="320" height="320"></canvas>
+      <div class="wheel-pointer" aria-hidden="true">▼</div>
+    </div>
+    <button class="big-btn" id="spinWheelBtn">转起来！</button>
+    <p class="result-line" id="wheelResult">转盘还没转过。</p>
+    <button class="btn ghost-btn small" id="resetWheelBtn">恢复默认选项</button>
+  </section>
+
+  <!-- 真心话大冒险 -->
+  <section class="panel toy hidden" id="toy-cards">
+    <h2>🃏 真心话大冒险</h2>
+    <p class="hint">宿舍夜话专用。抽到什么就是什么，不许耍赖，不许跳过——可以换一张，但全宿舍都知道你怂了。</p>
+    <div class="card-stage">
+      <div class="play-card" id="playCard">
+        <p class="card-type" id="cardType">点下面的按钮抽一张</p>
+        <p class="card-text" id="cardText">？</p>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn gold-btn" id="truthBtn">真心话 💬</button>
+      <button class="btn gold-btn" id="dareBtn">大冒险 🔥</button>
+      <button class="btn ghost-btn" id="eitherBtn">随便来 🎲</button>
+    </div>
+    <p class="count-line" id="cardCount"></p>
+  </section>
+
+  <!-- 骰子硬币 -->
+  <section class="panel toy hidden" id="toy-dice">
+    <h2>🎲 骰子 · 硬币</h2>
+    <p class="hint">谁先洗碗、谁去买水、谁当鬼，扔个骰子抛个硬币，别吵了。</p>
+    <div class="dice-stage" id="diceStage">🎲</div>
+    <p class="result-line" id="diceResult">还没扔过。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn" id="roll1Btn">扔 1 颗</button>
+      <button class="btn gold-btn" id="roll2Btn">扔 2 颗</button>
+      <button class="btn gold-btn" id="roll3Btn">扔 3 颗</button>
+    </div>
+    <hr class="divider">
+    <div class="coin-stage" id="coinStage">🪙</div>
+    <p class="result-line" id="coinResult">还没抛过。</p>
+    <button class="big-btn" id="flipCoinBtn">抛硬币！</button>
+  </section>
+
+  <!-- 今日运势 -->
+  <section class="panel toy hidden" id="toy-fortune">
+    <h2>🍀 今日运势</h2>
+    <p class="hint">每天一次，抽个签看看今天宜干什么。纯属娱乐，好签别骄傲，坏签别当真。</p>
+    <div class="fortune-stage">
+      <p class="fortune-tier" id="fortuneTier">？</p>
+      <p class="fortune-text" id="fortuneText">点下面，抽今日一签。</p>
+    </div>
+    <button class="big-btn" id="drawFortuneBtn">抽一签</button>
+    <p class="count-line" id="fortuneNote"></p>
+  </section>
+
+  <!-- 随机点名 -->
+  <section class="panel toy hidden" id="toy-picker">
+    <h2>📋 随机点名</h2>
+    <p class="hint">社团点名、小组抽人、谁来讲 PPT——名字粘进来，抽一个就是一个，公平公正，抽到不许跑。</p>
+    <textarea id="nameList" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五" aria-label="名字列表，每行一个"></textarea>
+    <label class="check-line"><input type="checkbox" id="noRepeatCheck" checked> 抽过的不再重复（抽完自动重置）</label>
+    <button class="big-btn" id="pickBtn">抽一个！</button>
+    <p class="result-line big" id="pickResult">还没抽过。</p>
+    <p class="count-line" id="pickLeft"></p>
+    <ul class="history" id="pickHistory"></ul>
+    <button class="btn ghost-btn small" id="resetPickBtn">重置已抽名单</button>
+  </section>
+
+  <!-- 番茄钟 -->
+  <section class="panel toy hidden" id="toy-timer">
+    <h2>🍅 番茄钟</h2>
+    <p class="hint">25 分钟只干一件事：写作业、背单词、改 PPT。时间到了就起来活动一下，别硬撑。</p>
+    <div class="timer-stage" id="timerDisplay">25:00</div>
+    <p class="result-line" id="timerStatus">还没开始。先想好这 25 分钟要干什么。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn" id="timerStartBtn">开始专注 ▶</button>
+      <button class="btn ghost-btn" id="timerResetBtn">重置 ↺</button>
+    </div>
+    <p class="count-line" id="tomatoCount">今天已完成 0 个番茄</p>
+  </section>
+</main>
+
+<footer>
+  <p>宿舍玩具盒 · 纯前端小工具合集，打开就能玩</p>
+  <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
+</footer>
+
+<script src="data.js"></script>
+<script src="toys.js"></script>
+</body>
+</html>

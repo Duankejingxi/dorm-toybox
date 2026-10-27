@@ -14,12 +14,22 @@
     btn.addEventListener("click", () => showToy(t.id));
     nav.appendChild(btn);
   });
+  let currentToy = "wheel";
   function showToy(id) {
+    if (!TOYS.some((t) => t.id === id)) id = "wheel";
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-" + id).classList.remove("hidden");
     nav.querySelectorAll(".pill").forEach((b, i) => b.classList.toggle("active", TOYS[i].id === id));
+    currentToy = id;
+    if (window.location.hash !== "#" + id) window.location.hash = id;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  window.addEventListener("hashchange", () => {
+    const id = window.location.hash.slice(1);
+    if (TOYS.some((t) => t.id === id) && id !== currentToy) showToy(id);
+  });
+  // 深链：打开 #guess 就直接进猜数字，分享给宿舍不用再教怎么点
+  showToy(TOYS.some((t) => t.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "wheel");
 
   /* ---------- 1. 命运大转盘 ---------- */
   const WHEEL_COLORS = ["#f5c542", "#7b5cff", "#ff9d00", "#3ec6a7", "#ff7a6b", "#7ab8ff", "#e58cff", "#8bc34a"];
@@ -503,6 +513,115 @@
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reactionClick(); }
   });
   renderReaction();
+
+  /* ---------- 9. 石头剪刀布 ---------- */
+  const RPS_KEY = "dorm-toybox-rps-v1";
+  const RPS_HANDS = { rock: "✊ 石头", scissors: "✌️ 剪刀", paper: "✋ 布" };
+  const RPS_BEATS = { rock: "scissors", scissors: "paper", paper: "rock" };
+  const RPS_TARGET = 5;
+  let rpsScore = { you: 0, cpu: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(RPS_KEY) || "null");
+    if (saved && typeof saved.you === "number" && typeof saved.cpu === "number") rpsScore = saved;
+  } catch (e) { /* 忽略 */ }
+  function renderRpsScore() {
+    $("rpsScore").textContent = "你 " + rpsScore.you + " : " + rpsScore.cpu + " 电脑 · 先赢 " + RPS_TARGET + " 局获胜";
+  }
+  function saveRps() {
+    try { localStorage.setItem(RPS_KEY, JSON.stringify(rpsScore)); } catch (e) { /* 忽略 */ }
+  }
+  function rpsPlay(you) {
+    if (rpsScore.you >= RPS_TARGET || rpsScore.cpu >= RPS_TARGET) return;
+    const cpu = pick(["rock", "scissors", "paper"]);
+    $("rpsYou").textContent = RPS_HANDS[you];
+    $("rpsCpu").textContent = RPS_HANDS[cpu];
+    let msg;
+    if (you === cpu) { msg = "平局！再来。"; }
+    else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; }
+    else { rpsScore.cpu++; msg = "😤 电脑赢了这局。"; }
+    if (rpsScore.you >= RPS_TARGET) msg = "🏆 你赢下了整场！电脑甘拜下风。";
+    else if (rpsScore.cpu >= RPS_TARGET) msg = "💻 电脑赢下了整场。再来一局雪耻？";
+    $("rpsResult").textContent = msg;
+    renderRpsScore();
+    saveRps();
+    $("rpsResetBtn").classList.remove("hidden");
+  }
+  $("rpsRockBtn").addEventListener("click", () => rpsPlay("rock"));
+  $("rpsScissorsBtn").addEventListener("click", () => rpsPlay("scissors"));
+  $("rpsPaperBtn").addEventListener("click", () => rpsPlay("paper"));
+  $("rpsResetBtn").addEventListener("click", () => {
+    rpsScore = { you: 0, cpu: 0 };
+    saveRps();
+    renderRpsScore();
+    $("rpsYou").textContent = "❔";
+    $("rpsCpu").textContent = "❔";
+    $("rpsResult").textContent = "出一个，看看谁赢。";
+  });
+  renderRpsScore();
+
+  /* ---------- 10. 猜数字 ---------- */
+  const GUESS_BEST_KEY = "dorm-toybox-guess-best-v1";
+  let guessTarget = 1 + Math.floor(Math.random() * 100);
+  let guessTries = [];
+  function loadGuessBest() {
+    try { return parseInt(localStorage.getItem(GUESS_BEST_KEY) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  let guessBest = loadGuessBest();
+  function renderGuessCount() {
+    $("guessCount").textContent = guessTries.length === 0
+      ? "1–100 之间，猜的次数越少越牛。" + (guessBest > 0 ? "宿舍纪录：" + guessBest + " 次。" : "")
+      : "已猜 " + guessTries.length + " 次" + (guessBest > 0 ? " · 纪录 " + guessBest + " 次" : "");
+  }
+  function renderGuessChips() {
+    const box = $("guessChips");
+    box.innerHTML = "";
+    guessTries.forEach((n) => {
+      const chip = document.createElement("span");
+      chip.className = "guess-chip" + (n < guessTarget ? " low" : n > guessTarget ? " high" : " hit");
+      chip.textContent = n;
+      box.appendChild(chip);
+    });
+  }
+  function guessOnce() {
+    const n = parseInt($("guessInput").value, 10);
+    if (isNaN(n) || n < 1 || n > 100) {
+      $("guessResult").textContent = "请输入 1–100 之间的整数。";
+      return;
+    }
+    guessTries.push(n);
+    renderGuessChips();
+    if (n === guessTarget) {
+      const tries = guessTries.length;
+      let msg = "🎉 猜中了！就是 " + guessTarget + "，用了 " + tries + " 次。";
+      if (guessBest === 0 || tries < guessBest) {
+        guessBest = tries;
+        try { localStorage.setItem(GUESS_BEST_KEY, String(tries)); } catch (e) { /* 忽略 */ }
+        msg += "新纪录！";
+      }
+      $("guessResult").textContent = msg;
+    } else if (n < guessTarget) {
+      $("guessResult").textContent = "小了，再大点 ↑（已猜 " + guessTries.length + " 次）";
+    } else {
+      $("guessResult").textContent = "大了，再小点 ↓（已猜 " + guessTries.length + " 次）";
+    }
+    renderGuessCount();
+    $("guessInput").value = "";
+    $("guessInput").focus();
+  }
+  $("guessBtn").addEventListener("click", guessOnce);
+  $("guessInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); guessOnce(); }
+  });
+  $("guessResetBtn").addEventListener("click", () => {
+    guessTarget = 1 + Math.floor(Math.random() * 100);
+    guessTries = [];
+    renderGuessChips();
+    renderGuessCount();
+    $("guessResult").textContent = "换了个数，重新猜。";
+    $("guessInput").value = "";
+  });
+  renderGuessCount();
 
   renderTimer();
 })();

@@ -13,6 +13,8 @@ const TOYS = [
   { id: "timer", label: "🍅 番茄钟" },
   { id: "groups", label: "👥 随机分组" },
   { id: "reaction", label: "⚡ 反应测试" },
+  { id: "rps", label: "✊ 石头剪刀布" },
+  { id: "guess", label: "🔢 猜数字" },
 ];
 
 const DEFAULT_WHEEL_OPTIONS = [

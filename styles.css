@@ -193,3 +193,40 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 @media (prefers-reduced-motion: reduce) {
   .glitter, .dice-stage.rolling, .coin-stage.rolling { animation: none; }
 }
+
+/* v1.2：视觉修复 + 新玩具 */
+.subtitle { text-wrap: balance; }
+/* 输入框按整行高度锁死，不再露出半行字（15px 字 × 1.6 行高 = 24px/行） */
+#wheelOptions, #nameList, #groupNames { line-height: 1.6; }
+#wheelOptions { height: 122px; } /* 4 行 × 24 + 上下 padding 24 + 边框 2 */
+#nameList, #groupNames { height: 146px; } /* 5 行 × 24 + 上下 padding 24 + 边框 2 */
+
+/* 石头剪刀布 */
+.rps-stage { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
+.rps-side { text-align: center; min-width: 110px; }
+.rps-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.rps-hand { font-size: 44px; }
+.rps-vs { font-size: 20px; font-weight: 800; color: var(--gold2); }
+.rps-btn { font-size: 19px; padding: 14px 10px; }
+
+/* 猜数字 */
+.guess-row { display: flex; gap: 10px; margin-top: 12px; }
+.guess-row input { flex: 1; min-width: 0; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); }
+.guess-row .btn { flex: none; padding: 12px 22px; }
+.guess-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; min-height: 10px; }
+.guess-chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: rgba(255, 255, 255, .04); }
+.guess-chip.low { border-color: #7ab8ff; color: #9ecfff; }
+.guess-chip.high { border-color: #ff9d7a; color: #ffb59e; }
+.guess-chip.hit { border-color: var(--gold); color: var(--gold2); background: rgba(245, 197, 66, .15); font-weight: 700; }
+
+/* v1.2 视觉修复二轮 */
+.nw { white-space: nowrap; }
+/* 转盘选项全部展开：8 行 × 24 + padding 24 + 边框 2 = 218px，不滚动就不露半行 */
+#wheelOptions { height: 218px; }
+/* 输入框底部渐隐：滚动时露出的半行字会被渐隐盖住，看起来是故意的 */
+.fade-wrap { position: relative; }
+.fade-wrap::after {
+  content: ""; position: absolute; left: 2px; right: 16px; bottom: 2px; height: 18px;
+  background: linear-gradient(to bottom, rgba(22, 17, 46, 0), #16112e);
+  pointer-events: none; border-radius: 0 0 10px 10px;
+}

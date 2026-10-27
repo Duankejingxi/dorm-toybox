@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">六个小玩意，宿舍夜话、社团破冰、上课摸鱼（不是）都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
 </header>
 
@@ -23,7 +23,7 @@
   <section class="panel toy" id="toy-wheel">
     <h2>🎡 命运大转盘</h2>
     <p class="hint">纠结的时候就转它：去哪玩、谁请客、晚上干什么，写上去，转一下，命运说了算。</p>
-    <textarea id="wheelOptions" rows="4" aria-label="转盘选项，每行一个"></textarea>
+    <textarea id="wheelOptions" rows="8" aria-label="转盘选项，每行一个"></textarea>
     <p class="hint">每行一个选项，最多 8 个。改完点「更新转盘」。</p>
     <button class="btn gold-btn small" id="updateWheelBtn">更新转盘 ↻</button>
     <div class="wheel-stage">
@@ -86,7 +86,7 @@
   <section class="panel toy hidden" id="toy-picker">
     <h2>📋 随机点名</h2>
     <p class="hint">社团点名、小组抽人、谁来讲 PPT——名字粘进来，抽一个就是一个，公平公正，抽到不许跑。</p>
-    <textarea id="nameList" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五" aria-label="名字列表，每行一个"></textarea>
+    <div class="fade-wrap"><textarea id="nameList" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五" aria-label="名字列表，每行一个"></textarea></div>
     <label class="check-line"><input type="checkbox" id="noRepeatCheck" checked> 抽过的不再重复（抽完自动重置）</label>
     <button class="big-btn" id="pickBtn">抽一个！</button>
     <p class="result-line big" id="pickResult">还没抽过。</p>
@@ -112,7 +112,7 @@
   <section class="panel toy hidden" id="toy-groups">
     <h2>👥 随机分组</h2>
     <p class="hint">社团分组、宿舍对抗赛、小组作业分工——名字粘进来，分几组，队长自动指定（每组第一个就是队长）。</p>
-    <textarea id="groupNames" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五&#10;赵六" aria-label="分组名字列表，每行一个"></textarea>
+    <div class="fade-wrap"><textarea id="groupNames" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五&#10;赵六" aria-label="分组名字列表，每行一个"></textarea></div>
     <div class="group-form-row">
       <label for="groupCount">分成</label>
       <select id="groupCount">
@@ -137,10 +137,43 @@
     <p class="count-line" id="reactionBest"></p>
     <ul class="history" id="reactionHistory"></ul>
   </section>
+
+  <!-- 石头剪刀布 -->
+  <section class="panel toy hidden" id="toy-rps">
+    <h2>✊ 石头剪刀布</h2>
+    <p class="hint">和电脑猜拳，先赢 5 局拿下整场。输了别赖，赢了请全宿舍喝水。</p>
+    <div class="rps-stage">
+      <div class="rps-side"><span class="rps-label">你</span><span class="rps-hand" id="rpsYou">❔</span></div>
+      <div class="rps-vs">VS</div>
+      <div class="rps-side"><span class="rps-label">电脑</span><span class="rps-hand" id="rpsCpu">❔</span></div>
+    </div>
+    <p class="result-line" id="rpsResult">出一个，看看谁赢。</p>
+    <p class="count-line" id="rpsScore">你 0 : 0 电脑 · 先赢 5 局获胜</p>
+    <div class="btn-row">
+      <button class="btn rps-btn" id="rpsRockBtn">✊ 石头</button>
+      <button class="btn rps-btn" id="rpsScissorsBtn">✌️ 剪刀</button>
+      <button class="btn rps-btn" id="rpsPaperBtn">✋ 布</button>
+    </div>
+    <button class="btn ghost-btn small hidden" id="rpsResetBtn">再来一场 ↺</button>
+  </section>
+
+  <!-- 猜数字 -->
+  <section class="panel toy hidden" id="toy-guess">
+    <h2>🔢 猜数字</h2>
+    <p class="hint">我想了一个 1–100 的数，猜猜是哪个。猜的次数越少越牛，宿舍纪录等你破。</p>
+    <div class="guess-row">
+      <input id="guessInput" type="number" min="1" max="100" placeholder="输入 1–100" aria-label="猜的数字">
+      <button class="btn gold-btn" id="guessBtn">猜！</button>
+    </div>
+    <p class="result-line" id="guessResult">还没猜过。先猜一个。</p>
+    <p class="count-line" id="guessCount"></p>
+    <div class="guess-chips" id="guessChips"></div>
+    <button class="btn ghost-btn small" id="guessResetBtn">换个数重开 ↺</button>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.1 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.2 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

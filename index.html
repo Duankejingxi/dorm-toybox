@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、自拍补光灯、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">二十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">三十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -448,10 +448,60 @@
     <div class="frog-grid" id="frogGrid"></div>
     <p class="result-line" id="frogResult">喜欢哪张就下载哪张。</p>
   </section>
+
+  <!-- 计时器 -->
+  <section class="panel toy hidden" id="toy-stopwatch">
+    <h2>⏱ 计时器</h2>
+    <p class="hint">秒表，精确到百分之一秒。跑步、做题、打赌都用得上，计次能记每一圈。</p>
+    <p class="sw-time" id="swTime">00:00.00</p>
+    <div class="sw-btns">
+      <button class="btn gold-btn" id="swStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn" id="swLapBtn">计次 ⏱</button>
+      <button class="btn ghost-btn" id="swResetBtn">清零 ↺</button>
+    </div>
+    <ul class="sw-laps" id="swLaps"></ul>
+  </section>
+
+  <!-- BMI 体重管理 -->
+  <section class="panel toy hidden" id="toy-bmi">
+    <h2>⚖️ BMI 体重管理</h2>
+    <p class="hint">填身高体重，算 BMI 和健康体重范围。BMI 只是参考，肌肉多的人别当真。</p>
+    <div class="bmi-form">
+      <input id="bmiHeight" type="number" placeholder="身高（厘米）" aria-label="身高厘米" min="100" max="250">
+      <input id="bmiWeight" type="number" placeholder="体重（公斤）" aria-label="体重公斤" min="20" max="300" step="0.1">
+    </div>
+    <button class="btn gold-btn" id="bmiCalcBtn">算一下 📏</button>
+    <p class="result-line" id="bmiResult">先填身高体重。</p>
+    <p class="count-line" id="bmiAdvice"></p>
+  </section>
+
+  <!-- 自拍补光灯 -->
+  <section class="panel toy hidden" id="toy-light">
+    <h2>💡 自拍补光灯</h2>
+    <p class="hint">光线不好自拍显黑？把屏幕当补光灯，选个色温，亮度拉满，怼脸自拍。</p>
+    <div class="light-panel" id="lightPanel"></div>
+    <div class="led-colors" id="lightColors"></div>
+    <label class="light-slider-label">亮度
+      <input id="lightSlider" type="range" min="30" max="100" value="100" aria-label="亮度">
+    </label>
+    <p class="result-line" id="lightResult">白色光，亮度 100%。</p>
+  </section>
+
+  <!-- 白噪音 -->
+  <section class="panel toy hidden" id="toy-whitenoise">
+    <h2>🌧 白噪音</h2>
+    <p class="hint">雨声、风扇声、海浪声，帮你专注、助眠。声音只在你手机里生成，不上传。</p>
+    <div class="wn-btns" id="wnSounds"></div>
+    <label class="light-slider-label">音量
+      <input id="wnVolume" type="range" min="0" max="100" value="60" aria-label="音量">
+    </label>
+    <p class="result-line" id="wnResult">点一个声音开始播放。</p>
+    <button class="btn ghost-btn" id="wnStopBtn">停止 ⏹</button>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.7 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.8 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -33,6 +33,10 @@ const TOYS = [
   { id: "compass", label: "🧭 指南针" },
   { id: "noise", label: "🔊 噪音检测" },
   { id: "frog", label: "🐸 奶蛙表情包" },
+  { id: "stopwatch", label: "⏱ 计时器" },
+  { id: "bmi", label: "⚖️ BMI 体重管理" },
+  { id: "light", label: "💡 自拍补光灯" },
+  { id: "whitenoise", label: "🌧 白噪音" },
 ];
 
 // 首页只放这 8 个最常玩的，其余进左上角侧边栏

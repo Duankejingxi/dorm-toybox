@@ -1981,5 +1981,159 @@
     drawFrog(cv, mood.id);
   });
 
+  /* ---------- 29. 计时器（秒表） ---------- */
+  let swRunning = false, swElapsed = 0, swStartAt = 0, swTimerId = null, swLaps = [];
+  function swFormat(ms) {
+    const totalCs = Math.floor(ms / 10);
+    const cs = totalCs % 100;
+    const s = Math.floor(totalCs / 100) % 60;
+    const m = Math.floor(totalCs / 6000);
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(cs).padStart(2, "0");
+  }
+  function swCurrent() { return swRunning ? swElapsed + (performance.now() - swStartAt) : swElapsed; }
+  function swRender() { $("swTime").textContent = swFormat(swCurrent()); }
+  $("swStartBtn").addEventListener("click", () => {
+    if (swRunning) {
+      swElapsed = swCurrent();
+      swRunning = false;
+      if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
+      $("swStartBtn").textContent = "继续 ▶";
+    } else {
+      swStartAt = performance.now();
+      swRunning = true;
+      swTimerId = setInterval(swRender, 100);
+      $("swStartBtn").textContent = "暂停 ⏸";
+    }
+    swRender();
+  });
+  $("swLapBtn").addEventListener("click", () => {
+    swLaps.push(swCurrent());
+    const li = document.createElement("li");
+    li.textContent = "第 " + swLaps.length + " 次 · " + swFormat(swCurrent());
+    $("swLaps").appendChild(li);
+  });
+  $("swResetBtn").addEventListener("click", () => {
+    if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
+    swRunning = false; swElapsed = 0; swLaps = [];
+    $("swLaps").innerHTML = "";
+    $("swStartBtn").textContent = "开始 ▶";
+    swRender();
+  });
+  swRender();
+
+  /* ---------- 30. BMI 体重管理 ---------- */
+  $("bmiCalcBtn").addEventListener("click", () => {
+    const h = parseFloat($("bmiHeight").value);
+    const w = parseFloat($("bmiWeight").value);
+    if (isNaN(h) || isNaN(w) || h < 100 || h > 250 || w < 20 || w > 300) {
+      $("bmiResult").textContent = "先填对身高（100–250 厘米）和体重（20–300 公斤）。";
+      $("bmiAdvice").textContent = "";
+      return;
+    }
+    const m = h / 100;
+    const bmi = w / (m * m);
+    const low = (18.5 * m * m).toFixed(1), high = (24 * m * m).toFixed(1);
+    let cat = "", advice = "";
+    if (bmi < 18.5) { cat = "偏瘦"; advice = "可以多吃点，增肌比增肥靠谱。"; }
+    else if (bmi < 24) { cat = "正常"; advice = "保持住，这个范围挺好的。"; }
+    else if (bmi < 28) { cat = "偏胖"; advice = "少喝点奶茶，多走走就下来了。"; }
+    else { cat = "肥胖"; advice = "别节食硬扛，管住嘴 + 多动，慢慢来。"; }
+    $("bmiResult").textContent = "BMI " + bmi.toFixed(1) + " · " + cat;
+    $("bmiAdvice").textContent = "你这个身高的健康体重是 " + low + "–" + high + " 公斤。" + advice;
+  });
+
+  /* ---------- 31. 自拍补光灯 ---------- */
+  const LIGHT_COLORS = [
+    { name: "白色光", hex: "#ffffff" },
+    { name: "暖光", hex: "#ffe0b2" },
+    { name: "冷光", hex: "#d6e9ff" },
+    { name: "粉光", hex: "#ffd6e8" },
+  ];
+  let lightColor = LIGHT_COLORS[0];
+  function lightRender() {
+    const bright = parseInt($("lightSlider").value, 10) || 100;
+    $("lightPanel").style.background = lightColor.hex;
+    $("lightPanel").style.filter = "brightness(" + bright / 100 + ")";
+    $("lightResult").textContent = lightColor.name + "，亮度 " + bright + "%。";
+  }
+  LIGHT_COLORS.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "led-color" + (i === 0 ? " active" : "");
+    b.style.background = c.hex;
+    b.setAttribute("aria-label", "补光灯颜色 " + c.name);
+    b.addEventListener("click", () => {
+      lightColor = c;
+      $("lightColors").querySelectorAll(".led-color").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      lightRender();
+    });
+    $("lightColors").appendChild(b);
+  });
+  $("lightSlider").addEventListener("input", lightRender);
+  lightRender();
+
+  /* ---------- 32. 白噪音 ---------- */
+  const WN_SOUNDS = [
+    { id: "rain", name: "🌧 雨声", freq: 1200, q: 0.5, gain: 0.5 },
+    { id: "white", name: "📻 白噪音", freq: 8000, q: 0.2, gain: 0.35 },
+    { id: "pink", name: "🌸 粉红噪音", freq: 800, q: 0.5, gain: 0.5 },
+    { id: "fan", name: "🌀 风扇声", freq: 400, q: 1, gain: 0.6 },
+    { id: "sea", name: "🌊 海浪声", freq: 600, q: 0.8, gain: 0.55 },
+  ];
+  let wnCtx = null, wnNodes = null, wnCurrent = null;
+  function wnStopAll(silent) {
+    if (wnNodes) {
+      try { wnNodes.src.stop(); } catch (e) { /* 忽略 */ }
+      try { wnNodes.src.disconnect(); } catch (e) { /* 忽略 */ }
+      wnNodes = null;
+    }
+    wnCurrent = null;
+    if (!silent) $("wnResult").textContent = "已停止。";
+  }
+  WN_SOUNDS.forEach((s) => {
+    const b = document.createElement("button");
+    b.className = "btn small ghost-btn";
+    b.textContent = s.name;
+    b.addEventListener("click", () => {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (typeof AC === "undefined") { $("wnResult").textContent = "当前设备不支持音频播放。"; return; }
+      try {
+        if (!wnCtx) wnCtx = new AC();
+        if (wnCtx.state === "suspended") wnCtx.resume();
+        wnStopAll(true);
+        const len = wnCtx.sampleRate * 2;
+        const buffer = wnCtx.createBuffer(1, len, wnCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+          const white = Math.random() * 2 - 1;
+          if (s.id === "pink" || s.id === "fan" || s.id === "sea") { last = (last + 0.02 * white) / 1.02; data[i] = last * 3.5; }
+          else data[i] = white;
+        }
+        const src = wnCtx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        const filter = wnCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = s.freq;
+        filter.Q.value = s.q;
+        const gain = wnCtx.createGain();
+        gain.gain.value = s.gain * (parseInt($("wnVolume").value, 10) / 100 || 0.6);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(wnCtx.destination);
+        src.start();
+        wnNodes = { src, gain };
+        wnCurrent = s.id;
+        $("wnResult").textContent = "正在播放：" + s.name + "。";
+      } catch (e) { $("wnResult").textContent = "播放失败，换个浏览器试试。"; }
+    });
+    $("wnSounds").appendChild(b);
+  });
+  $("wnVolume").addEventListener("input", () => {
+    if (wnNodes) wnNodes.gain.gain.value = (parseInt($("wnVolume").value, 10) / 100 || 0) * 0.5;
+  });
+  $("wnStopBtn").addEventListener("click", () => wnStopAll(false));
+
   renderTimer();
 })();

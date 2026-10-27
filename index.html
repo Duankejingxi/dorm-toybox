@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">三十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">四十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -629,8 +629,98 @@
     <button class="btn ghost-btn small hidden" id="todoClearBtn">清除已完成 🧹</button>
   </section>
 
+  <!-- 俄罗斯方块 -->
+  <section class="panel toy hidden" id="toy-tetris">
+    <h2>🧱 俄罗斯方块</h2>
+    <p class="hint">方向键左右移动、下键加速下落、上键旋转、空格直接掉到底。屏幕按钮也能玩。消一行 100 分，消得越多越快，最高分存在本机。</p>
+    <div class="tetris-wrap">
+      <canvas id="tetrisCanvas" width="240" height="480"></canvas>
+      <div class="tetris-side">
+        <p class="count-line">下一个</p>
+        <canvas id="tetrisNext" width="96" height="96"></canvas>
+        <p class="result-line" id="tetrisScore">得分 0</p>
+        <p class="result-line" id="tetrisLevel">第 1 关</p>
+        <p class="result-line" id="tetrisBest">最高 0</p>
+      </div>
+    </div>
+    <p class="result-line" id="tetrisStatus">点开始，方块就掉下来。</p>
+    <div class="beads-controls">
+      <button class="btn gold-btn small" id="tetrisStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="tetrisPauseBtn">暂停 ⏸</button>
+    </div>
+    <div class="snake-dpad">
+      <span></span><button class="btn ghost-btn" id="tetrisRotBtn" aria-label="旋转">↻</button><span></span>
+      <button class="btn ghost-btn" id="tetrisLeftBtn" aria-label="向左">◀</button><button class="btn ghost-btn" id="tetrisDownBtn" aria-label="下落">▼</button><button class="btn ghost-btn" id="tetrisRightBtn" aria-label="向右">▶</button>
+      <span></span><button class="btn ghost-btn" id="tetrisDropBtn" aria-label="直接掉落">⤓</button><span></span>
+    </div>
+  </section>
+
+  <!-- 2048 -->
+  <section class="panel toy hidden" id="toy-game2048">
+    <h2>🔢 2048</h2>
+    <p class="hint">方向键或者手指滑动，相同数字的方块撞到一起就合并。拼出 2048 就赢了，拼不下去就输了。最高分存在本机。</p>
+    <div class="g2048-grid" id="g2048Grid"></div>
+    <p class="result-line" id="g2048Score">得分 0 · 最高 0</p>
+    <p class="result-line" id="g2048Status">滑动或者按方向键，开始合并。</p>
+    <div class="beads-controls">
+      <button class="btn gold-btn small" id="g2048NewBtn">新一局 🔄</button>
+    </div>
+    <div class="snake-dpad">
+      <span></span><button class="btn ghost-btn" id="g2048UpBtn" aria-label="向上">▲</button><span></span>
+      <button class="btn ghost-btn" id="g2048LeftBtn" aria-label="向左">◀</button><span></span><button class="btn ghost-btn" id="g2048RightBtn" aria-label="向右">▶</button>
+      <span></span><button class="btn ghost-btn" id="g2048DownBtn" aria-label="向下">▼</button><span></span>
+    </div>
+  </section>
+
+  <!-- 扫雷 -->
+  <section class="panel toy hidden" id="toy-mines">
+    <h2>💣 扫雷</h2>
+    <p class="hint">点一下挖开格子，数字是周围 8 格里有几颗雷。右键（或者长按）插旗标记雷。挖到雷就输了，挖开所有安全格子就赢了。第一下永远安全。</p>
+    <div class="mines-bar">
+      <span class="result-line" id="minesLeft">💣 剩 10 颗雷</span>
+      <button class="btn gold-btn small" id="minesFaceBtn">🙂</button>
+      <span class="result-line" id="minesTime">⏱ 0 秒</span>
+    </div>
+    <div class="mines-grid" id="minesGrid"></div>
+    <p class="result-line" id="minesStatus">点任意格子开始。</p>
+    <div class="beads-controls">
+      <button class="btn gold-btn small" id="minesNewBtn">新一局 🔄</button>
+      <button class="btn ghost-btn small" id="minesFlagBtn">🚩 插旗模式：关</button>
+    </div>
+  </section>
+
+  <!-- 课程表 -->
+  <section class="panel toy hidden" id="toy-schedule">
+    <h2>📅 课程表</h2>
+    <p class="hint">把这周的课填进来，今天那一列会高亮，现在这节课会标出来。点一格可以改或者删，存在本机，关掉页面也不丢。</p>
+    <div class="beads-controls">
+      <input id="schName" type="text" maxlength="16" placeholder="课程名，比如：高数">
+      <input id="schRoom" type="text" maxlength="10" placeholder="教室（可不填）">
+    </div>
+    <div class="beads-controls">
+      <select id="schDay">
+        <option value="0">周一</option>
+        <option value="1">周二</option>
+        <option value="2">周三</option>
+        <option value="3">周四</option>
+        <option value="4">周五</option>
+      </select>
+      <select id="schPeriod">
+        <option value="0">第 1-2 节（8:00）</option>
+        <option value="1">第 3-4 节（10:00）</option>
+        <option value="2">第 5-6 节（14:00）</option>
+        <option value="3">第 7-8 节（16:00）</option>
+        <option value="4">第 9-10 节（19:00）</option>
+      </select>
+      <button class="btn gold-btn small" id="schAddBtn">加上 ➕</button>
+    </div>
+    <div class="sch-grid" id="schGrid"></div>
+    <p class="result-line" id="schResult">还没加课。</p>
+    <button class="btn ghost-btn small" id="schClearBtn">清空课程表 🧹</button>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.19 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.20 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -43,6 +43,10 @@ const TOYS = [
   { id: "scratch", label: "🎰 刮刮乐" },
   { id: "countdown", label: "📅 倒计时" },
   { id: "todo", label: "✅ 待办清单" },
+  { id: "tetris", label: "🧱 俄罗斯方块" },
+  { id: "game2048", label: "🔢 2048" },
+  { id: "mines", label: "💣 扫雷" },
+  { id: "schedule", label: "📅 课程表" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

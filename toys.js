@@ -2782,5 +2782,460 @@
   $("todoClearBtn").addEventListener("click", () => { todoItems = todoItems.filter((i) => !i.done); todoSave(); todoRender(); });
   todoRender();
 
+  /* ---------- 41. 俄罗斯方块 ---------- */
+  const TETRIS_KEY = "dorm-toybox-tetris-best-v1";
+  const T_COLS = 10, T_ROWS = 20, T_CELL = 24;
+  const T_PIECES = [
+    { m: [[1, 1, 1, 1]], c: "#22d3ee" }, // I
+    { m: [[1, 1], [1, 1]], c: "#facc15" }, // O
+    { m: [[0, 1, 0], [1, 1, 1]], c: "#c084fc" }, // T
+    { m: [[0, 1, 1], [1, 1, 0]], c: "#4ade80" }, // S
+    { m: [[1, 1, 0], [0, 1, 1]], c: "#f87171" }, // Z
+    { m: [[1, 0, 0], [1, 1, 1]], c: "#60a5fa" }, // J
+    { m: [[0, 0, 1], [1, 1, 1]], c: "#fb923c" }, // L
+  ];
+  const T_POINTS = { 1: 100, 2: 300, 3: 500, 4: 800 };
+  let tBoard = [], tCur = null, tNext = null, tScore = 0, tLines = 0, tLevel = 1, tTimer = null, tState = "idle";
+  function tBest() { try { return parseInt(localStorage.getItem(TETRIS_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
+  function tSaveBest() { try { if (tScore > tBest()) localStorage.setItem(TETRIS_KEY, String(tScore)); } catch (e) { /* 忽略 */ } }
+  const tCanvas = $("tetrisCanvas");
+  const tCtx = tCanvas.getContext ? tCanvas.getContext("2d") : null;
+  const tNextCanvas = $("tetrisNext");
+  const tNextCtx = tNextCanvas.getContext ? tNextCanvas.getContext("2d") : null;
+  function tEmptyBoard() { tBoard = []; for (let r = 0; r < T_ROWS; r++) tBoard.push(new Array(T_COLS).fill(null)); }
+  function tNewPiece() {
+    const p = T_PIECES[Math.floor(Math.random() * T_PIECES.length)];
+    return { m: p.m.map((row) => row.slice()), c: p.c, x: Math.floor((T_COLS - p.m[0].length) / 2), y: 0 };
+  }
+  function tCollide(m, x, y) {
+    for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) {
+      if (!m[r][c]) continue;
+      const bx = x + c, by = y + r;
+      if (bx < 0 || bx >= T_COLS || by >= T_ROWS) return true;
+      if (by >= 0 && tBoard[by][bx]) return true;
+    }
+    return false;
+  }
+  function tDraw() {
+    if (!tCtx) return;
+    tCtx.fillStyle = "#10101f";
+    tCtx.fillRect(0, 0, T_COLS * T_CELL, T_ROWS * T_CELL);
+    for (let r = 0; r < T_ROWS; r++) for (let c = 0; c < T_COLS; c++) {
+      if (tBoard[r][c]) { tCtx.fillStyle = tBoard[r][c]; tCtx.fillRect(c * T_CELL + 1, r * T_CELL + 1, T_CELL - 2, T_CELL - 2); }
+    }
+    if (tCur) {
+      tCtx.fillStyle = tCur.c;
+      for (let r = 0; r < tCur.m.length; r++) for (let c = 0; c < tCur.m[r].length; c++) {
+        if (tCur.m[r][c]) tCtx.fillRect((tCur.x + c) * T_CELL + 1, (tCur.y + r) * T_CELL + 1, T_CELL - 2, T_CELL - 2);
+      }
+    }
+    if (tNextCtx && tNext) {
+      tNextCtx.fillStyle = "#10101f";
+      tNextCtx.fillRect(0, 0, 96, 96);
+      tNextCtx.fillStyle = tNext.c;
+      const w = tNext.m[0].length, h = tNext.m.length;
+      const ox = Math.floor((96 - w * 20) / 2), oy = Math.floor((96 - h * 20) / 2);
+      for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+        if (tNext.m[r][c]) tNextCtx.fillRect(ox + c * 20 + 1, oy + r * 20 + 1, 18, 18);
+      }
+    }
+  }
+  function tUpdateHud() {
+    $("tetrisScore").textContent = "得分 " + tScore;
+    $("tetrisLevel").textContent = "第 " + tLevel + " 关 · 已消 " + tLines + " 行";
+    $("tetrisBest").textContent = "最高 " + Math.max(tBest(), tScore);
+  }
+  function tLock() {
+    for (let r = 0; r < tCur.m.length; r++) for (let c = 0; c < tCur.m[r].length; c++) {
+      if (tCur.m[r][c] && tCur.y + r >= 0) tBoard[tCur.y + r][tCur.x + c] = tCur.c;
+    }
+    let cleared = 0;
+    for (let r = T_ROWS - 1; r >= 0; r--) {
+      if (tBoard[r].every(Boolean)) { tBoard.splice(r, 1); tBoard.unshift(new Array(T_COLS).fill(null)); cleared++; r++; }
+    }
+    if (cleared > 0) {
+      tLines += cleared;
+      tScore += (T_POINTS[cleared] || 100) * tLevel;
+      tLevel = Math.floor(tLines / 10) + 1;
+      if (tTimer) { clearInterval(tTimer); tTimer = setInterval(tTick, Math.max(100, 800 - (tLevel - 1) * 70)); }
+    }
+    tCur = tNext; tNext = tNewPiece();
+    if (tCollide(tCur.m, tCur.x, tCur.y)) { tGameOver(); return; }
+    tUpdateHud(); tDraw();
+  }
+  function tTick() {
+    if (!tCur) return;
+    if (!tCollide(tCur.m, tCur.x, tCur.y + 1)) { tCur.y++; }
+    else tLock();
+    tDraw();
+  }
+  function tGameOver() {
+    if (tTimer) { clearInterval(tTimer); tTimer = null; }
+    tState = "over";
+    tSaveBest(); tUpdateHud();
+    $("tetrisStatus").textContent = "💥 堆到顶了！得分 " + tScore + "，最高 " + Math.max(tBest(), tScore) + "。点开始再来一局。";
+    $("tetrisStartBtn").textContent = "开始 ▶";
+  }
+  function tReset() {
+    tEmptyBoard(); tScore = 0; tLines = 0; tLevel = 1;
+    tCur = tNewPiece(); tNext = tNewPiece();
+    tUpdateHud(); tDraw();
+  }
+  function tStart() {
+    if (tState === "over" || tState === "idle") tReset();
+    if (tTimer) return;
+    tState = "running";
+    tTimer = setInterval(tTick, Math.max(100, 800 - (tLevel - 1) * 70));
+    $("tetrisStatus").textContent = "游戏中，消行得分，越往后越快。";
+    $("tetrisStartBtn").textContent = "暂停 ⏸";
+  }
+  function tPause() {
+    if (tTimer) { clearInterval(tTimer); tTimer = null; }
+    if (tState === "running") { tState = "paused"; $("tetrisStatus").textContent = "已暂停，点开始继续。"; $("tetrisStartBtn").textContent = "继续 ▶"; }
+  }
+  function tMove(dx) { if (tCur && tState === "running" && !tCollide(tCur.m, tCur.x + dx, tCur.y)) { tCur.x += dx; tDraw(); } }
+  function tRotate() {
+    if (!tCur || tState !== "running") return;
+    const m = tCur.m;
+    const rot = [];
+    for (let c = 0; c < m[0].length; c++) { const row = []; for (let r = m.length - 1; r >= 0; r--) row.push(m[r][c]); rot.push(row); }
+    const kicks = [0, -1, 1, -2, 2];
+    for (let i = 0; i < kicks.length; i++) {
+      if (!tCollide(rot, tCur.x + kicks[i], tCur.y)) { tCur.m = rot; tCur.x += kicks[i]; tDraw(); return; }
+    }
+  }
+  function tSoftDrop() { if (tCur && tState === "running") { if (!tCollide(tCur.m, tCur.x, tCur.y + 1)) { tCur.y++; tDraw(); } else tLock(); } }
+  function tHardDrop() { if (!tCur || tState !== "running") return; while (!tCollide(tCur.m, tCur.x, tCur.y + 1)) tCur.y++; tLock(); tDraw(); }
+  $("tetrisStartBtn").addEventListener("click", () => { if (tState === "running") tPause(); else tStart(); });
+  $("tetrisPauseBtn").addEventListener("click", tPause);
+  $("tetrisLeftBtn").addEventListener("click", () => tMove(-1));
+  $("tetrisRightBtn").addEventListener("click", () => tMove(1));
+  $("tetrisDownBtn").addEventListener("click", tSoftDrop);
+  $("tetrisRotBtn").addEventListener("click", tRotate);
+  $("tetrisDropBtn").addEventListener("click", tHardDrop);
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-tetris").classList.contains("hidden")) return;
+      if (e.key === "ArrowLeft") { tMove(-1); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === "ArrowRight") { tMove(1); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === "ArrowDown") { tSoftDrop(); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === "ArrowUp") { tRotate(); if (e.preventDefault) e.preventDefault(); }
+      else if (e.key === " ") { tHardDrop(); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  tReset();
+  toyLeaveCleanup.tetris = () => { tPause(); };
+
+  /* ---------- 42. 2048 ---------- */
+  const G2048_KEY = "dorm-toybox-2048-best-v1";
+  const G2048_COLORS = { 2: "#eee4da", 4: "#ede0c8", 8: "#f2b179", 16: "#f59563", 32: "#f67c5f", 64: "#f65e3b", 128: "#edcf72", 256: "#edcc61", 512: "#edc850", 1024: "#edc53f", 2048: "#edc22e" };
+  let g2048 = [], gScore = 0, gOver = false, gWon = false;
+  function g2048Best() { try { return parseInt(localStorage.getItem(G2048_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
+  function g2048SaveBest() { try { if (gScore > g2048Best()) localStorage.setItem(G2048_KEY, String(gScore)); } catch (e) { /* 忽略 */ } }
+  function g2048Spawn() {
+    const empty = [];
+    for (let i = 0; i < 16; i++) if (!g2048[i]) empty.push(i);
+    if (empty.length === 0) return;
+    g2048[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < 0.9 ? 2 : 4;
+  }
+  function g2048New() {
+    g2048 = new Array(16).fill(0); gScore = 0; gOver = false; gWon = false;
+    g2048Spawn(); g2048Spawn();
+    g2048Render();
+    $("g2048Status").textContent = "滑动或者按方向键，开始合并。";
+  }
+  function g2048Render() {
+    const grid = $("g2048Grid");
+    grid.innerHTML = "";
+    for (let i = 0; i < 16; i++) {
+      const cell = document.createElement("div");
+      const v = g2048[i];
+      cell.className = "g2048-tile" + (v ? " filled" : "");
+      if (v) {
+        cell.textContent = v;
+        cell.style.background = G2048_COLORS[v] || "#3c3a32";
+        cell.style.color = v <= 4 ? "#776e65" : "#f9f6f2";
+      }
+      grid.appendChild(cell);
+    }
+    $("g2048Score").textContent = "得分 " + gScore + " · 最高 " + Math.max(g2048Best(), gScore);
+  }
+  function g2048SlideLine(line) {
+    const arr = line.filter(Boolean);
+    let gained = 0;
+    for (let i = 0; i < arr.length - 1; i++) {
+      if (arr[i] === arr[i + 1]) { arr[i] *= 2; gained += arr[i]; arr.splice(i + 1, 1); }
+    }
+    while (arr.length < 4) arr.push(0);
+    return { line: arr, gained };
+  }
+  function g2048Move(dir) {
+    if (gOver) return;
+    const before = g2048.join(",");
+    let gained = 0;
+    const idx = (r, c) => r * 4 + c;
+    if (dir === "left" || dir === "right") {
+      for (let r = 0; r < 4; r++) {
+        let line = [g2048[idx(r, 0)], g2048[idx(r, 1)], g2048[idx(r, 2)], g2048[idx(r, 3)]];
+        if (dir === "right") line.reverse();
+        const res = g2048SlideLine(line);
+        gained += res.gained;
+        if (dir === "right") res.line.reverse();
+        for (let c = 0; c < 4; c++) g2048[idx(r, c)] = res.line[c];
+      }
+    } else {
+      for (let c = 0; c < 4; c++) {
+        let line = [g2048[idx(0, c)], g2048[idx(1, c)], g2048[idx(2, c)], g2048[idx(3, c)]];
+        if (dir === "down") line.reverse();
+        const res = g2048SlideLine(line);
+        gained += res.gained;
+        if (dir === "down") res.line.reverse();
+        for (let r = 0; r < 4; r++) g2048[idx(r, c)] = res.line[r];
+      }
+    }
+    if (g2048.join(",") === before) return; // 没动，不生成新块
+    gScore += gained;
+    g2048Spawn();
+    g2048SaveBest();
+    g2048Render();
+    if (!gWon && g2048.some((v) => v >= 2048)) { gWon = true; $("g2048Status").textContent = "🎉 拼出 2048 了！太强了，还能继续往上拼。"; }
+    else if (g2048CanMove()) { if (!gWon) $("g2048Status").textContent = "继续，拼出更大的数。"; }
+    else { gOver = true; $("g2048Status").textContent = "💥 拼不动了！得分 " + gScore + "，最高 " + Math.max(g2048Best(), gScore) + "。点新一局再来。"; }
+  }
+  function g2048CanMove() {
+    if (g2048.some((v) => !v)) return true;
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      const v = g2048[r * 4 + c];
+      if (c < 3 && g2048[r * 4 + c + 1] === v) return true;
+      if (r < 3 && g2048[(r + 1) * 4 + c] === v) return true;
+    }
+    return false;
+  }
+  $("g2048NewBtn").addEventListener("click", g2048New);
+  $("g2048UpBtn").addEventListener("click", () => g2048Move("up"));
+  $("g2048DownBtn").addEventListener("click", () => g2048Move("down"));
+  $("g2048LeftBtn").addEventListener("click", () => g2048Move("left"));
+  $("g2048RightBtn").addEventListener("click", () => g2048Move("right"));
+  let g2048Swipe = null;
+  $("g2048Grid").addEventListener("pointerdown", (e) => { g2048Swipe = { x: e.clientX, y: e.clientY }; });
+  $("g2048Grid").addEventListener("pointerup", (e) => {
+    if (!g2048Swipe) return;
+    const dx = e.clientX - g2048Swipe.x, dy = e.clientY - g2048Swipe.y;
+    g2048Swipe = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) g2048Move(dx > 0 ? "right" : "left"); else g2048Move(dy > 0 ? "down" : "up");
+  });
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-game2048").classList.contains("hidden")) return;
+      const k = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+      if (k) { g2048Move(k); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  g2048New();
+
+  /* ---------- 43. 扫雷 ---------- */
+  const M_ROWS = 9, M_COLS = 9, M_MINES = 10;
+  let mCells = [], mStarted = false, mOver = false, mFlagMode = false, mTimer = null, mSeconds = 0;
+  function mNew() {
+    mCells = [];
+    for (let i = 0; i < M_ROWS * M_COLS; i++) mCells.push({ mine: false, revealed: false, flagged: false, count: 0 });
+    mStarted = false; mOver = false; mSeconds = 0;
+    if (mTimer) { clearInterval(mTimer); mTimer = null; }
+    $("minesTime").textContent = "⏱ 0 秒";
+    $("minesFaceBtn").textContent = "🙂";
+    $("minesStatus").textContent = "点任意格子开始。";
+    mRender();
+  }
+  function mNeighbors(i) {
+    const r = Math.floor(i / M_COLS), c = i % M_COLS;
+    const out = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < M_ROWS && nc >= 0 && nc < M_COLS) out.push(nr * M_COLS + nc);
+    }
+    return out;
+  }
+  function mPlaceMines(safe) {
+    const safeSet = {};
+    safeSet[safe] = true;
+    mNeighbors(safe).forEach((n) => { safeSet[n] = true; });
+    const pool = [];
+    for (let i = 0; i < M_ROWS * M_COLS; i++) if (!safeSet[i]) pool.push(i);
+    for (let k = 0; k < M_MINES; k++) {
+      const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+      mCells[pick].mine = true;
+    }
+    for (let i = 0; i < M_ROWS * M_COLS; i++) {
+      if (mCells[i].mine) continue;
+      mCells[i].count = mNeighbors(i).filter((n) => mCells[n].mine).length;
+    }
+  }
+  function mRender() {
+    const grid = $("minesGrid");
+    grid.innerHTML = "";
+    let flags = 0;
+    mCells.forEach((cell, i) => {
+      if (cell.flagged) flags++;
+      const btn = document.createElement("button");
+      btn.className = "mines-cell" + (cell.revealed ? " open" : "") + (cell.flagged ? " flagged" : "");
+      btn.setAttribute("aria-label", "扫雷格子 " + (Math.floor(i / M_COLS) + 1) + " 行 " + (i % M_COLS + 1) + " 列");
+      if (cell.revealed) {
+        if (cell.mine) btn.textContent = "💣";
+        else if (cell.count > 0) { btn.textContent = cell.count; btn.classList.add("n" + cell.count); }
+      } else if (cell.flagged) btn.textContent = "🚩";
+      btn.addEventListener("click", () => mClick(i, false));
+      btn.addEventListener("contextmenu", (e) => { if (e.preventDefault) e.preventDefault(); mClick(i, true); });
+      let pressTimer = null;
+      btn.addEventListener("pointerdown", () => { pressTimer = setTimeout(() => { mClick(i, true); pressTimer = null; }, 450); });
+      btn.addEventListener("pointerup", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+      btn.addEventListener("pointerleave", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+      grid.appendChild(btn);
+    });
+    $("minesLeft").textContent = "💣 剩 " + (M_MINES - flags) + " 颗雷";
+  }
+  function mStartTimer() {
+    if (mTimer) return;
+    mTimer = setInterval(() => { mSeconds++; $("minesTime").textContent = "⏱ " + mSeconds + " 秒"; }, 1000);
+  }
+  function mStopTimer() { if (mTimer) { clearInterval(mTimer); mTimer = null; } }
+  function mClick(i, flag) {
+    if (mOver) return;
+    const cell = mCells[i];
+    if (flag) {
+      if (cell.revealed) return;
+      cell.flagged = !cell.flagged;
+      mRender();
+      return;
+    }
+    if (mFlagMode) { if (!cell.revealed) { cell.flagged = !cell.flagged; mRender(); } return; }
+    if (cell.revealed || cell.flagged) return;
+    if (!mStarted) { mPlaceMines(i); mStarted = true; mStartTimer(); }
+    if (cell.mine) {
+      cell.revealed = true;
+      mOver = true; mStopTimer();
+      mCells.forEach((c) => { if (c.mine) c.revealed = true; });
+      $("minesFaceBtn").textContent = "😵";
+      $("minesStatus").textContent = "💥 踩到雷了！用时 " + mSeconds + " 秒。点新一局再来。";
+      mRender();
+      return;
+    }
+    mFlood(i);
+    mRender();
+    if (mCells.every((c) => c.mine || c.revealed)) {
+      mOver = true; mStopTimer();
+      $("minesFaceBtn").textContent = "😎";
+      $("minesStatus").textContent = "🎉 赢了！用时 " + mSeconds + " 秒，全挖开了，太强了。";
+    }
+  }
+  function mFlood(i) {
+    const cell = mCells[i];
+    if (cell.revealed || cell.flagged) return;
+    cell.revealed = true;
+    if (cell.count === 0) mNeighbors(i).forEach(mFlood);
+  }
+  $("minesNewBtn").addEventListener("click", mNew);
+  $("minesFaceBtn").addEventListener("click", mNew);
+  $("minesFlagBtn").addEventListener("click", () => {
+    mFlagMode = !mFlagMode;
+    $("minesFlagBtn").textContent = mFlagMode ? "🚩 插旗模式：开" : "🚩 插旗模式：关";
+  });
+  mNew();
+  toyLeaveCleanup.mines = () => { mStopTimer(); };
+
+  /* ---------- 44. 课程表 ---------- */
+  const SCH_KEY = "dorm-toybox-schedule-v1";
+  const SCH_DAYS = ["周一", "周二", "周三", "周四", "周五"];
+  const SCH_PERIODS = ["第 1-2 节\n8:00", "第 3-4 节\n10:00", "第 5-6 节\n14:00", "第 7-8 节\n16:00", "第 9-10 节\n19:00"];
+  const SCH_PERIOD_HOURS = [[8, 10], [10, 12], [14, 16], [16, 18], [19, 21]];
+  let schCourses = [];
+  try { schCourses = JSON.parse(localStorage.getItem(SCH_KEY) || "[]") || []; } catch (e) { schCourses = []; }
+  function schSave() { try { localStorage.setItem(SCH_KEY, JSON.stringify(schCourses)); } catch (e) { /* 忽略 */ } }
+  function schRender() {
+    const grid = $("schGrid");
+    grid.innerHTML = "";
+    const now = new Date();
+    const today = now.getDay() - 1; // 周一=0
+    const hour = now.getHours() + now.getMinutes() / 60;
+    let curPeriod = -1;
+    SCH_PERIOD_HOURS.forEach((h, i) => { if (hour >= h[0] && hour < h[1]) curPeriod = i; });
+    // 表头
+    const corner = document.createElement("div");
+    corner.className = "sch-head";
+    corner.textContent = "时间";
+    grid.appendChild(corner);
+    SCH_DAYS.forEach((d, i) => {
+      const h = document.createElement("div");
+      h.className = "sch-head" + (i === today ? " today" : "");
+      h.textContent = d + (i === today ? "（今天）" : "");
+      grid.appendChild(h);
+    });
+    for (let p = 0; p < 5; p++) {
+      const label = document.createElement("div");
+      label.className = "sch-label" + (p === curPeriod ? " now" : "");
+      label.textContent = SCH_PERIODS[p];
+      grid.appendChild(label);
+      for (let d = 0; d < 5; d++) {
+        const cell = document.createElement("button");
+        const course = schCourses.find((c) => c.day === d && c.period === p);
+        cell.className = "sch-cell" + (d === today ? " today" : "") + (d === today && p === curPeriod ? " now" : "") + (course ? " filled" : "");
+        if (course) {
+          const nm = document.createElement("span");
+          nm.className = "sch-name";
+          nm.textContent = course.name;
+          cell.appendChild(nm);
+          if (course.room) {
+            const rm = document.createElement("span");
+            rm.className = "sch-room";
+            rm.textContent = course.room;
+            cell.appendChild(rm);
+          }
+        } else {
+          cell.textContent = "＋";
+        }
+        cell.addEventListener("click", () => {
+          if (course) {
+            schCourses = schCourses.filter((c) => c !== course);
+            schSave(); schRender();
+            $("schResult").textContent = "已删掉「" + course.name + "」。";
+          } else {
+            $("schDay").value = String(d);
+            $("schPeriod").value = String(p);
+            $("schName").focus();
+            $("schResult").textContent = "已选 " + SCH_DAYS[d] + " " + SCH_PERIODS[p].split("\n")[0] + "，写课程名点加上。";
+          }
+        });
+        grid.appendChild(cell);
+      }
+    }
+    $("schResult").textContent = schCourses.length === 0 ? "还没加课。" : "共 " + schCourses.length + " 门课，点一格可以删。";
+  }
+  $("schAddBtn").addEventListener("click", () => {
+    const name = $("schName").value.trim();
+    const room = $("schRoom").value.trim();
+    const day = parseInt($("schDay").value, 10);
+    const period = parseInt($("schPeriod").value, 10);
+    if (!name) { $("schResult").textContent = "先写课程名。"; return; }
+    schCourses = schCourses.filter((c) => !(c.day === day && c.period === period));
+    schCourses.push({ name, room, day, period });
+    schSave(); schRender();
+    $("schName").value = "";
+    $("schRoom").value = "";
+    $("schResult").textContent = "已加上「" + name + "」（" + SCH_DAYS[day] + " " + SCH_PERIODS[period].split("\n")[0] + "）。";
+  });
+  $("schClearBtn").addEventListener("click", () => { schCourses = []; schSave(); schRender(); $("schResult").textContent = "课程表已清空。"; });
+  schRender();
+
+  /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
+  window.__toybox = {
+    get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
+    tetrisSetCur(x, y) { if (tCur) { tCur.x = x; tCur.y = y; } },
+    get g2048() { return { board: g2048.slice(), score: gScore, over: gOver, won: gWon }; },
+    g2048Set(board) { g2048 = board.slice(); g2048Render(); },
+    get mines() { return { cells: mCells, started: mStarted, over: mOver }; },
+    get schedule() { return { courses: schCourses.slice() }; },
+  };
+
   renderTimer();
 })();

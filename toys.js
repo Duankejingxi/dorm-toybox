@@ -1578,6 +1578,8 @@
   let beadsCellPx = 22;
   let beadsFocusN = null; // 正在单独拼的色号，null = 全部显示
   let beadsLastPixels = null, beadsLastCols = 0, beadsLastRows = 0;
+  let beadsLastImage = null; // 传过的原图：换格数时直接拿它重算，不用重新选图
+  let beadsShowingPhoto = false; // 当前图纸是不是照片算出来的（示例爱心是固定 16 格，不跟格数走）
   let beadsSymbols = {}; // 色号 -> 符号
   let beadsLegendItems = []; // { n, el }
   function beadRingBg(hex) {
@@ -1734,6 +1736,8 @@
         pixels.push("#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join(""));
       }
       beadsRender(pixels, canvas.width, canvas.height);
+      beadsLastImage = img;
+      beadsShowingPhoto = true;
     } catch (e) { $("beadsResult").textContent = "这张图处理失败，换一张试试。"; }
   }
   function beadsFromFile(file) {
@@ -1756,7 +1760,12 @@
     const charHex = { ".": "#E5ECF1", R: "#B4060E", P: "#EA8AA5" };
     const pixels = [];
     BEADS_SAMPLE.forEach((row) => { for (const ch of row) pixels.push(charHex[ch] || "#E5ECF1"); });
+    beadsShowingPhoto = false;
     beadsRender(pixels, 16, 16);
+  });
+  $("beadsSize").addEventListener("change", () => {
+    // 换格数（清晰度）图纸马上重算：拿存着的原图按新格数重缩，不用重新选图
+    if (beadsLastImage && beadsShowingPhoto) beadsFromImage(beadsLastImage);
   });
   $("beadsMaxColors").addEventListener("change", () => {
     // 换颜色数上限就按原图重算：少的色并进最近的保留色，图例和符号跟着变

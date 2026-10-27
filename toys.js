@@ -72,7 +72,6 @@
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("转", cx, cy + 5);
-    ctx.restore();
   }
   function updateWheelFromInput() {
     const opts = readWheelOptions();
@@ -86,6 +85,9 @@
   }
   $("wheelOptions").value = DEFAULT_WHEEL_OPTIONS.join("\n");
   $("wheelOptions").addEventListener("change", updateWheelFromInput);
+  $("updateWheelBtn").addEventListener("click", () => {
+    if (updateWheelFromInput()) $("wheelResult").textContent = "转盘已更新，共 " + wheelOptions.length + " 个选项。";
+  });
   $("resetWheelBtn").addEventListener("click", () => {
     $("wheelOptions").value = DEFAULT_WHEEL_OPTIONS.join("\n");
     wheelOptions = DEFAULT_WHEEL_OPTIONS.slice();
@@ -228,7 +230,13 @@
   /* ---------- 5. 随机点名 ---------- */
   let picked = [];
   function namePool() {
-    return $("nameList").value.split("\n").map((s) => s.trim()).filter(Boolean);
+    // 去重（保序）：重名会让“抽过的不再重复”误判，两个同名算一个人
+    const seen = new Set();
+    return $("nameList").value.split("\n").map((s) => s.trim()).filter((s) => {
+      if (!s || seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    });
   }
   function renderPickLeft() {
     const pool = namePool();
@@ -346,5 +354,155 @@
     $("timerStatus").textContent = "已重置。先想好这 25 分钟要干什么。";
     renderTimer();
   });
+  /* ---------- 7. 随机分组 ---------- */
+  function groupNamePool() {
+    const seen = new Set();
+    return $("groupNames").value.split("\n").map((s) => s.trim()).filter((s) => {
+      if (!s || seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    });
+  }
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+  let lastGroups = [];
+  $("doGroupBtn").addEventListener("click", () => {
+    const names = groupNamePool();
+    const count = parseInt($("groupCount").value, 10);
+    if (names.length < count) {
+      $("groupResult").textContent = "人太少了，至少要 " + count + " 个人才能分 " + count + " 组。";
+      return;
+    }
+    const shuffled = shuffle(names.slice());
+    const groups = Array.from({ length: count }, () => []);
+    shuffled.forEach((name, i) => groups[i % count].push(name));
+    lastGroups = groups;
+    const grid = $("groupGrid");
+    grid.innerHTML = "";
+    groups.forEach((members, gi) => {
+      const card = document.createElement("div");
+      card.className = "group-card";
+      const title = document.createElement("h3");
+      title.textContent = "第 " + (gi + 1) + " 组 · " + members.length + " 人";
+      const ul = document.createElement("ul");
+      members.forEach((m, mi) => {
+        const li = document.createElement("li");
+        if (mi === 0) {
+          const b = document.createElement("b");
+          b.className = "captain";
+          b.textContent = "👑 " + m + "（队长）";
+          li.appendChild(b);
+        } else {
+          li.textContent = m;
+        }
+        ul.appendChild(li);
+      });
+      card.appendChild(title);
+      card.appendChild(ul);
+      grid.appendChild(card);
+    });
+    $("groupResult").textContent = "🎉 已随机分成 " + count + " 组，每组第一个是队长。";
+    $("copyGroupsBtn").classList.remove("hidden");
+  });
+  $("copyGroupsBtn").addEventListener("click", async () => {
+    const text = lastGroups.map((g, i) => "第 " + (i + 1) + " 组（队长 " + g[0] + "）：" + g.join("、")).join("\n");
+    try {
+      await navigator.clipboard.writeText("👥 随机分组结果\n" + text);
+      $("copyGroupsBtn").textContent = "已复制 ✅";
+      setTimeout(() => { $("copyGroupsBtn").textContent = "复制分组结果 📋"; }, 2000);
+    } catch (e) {
+      $("groupResult").textContent = text;
+    }
+  });
+
+  /* ---------- 8. 反应速度测试 ---------- */
+  const REACTION_BEST_KEY = "dorm-toybox-reaction-best-v1";
+  let reactionTimerId = null;
+  let reactionStartAt = 0;
+  let reactionState = "idle"; // idle | waiting | go
+  let reactionScores = [];
+  function loadBest() {
+    try { return parseInt(localStorage.getItem(REACTION_BEST_KEY) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  let reactionBest = loadBest();
+  function rankLabel(ms) {
+    if (ms < 200) return "神仙手速 👑";
+    if (ms < 280) return "宿舍最快 ⚡";
+    if (ms < 380) return "正常发挥 🙂";
+    return "手速待练 🐢";
+  }
+  function renderReaction() {
+    $("reactionBest").textContent = reactionBest > 0
+      ? "最好成绩：" + reactionBest + " ms（" + rankLabel(reactionBest) + "）"
+      : "还没留下成绩。先测一次。";
+    const box = $("reactionHistory");
+    box.innerHTML = "";
+    reactionScores.slice(-5).reverse().forEach((s) => {
+      const li = document.createElement("li");
+      const a = document.createElement("span");
+      a.textContent = "⚡ " + s + " ms";
+      const b = document.createElement("span");
+      b.textContent = rankLabel(s);
+      li.appendChild(a);
+      li.appendChild(b);
+      box.appendChild(li);
+    });
+  }
+  function setReactionStage(text, sub, cls) {
+    const stage = $("reactionStage");
+    stage.classList.remove("waiting", "go");
+    if (cls) stage.classList.add(cls);
+    stage.innerHTML = "";
+    stage.appendChild(document.createTextNode(text));
+    if (sub) {
+      const span = document.createElement("span");
+      span.className = "sub";
+      span.textContent = sub;
+      stage.appendChild(span);
+    }
+  }
+  function reactionClick() {
+    if (reactionState === "idle") {
+      reactionState = "waiting";
+      setReactionStage("等绿色……", "别点！等它变绿", "waiting");
+      $("reactionResult").textContent = "等着，别急……";
+      const delay = 1500 + Math.random() * 2500;
+      reactionTimerId = setTimeout(() => {
+        reactionState = "go";
+        reactionStartAt = performance.now();
+        setReactionStage("点！", "", "go");
+      }, delay);
+    } else if (reactionState === "waiting") {
+      clearTimeout(reactionTimerId);
+      reactionState = "idle";
+      setReactionStage("抢跑了！", "变绿之前别点，重新来", "");
+      $("reactionResult").textContent = "❌ 犯规：抢跑。再点一次重新开始。";
+    } else if (reactionState === "go") {
+      const ms = Math.round(performance.now() - reactionStartAt);
+      reactionState = "idle";
+      reactionScores.push(ms);
+      if (reactionBest === 0 || ms < reactionBest) {
+        reactionBest = ms;
+        try { localStorage.setItem(REACTION_BEST_KEY, String(ms)); } catch (e) { /* 忽略 */ }
+        $("reactionResult").textContent = "🎉 " + ms + " ms，新纪录！" + rankLabel(ms);
+      } else {
+        $("reactionResult").textContent = "⚡ " + ms + " ms，" + rankLabel(ms) + "（最好 " + reactionBest + " ms）";
+      }
+      setReactionStage("点我再测一次", "最好成绩 " + reactionBest + " ms", "");
+      renderReaction();
+    }
+  }
+  $("reactionStage").addEventListener("click", reactionClick);
+  $("reactionStage").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reactionClick(); }
+  });
+  renderReaction();
+
   renderTimer();
 })();

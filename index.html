@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
 <meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -24,8 +25,9 @@
     <p class="hint">纠结的时候就转它：去哪玩、谁请客、晚上干什么，写上去，转一下，命运说了算。</p>
     <textarea id="wheelOptions" rows="4" aria-label="转盘选项，每行一个"></textarea>
     <p class="hint">每行一个选项，最多 8 个。改完点「更新转盘」。</p>
+    <button class="btn gold-btn small" id="updateWheelBtn">更新转盘 ↻</button>
     <div class="wheel-stage">
-      <canvas id="wheelCanvas" width="320" height="320"></canvas>
+      <canvas id="wheelCanvas" width="320" height="320" role="img" aria-label="命运大转盘"></canvas>
       <div class="wheel-pointer" aria-hidden="true">▼</div>
     </div>
     <button class="big-btn" id="spinWheelBtn">转起来！</button>
@@ -105,10 +107,40 @@
     </div>
     <p class="count-line" id="tomatoCount">今天已完成 0 个番茄</p>
   </section>
+
+  <!-- 随机分组 -->
+  <section class="panel toy hidden" id="toy-groups">
+    <h2>👥 随机分组</h2>
+    <p class="hint">社团分组、宿舍对抗赛、小组作业分工——名字粘进来，分几组，队长自动指定（每组第一个就是队长）。</p>
+    <textarea id="groupNames" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五&#10;赵六" aria-label="分组名字列表，每行一个"></textarea>
+    <div class="group-form-row">
+      <label for="groupCount">分成</label>
+      <select id="groupCount">
+        <option value="2">2 组</option>
+        <option value="3">3 组</option>
+        <option value="4">4 组</option>
+        <option value="5">5 组</option>
+      </select>
+      <button class="btn gold-btn" id="doGroupBtn">分组！</button>
+    </div>
+    <p class="result-line" id="groupResult">还没分过组。</p>
+    <div class="group-grid" id="groupGrid"></div>
+    <button class="btn ghost-btn small hidden" id="copyGroupsBtn">复制分组结果 📋</button>
+  </section>
+
+  <!-- 反应速度测试 -->
+  <section class="panel toy hidden" id="toy-reaction">
+    <h2>⚡ 反应速度测试</h2>
+    <p class="hint">点开始，等方块变绿就立刻点它。提前点了算犯规。宿舍比一比，谁的手速最快。</p>
+    <div class="reaction-stage" id="reactionStage" role="button" tabindex="0">点我开始<span class="sub">变绿就点，别抢跑</span></div>
+    <p class="result-line" id="reactionResult">还没测过。</p>
+    <p class="count-line" id="reactionBest"></p>
+    <ul class="history" id="reactionHistory"></ul>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.1 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

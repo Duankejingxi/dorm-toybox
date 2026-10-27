@@ -11,6 +11,8 @@ const TOYS = [
   { id: "fortune", label: "🍀 今日运势" },
   { id: "picker", label: "📋 随机点名" },
   { id: "timer", label: "🍅 番茄钟" },
+  { id: "groups", label: "👥 随机分组" },
+  { id: "reaction", label: "⚡ 反应测试" },
 ];
 
 const DEFAULT_WHEEL_OPTIONS = [

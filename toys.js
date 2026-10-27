@@ -1787,7 +1787,8 @@
   $("beadsExportBtn").addEventListener("click", () => {
     if (!beadsCells.length) { $("beadsResult").textContent = "先传图或点示例，生成图纸再导出。"; return; }
     try {
-      const cell = 24, margin = 30;
+      // 导出图放大一倍（每颗 48px）：64 格的图在手机上看，字母才够大；孔也放大，字母全落在白底上
+      const cell = 48, margin = 40;
       const canvas = document.createElement("canvas");
       if (typeof canvas.getContext !== "function" || typeof canvas.toDataURL !== "function") { $("beadsResult").textContent = "当前环境不支持导出。"; return; }
       canvas.width = beadsCols * cell + margin;
@@ -1798,7 +1799,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       // 行列号：每 5 格在图边上标一个，对着纸图也能找到第几行第几列
       ctx.fillStyle = "#666666";
-      ctx.font = "12px sans-serif";
+      ctx.font = "18px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       for (let c = 0; c < beadsCols; c += 5) ctx.fillText(String(c + 1), margin + c * cell + cell / 2, margin / 2);
@@ -1810,13 +1811,16 @@
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#ffffff"; // 豆子中间的孔（和屏幕上一样大）
+        ctx.fillStyle = "#ffffff"; // 豆子中间的孔（比屏幕上的大，字母全落在白底上）
         ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
+        ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
         ctx.fill();
-        // 符号写在孔里：打印出来的图也能靠符号分色，不用只看颜色
-        ctx.fillStyle = "#333333";
-        ctx.font = "bold " + Math.round(cell * 0.45) + "px sans-serif";
+        // 符号：先描一圈白边，再写深色字——白边把字母和彩色环隔开，字母伸到颜色上也不糊
+        ctx.font = "bold " + Math.round(cell * 0.5) + "px sans-serif";
+        ctx.lineWidth = Math.round(cell * 0.12);
+        ctx.strokeStyle = "#ffffff";
+        ctx.strokeText(beadsSymbols[bead.n], cx, cy + 1);
+        ctx.fillStyle = "#222222";
         ctx.fillText(beadsSymbols[bead.n], cx, cy + 1);
       });
       const a = document.createElement("a");

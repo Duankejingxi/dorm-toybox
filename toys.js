@@ -623,5 +623,186 @@
   });
   renderGuessCount();
 
+  /* ---------- 11. 记忆翻牌 ---------- */
+  const MEMORY_BEST_KEY = "dorm-toybox-memory-best-v1";
+  let memoryFlipped = [];
+  let memoryLock = false;
+  let memoryMatched = 0;
+  let memoryMoves = 0;
+  let memoryStartAt = 0;
+  let memoryTimerId = null;
+  function loadMemoryBest() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MEMORY_BEST_KEY) || "null");
+      return saved && typeof saved.moves === "number" ? saved : null;
+    } catch (e) { return null; }
+  }
+  let memoryBest = loadMemoryBest();
+  function renderMemoryBest() {
+    $("memoryBest").textContent = memoryBest
+      ? "宿舍纪录：" + memoryBest.moves + " 步 · " + memoryBest.seconds + " 秒"
+      : "还没人留下纪录。第一个通关的就是纪录。";
+  }
+  function memoryElapsed() {
+    return memoryStartAt ? Math.floor((performance.now() - memoryStartAt) / 1000) : 0;
+  }
+  function renderMemoryStats() {
+    $("memoryStats").textContent = "步数 " + memoryMoves + " · 用时 " + memoryElapsed() + " 秒";
+  }
+  function buildMemoryDeck() {
+    const deck = shuffle(MEMORY_EMOJIS.concat(MEMORY_EMOJIS));
+    memoryFlipped = [];
+    memoryLock = false;
+    memoryMatched = 0;
+    memoryMoves = 0;
+    memoryStartAt = 0;
+    if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; }
+    const grid = $("memoryGrid");
+    grid.innerHTML = "";
+    deck.forEach((emoji, i) => {
+      const card = document.createElement("button");
+      card.className = "memory-card";
+      card.setAttribute("data-emoji", emoji);
+      card.setAttribute("data-index", String(i));
+      card.textContent = "❓";
+      card.addEventListener("click", () => memoryFlip(card));
+      grid.appendChild(card);
+    });
+    $("memoryResult").textContent = "点一张牌开始。";
+    renderMemoryStats();
+    renderMemoryBest();
+  }
+  function memoryFlip(card) {
+    if (memoryLock || card.classList.contains("flipped") || card.classList.contains("matched")) return;
+    if (!memoryStartAt) {
+      memoryStartAt = performance.now();
+      memoryTimerId = setInterval(renderMemoryStats, 500);
+    }
+    card.classList.add("flipped");
+    card.textContent = card.getAttribute("data-emoji");
+    memoryFlipped.push(card);
+    if (memoryFlipped.length === 2) {
+      memoryLock = true;
+      memoryMoves++;
+      renderMemoryStats();
+      const a = memoryFlipped[0];
+      const b = memoryFlipped[1];
+      setTimeout(() => {
+        if (a.getAttribute("data-emoji") === b.getAttribute("data-emoji")) {
+          a.classList.add("matched");
+          b.classList.add("matched");
+          memoryMatched++;
+          if (memoryMatched === MEMORY_EMOJIS.length) {
+            if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; }
+            const seconds = memoryElapsed();
+            let msg = "🎉 通关！用了 " + memoryMoves + " 步 · " + seconds + " 秒。";
+            if (!memoryBest || memoryMoves < memoryBest.moves ||
+              (memoryMoves === memoryBest.moves && seconds < memoryBest.seconds)) {
+              memoryBest = { moves: memoryMoves, seconds };
+              try { localStorage.setItem(MEMORY_BEST_KEY, JSON.stringify(memoryBest)); } catch (e) { /* 忽略 */ }
+              msg += "新纪录！";
+            }
+            $("memoryResult").textContent = msg;
+            renderMemoryBest();
+          } else {
+            $("memoryResult").textContent = "配对成功！还剩 " + (MEMORY_EMOJIS.length - memoryMatched) + " 对。";
+          }
+        } else {
+          a.classList.remove("flipped");
+          b.classList.remove("flipped");
+          a.textContent = "❓";
+          b.textContent = "❓";
+          $("memoryResult").textContent = "没配上，再试一次。";
+        }
+        memoryFlipped = [];
+        memoryLock = false;
+      }, 600);
+    }
+  }
+  $("memoryResetBtn").addEventListener("click", buildMemoryDeck);
+  buildMemoryDeck();
+
+  /* ---------- 12. 打字测试 ---------- */
+  const TYPING_BEST_KEY = "dorm-toybox-typing-best-v1";
+  let typingTarget = "";
+  let typingStartAt = 0;
+  let typingTimerId = null;
+  let typingDone = false;
+  function loadTypingBest() {
+    try { return parseInt(localStorage.getItem(TYPING_BEST_KEY) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  let typingBest = loadTypingBest();
+  function renderTypingBest() {
+    $("typingBest").textContent = typingBest > 0
+      ? "宿舍纪录：" + typingBest + " 字/分"
+      : "还没人留下纪录。第一个打完的就是纪录。";
+  }
+  function typingElapsedSec() {
+    return typingStartAt ? (performance.now() - typingStartAt) / 1000 : 0;
+  }
+  function renderTypingTarget() {
+    const box = $("typingTarget");
+    box.innerHTML = "";
+    typingTarget.split("").forEach((ch) => {
+      const span = document.createElement("span");
+      span.className = "typing-char";
+      span.textContent = ch;
+      box.appendChild(span);
+    });
+  }
+  function typingNewSentence() {
+    typingTarget = pick(TYPING_SENTENCES);
+    typingStartAt = 0;
+    typingDone = false;
+    if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
+    $("typingInput").value = "";
+    $("typingInput").disabled = false;
+    renderTypingTarget();
+    $("typingResult").textContent = "还没开始打。";
+    $("typingStats").textContent = "用时 0 秒 · 已打 0 字";
+    renderTypingBest();
+  }
+  function typingTick() {
+    const input = $("typingInput").value;
+    const chars = $("typingTarget").children;
+    let correct = 0;
+    for (let i = 0; i < chars.length; i++) {
+      const span = chars[i];
+      const typed = input[i];
+      span.classList.remove("ok", "bad");
+      if (typed === undefined) { /* 未打 */ }
+      else if (typed === span.textContent) { span.classList.add("ok"); correct++; }
+      else { span.classList.add("bad"); }
+    }
+    const elapsed = typingElapsedSec();
+    $("typingStats").textContent = "用时 " + Math.floor(elapsed) + " 秒 · 已打 " + input.length + " 字 · 正确 " + correct + " 字";
+    if (!typingDone && input.length >= typingTarget.length) {
+      typingDone = true;
+      if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
+      $("typingInput").disabled = true;
+      const seconds = Math.max(elapsed, 0.1);
+      const cpm = Math.round((typingTarget.length / seconds) * 60);
+      const accuracy = Math.round((correct / typingTarget.length) * 100);
+      let msg = "🎉 打完！速度 " + cpm + " 字/分 · 正确率 " + accuracy + "% · 用时 " + seconds.toFixed(1) + " 秒。";
+      if (typingBest === 0 || cpm > typingBest) {
+        typingBest = cpm;
+        try { localStorage.setItem(TYPING_BEST_KEY, String(cpm)); } catch (e) { /* 忽略 */ }
+        msg += "新纪录！";
+      }
+      $("typingResult").textContent = msg;
+      renderTypingBest();
+    }
+  }
+  $("typingInput").addEventListener("input", () => {
+    if (!typingStartAt && !typingDone) {
+      typingStartAt = performance.now();
+      typingTimerId = setInterval(typingTick, 200);
+    }
+    typingTick();
+  });
+  $("typingNextBtn").addEventListener("click", typingNewSentence);
+  typingNewSentence();
+
   renderTimer();
 })();

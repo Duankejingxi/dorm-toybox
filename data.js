@@ -15,6 +15,19 @@ const TOYS = [
   { id: "reaction", label: "⚡ 反应测试" },
   { id: "rps", label: "✊ 石头剪刀布" },
   { id: "guess", label: "🔢 猜数字" },
+  { id: "memory", label: "🃏 记忆翻牌" },
+  { id: "typing", label: "⌨️ 打字测试" },
+];
+
+const MEMORY_EMOJIS = ["🍜", "🎮", "📚", "⚽", "🎵", "🐱", "🚀", "🍕"];
+
+const TYPING_SENTENCES = [
+  "宿舍的夜聊总是从作业开始以八卦结束",
+  "今天的实验报告明天就要交了你写完了吗",
+  "食堂新开的窗口排了好长的队味道还不错",
+  "周末约好了去操场跑步谁赖床谁请奶茶",
+  "上课铃响了快跑再不走又要坐最后一排",
+  "这个代码调了一下午终于跑通了开心",
 ];
 
 const DEFAULT_WHEEL_OPTIONS = [

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
 </header>
 
@@ -170,10 +170,33 @@
     <div class="guess-chips" id="guessChips"></div>
     <button class="btn ghost-btn small" id="guessResetBtn">换个数重开 ↺</button>
   </section>
+
+  <!-- 记忆翻牌 -->
+  <section class="panel toy hidden" id="toy-memory">
+    <h2>🃏 记忆翻牌</h2>
+    <p class="hint">16 张牌，8 对图案。翻两张，成对留下，不成对扣回去。步数越少越牛，宿舍纪录等你破。</p>
+    <div class="memory-grid" id="memoryGrid"></div>
+    <p class="result-line" id="memoryResult">点一张牌开始。</p>
+    <p class="count-line" id="memoryStats">步数 0 · 用时 0 秒</p>
+    <p class="count-line" id="memoryBest"></p>
+    <button class="btn gold-btn small" id="memoryResetBtn">重新洗牌 ↺</button>
+  </section>
+
+  <!-- 打字测试 -->
+  <section class="panel toy hidden" id="toy-typing">
+    <h2>⌨️ 打字测试</h2>
+    <p class="hint">照着上面那句打，绿了就是打对了，红了就是打错了。打完出速度和正确率，跟宿舍比一比。</p>
+    <div class="typing-target" id="typingTarget"></div>
+    <input id="typingInput" type="text" placeholder="点这里开始打字" aria-label="打字输入" autocomplete="off">
+    <p class="result-line" id="typingResult">还没开始打。</p>
+    <p class="count-line" id="typingStats">用时 0 秒 · 已打 0 字</p>
+    <p class="count-line" id="typingBest"></p>
+    <button class="btn ghost-btn small" id="typingNextBtn">换一句 ↻</button>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.2 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.3 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

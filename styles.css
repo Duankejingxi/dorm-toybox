@@ -230,3 +230,13 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
   background: linear-gradient(to bottom, rgba(22, 17, 46, 0), #16112e);
   pointer-events: none; border-radius: 0 0 10px 10px;
 }
+
+/* v1.3：记忆翻牌 + 打字测试 */
+.memory-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.memory-card { aspect-ratio: 1; font-size: 30px; border-radius: 12px; cursor: pointer; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); }
+.memory-card.flipped { background: rgba(245, 197, 66, .18); border-color: var(--gold); }
+.memory-card.matched { background: rgba(245, 197, 66, .25); border-color: var(--gold); box-shadow: 0 0 14px rgba(245, 197, 66, .35); }
+.typing-target { font-size: 19px; line-height: 2; letter-spacing: .04em; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; }
+.typing-char.ok { color: #7dff9b; }
+.typing-char.bad { color: #ff8f8f; background: rgba(255, 122, 107, .15); border-radius: 4px; }
+#typingInput { width: 100%; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin-top: 12px; }

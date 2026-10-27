@@ -1632,5 +1632,354 @@
     } catch (e) { $("beadsResult").textContent = "导出失败，换个浏览器试试。"; }
   });
 
+  /* ---------- 23. 亲戚计算器 ---------- */
+  const KIN_RELATIONS = [
+    { key: "爸", label: "爸爸" }, { key: "妈", label: "妈妈" },
+    { key: "哥", label: "哥哥" }, { key: "弟", label: "弟弟" },
+    { key: "姐", label: "姐姐" }, { key: "妹", label: "妹妹" },
+    { key: "儿", label: "儿子" }, { key: "女", label: "女儿" },
+    { key: "夫", label: "丈夫" }, { key: "妻", label: "妻子" },
+  ];
+  let kinChain = [];
+  function kinCurrentKey() {
+    let cur = "我";
+    for (const r of kinChain) {
+      const next = KIN_PAIRS[cur + "," + r];
+      if (!next) return null;
+      cur = next;
+    }
+    return cur;
+  }
+  function renderKin() {
+    $("kinChain").textContent = kinChain.length === 0 ? "我" : "我的" + kinChain.map((k) => KIN_NAMES[k]).join("的");
+    const cur = kinCurrentKey();
+    $("kinResult").textContent = kinChain.length === 0
+      ? "点下面的关系，算算他该叫什么。"
+      : (cur ? "应该叫：" + KIN_NAMES[cur] : "这个关系有点绕，算不出来，换个问法试试。");
+  }
+  KIN_RELATIONS.forEach((rel) => {
+    const b = document.createElement("button");
+    b.className = "btn small ghost-btn";
+    b.textContent = rel.label;
+    b.addEventListener("click", () => {
+      if (kinChain.length >= 4) { $("kinResult").textContent = "最多算 4 层关系，点清除重来。"; return; }
+      kinChain.push(rel.key);
+      renderKin();
+    });
+    $("kinButtons").appendChild(b);
+  });
+  [["爸爸的妈妈", ["爸", "妈"]], ["妈妈的爸爸", ["妈", "爸"]], ["爸爸的哥哥", ["爸", "哥"]], ["姐姐的儿子", ["姐", "儿"]]].forEach(([label, chain]) => {
+    const b = document.createElement("button");
+    b.className = "btn small ghost-btn";
+    b.textContent = label;
+    b.addEventListener("click", () => { kinChain = chain.slice(); renderKin(); });
+    $("kinPresets").appendChild(b);
+  });
+  $("kinClearBtn").addEventListener("click", () => { kinChain = []; renderKin(); });
+  renderKin();
+
+  /* ---------- 24. 汇率计算器（联网每天更新一次，存本机；离线用备用汇率） ---------- */
+  const FX_KEY = "dorm-toybox-fx-v1";
+  let fxRates = FX_FALLBACK.rates;
+  let fxDate = FX_FALLBACK.date;
+  let fxLive = false;
+  function fxToday() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function fxRender() {
+    const amount = parseFloat($("fxAmount").value);
+    const from = $("fxFrom").value, to = $("fxTo").value;
+    if (isNaN(amount)) { $("fxResult").textContent = "先填个金额。"; return; }
+    const cny = amount / fxRates[from];
+    const out = cny * fxRates[to];
+    $("fxResult").textContent = amount + " " + from + " ≈ " + out.toFixed(2) + " " + to;
+    $("fxMeta").textContent = (fxLive ? "实时汇率" : "离线参考汇率") + " · 更新于 " + fxDate + "（每天更新一次）";
+  }
+  function fxFetch() {
+    if (typeof fetch !== "function") return;
+    fetch("https://open.er-api.com/v6/latest/CNY").then((r) => r.json()).then((data) => {
+      if (!data || !data.rates) return;
+      fxRates = Object.assign({}, FX_FALLBACK.rates, data.rates);
+      fxDate = fxToday();
+      fxLive = true;
+      try { localStorage.setItem(FX_KEY, JSON.stringify({ date: fxDate, rates: fxRates })); } catch (e) { /* 忽略 */ }
+      fxRender();
+    }).catch(() => { /* 离线用备用汇率 */ });
+  }
+  function fxLoadCache() {
+    try {
+      const s = JSON.parse(localStorage.getItem(FX_KEY) || "null");
+      if (s && s.date === fxToday() && s.rates) { fxRates = s.rates; fxDate = s.date; fxLive = true; return true; }
+    } catch (e) { /* 忽略 */ }
+    return false;
+  }
+  FX_CURRENCIES.forEach(([code, label]) => {
+    const o1 = document.createElement("option"); o1.value = code; o1.textContent = label;
+    const o2 = document.createElement("option"); o2.value = code; o2.textContent = label;
+    $("fxFrom").appendChild(o1); $("fxTo").appendChild(o2);
+  });
+  $("fxFrom").value = "CNY"; $("fxTo").value = "USD";
+  $("fxAmount").addEventListener("input", fxRender);
+  $("fxFrom").addEventListener("change", fxRender);
+  $("fxTo").addEventListener("change", fxRender);
+  $("fxSwapBtn").addEventListener("click", () => {
+    const f = $("fxFrom").value; $("fxFrom").value = $("fxTo").value; $("fxTo").value = f; fxRender();
+  });
+  $("fxRefreshBtn").addEventListener("click", () => {
+    if (typeof fetch !== "function") { $("fxMeta").textContent = "当前环境不支持联网更新，用离线参考汇率。"; return; }
+    $("fxMeta").textContent = "正在更新汇率……";
+    fxFetch();
+  });
+  if (!fxLoadCache()) fxFetch();
+  fxRender();
+
+  /* ---------- 25. 中英日韩翻译器 ---------- */
+  const TRANS_LANGS = [["zh-CN", "中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"]];
+  TRANS_LANGS.forEach(([code, label]) => {
+    const o1 = document.createElement("option"); o1.value = code; o1.textContent = label;
+    const o2 = document.createElement("option"); o2.value = code; o2.textContent = label;
+    $("transFrom").appendChild(o1); $("transTo").appendChild(o2);
+  });
+  $("transFrom").value = "zh-CN"; $("transTo").value = "en";
+  $("transSwapBtn").addEventListener("click", () => {
+    const f = $("transFrom").value; $("transFrom").value = $("transTo").value; $("transTo").value = f;
+    const t = $("transInput").value; $("transInput").value = $("transOutput").textContent; $("transOutput").textContent = t;
+  });
+  $("transBtn").addEventListener("click", () => {
+    const q = $("transInput").value.trim();
+    if (!q) { $("transOutput").textContent = "先输入要翻译的内容。"; return; }
+    if (typeof fetch !== "function") { $("transOutput").textContent = "当前环境不支持在线翻译。"; return; }
+    $("transOutput").textContent = "翻译中……";
+    const pair = $("transFrom").value + "|" + $("transTo").value;
+    fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(q) + "&langpair=" + encodeURIComponent(pair))
+      .then((r) => r.json())
+      .then((data) => {
+        const t = data && data.responseData && data.responseData.translatedText;
+        $("transOutput").textContent = t ? t : "没翻出来，换句话试试。";
+      })
+      .catch(() => { $("transOutput").textContent = "翻译服务暂时不可用，检查网络再试。"; });
+  });
+
+  /* ---------- 26. 指南针 ---------- */
+  let compassWatching = false;
+  $("compassN").textContent = "北";
+  $("compassE").textContent = "东";
+  $("compassS").textContent = "南";
+  $("compassW").textContent = "西";
+  function compassDir(deg) {
+    const dirs = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+    return dirs[Math.round(deg / 45) % 8];
+  }
+  function compassUpdate(deg) {
+    $("compassNeedle").style.transform = "rotate(" + deg + "deg)";
+    $("compassDeg").textContent = Math.round(deg) + "° · " + compassDir(deg);
+  }
+  function compassHandler(e) {
+    let deg = null;
+    if (typeof e.webkitCompassHeading === "number") deg = e.webkitCompassHeading;
+    else if (typeof e.alpha === "number") deg = (360 - e.alpha) % 360;
+    if (deg !== null) compassUpdate(deg);
+  }
+  $("compassBtn").addEventListener("click", () => {
+    if (compassWatching) {
+      window.removeEventListener("deviceorientation", compassHandler);
+      compassWatching = false;
+      $("compassBtn").textContent = "开启指南针 🧭";
+      $("compassResult").textContent = "已关闭。";
+      return;
+    }
+    if (typeof DeviceOrientationEvent === "undefined") {
+      $("compassResult").textContent = "当前设备没有方向传感器，在手机上打开试试。";
+      return;
+    }
+    const start = () => {
+      window.addEventListener("deviceorientation", compassHandler);
+      compassWatching = true;
+      $("compassBtn").textContent = "关闭指南针 ⏸";
+      $("compassResult").textContent = "把手机平放，慢慢转一圈校准。";
+    };
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission().then((state) => {
+        if (state === "granted") start();
+        else $("compassResult").textContent = "需要允许“动作与方向”权限才能用指南针。";
+      }).catch(() => { $("compassResult").textContent = "权限请求失败，在手机设置里打开试试。"; });
+    } else {
+      start();
+    }
+  });
+
+  /* ---------- 27. 噪音检测 ---------- */
+  let noiseCtx = null, noiseStream = null, noiseRaf = null, noiseRunning = false;
+  function noiseLevel(db) {
+    if (db < 30) return "很安静 🤫";
+    if (db < 50) return "正常说话声 🗣";
+    if (db < 70) return "有点吵 📢";
+    if (db < 90) return "很吵，注意听力 🙉";
+    return "非常吵，离远点！🚨";
+  }
+  function noiseRender(db) {
+    $("noiseDb").textContent = Math.round(db) + " dB";
+    $("noiseMeter").style.width = Math.min(100, Math.max(0, db)) + "%";
+    $("noiseLevel").textContent = noiseLevel(db);
+  }
+  function noiseStop() {
+    noiseRunning = false;
+    if (noiseRaf) { cancelAnimationFrame(noiseRaf); noiseRaf = null; }
+    if (noiseStream) { noiseStream.getTracks().forEach((t) => t.stop()); noiseStream = null; }
+    if (noiseCtx) { noiseCtx.close(); noiseCtx = null; }
+    $("noiseBtn").textContent = "开始检测 🎙";
+    $("noiseResult").textContent = "已停止。数值是估算，仅供参考。";
+  }
+  $("noiseBtn").addEventListener("click", () => {
+    if (noiseRunning) { noiseStop(); return; }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      $("noiseResult").textContent = "当前设备不支持录音，在手机上打开试试。";
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      noiseStream = stream;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      noiseCtx = new AC();
+      const src = noiseCtx.createMediaStreamSource(stream);
+      const analyser = noiseCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      noiseRunning = true;
+      $("noiseBtn").textContent = "停止检测 ⏹";
+      $("noiseResult").textContent = "正在检测……数值是估算，仅供参考。";
+      const tick = () => {
+        if (!noiseRunning) return;
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / buf.length);
+        const db = rms > 0 ? 20 * Math.log10(rms) + 90 : 0;
+        noiseRender(db);
+        noiseRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    }).catch(() => {
+      $("noiseResult").textContent = "需要允许麦克风权限才能测噪音。";
+    });
+  });
+  noiseRender(0);
+
+  /* ---------- 28. 奶蛙表情包（原画手绘风小青蛙，点一下下载 PNG） ---------- */
+  const FROG_MOODS = [
+    { id: "happy", name: "开心大笑", file: "奶蛙-开心.png" },
+    { id: "wronged", name: "委屈巴巴", file: "奶蛙-委屈.png" },
+    { id: "melon", name: "吃瓜看戏", file: "奶蛙-吃瓜.png" },
+    { id: "speechless", name: "无语翻白眼", file: "奶蛙-无语.png" },
+    { id: "cheer", name: "加油打气", file: "奶蛙-加油.png" },
+    { id: "night", name: "晚安好梦", file: "奶蛙-晚安.png" },
+    { id: "angry", name: "气鼓鼓", file: "奶蛙-生气.png" },
+    { id: "love", name: "比心", file: "奶蛙-比心.png" },
+  ];
+  function drawFrog(canvas, mood) {
+    try {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return false;
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2 + 8;
+      const green = "#7ed957", light = "#a8e88a", dark = "#3d8b2f";
+      ctx.clearRect(0, 0, W, H);
+      const circle = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+      circle(cx, cy, 62, green); // 身体
+      ctx.fillStyle = light; // 肚皮
+      ctx.beginPath(); ctx.ellipse(cx, cy + 26, 34, 24, 0, 0, Math.PI * 2); ctx.fill();
+      circle(cx - 34, cy - 56, 22, green); // 头顶眼包
+      circle(cx + 34, cy - 56, 22, green);
+      circle(cx - 42, cy + 18, 10, "rgba(255,120,140,0.55)"); // 腮红
+      circle(cx + 42, cy + 18, 10, "rgba(255,120,140,0.55)");
+      const eyeY = cy - 56;
+      ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = "round";
+      if (mood === "happy" || mood === "night") {
+        ctx.beginPath(); ctx.arc(cx - 34, eyeY, 12, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx + 34, eyeY, 12, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      } else {
+        circle(cx - 34, eyeY, 14, "#ffffff");
+        circle(cx + 34, eyeY, 14, "#ffffff");
+        let py = 0;
+        if (mood === "speechless") py = -5;
+        else if (mood === "wronged") py = 4;
+        circle(cx - 34, eyeY + py, 6, "#222222");
+        circle(cx + 34, eyeY + py, 6, "#222222");
+        if (mood === "angry") {
+          ctx.beginPath(); ctx.moveTo(cx - 48, eyeY - 18); ctx.lineTo(cx - 22, eyeY - 10); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx + 48, eyeY - 18); ctx.lineTo(cx + 22, eyeY - 10); ctx.stroke();
+        }
+      }
+      if (mood === "happy") {
+        ctx.fillStyle = "#c0392b";
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 20, 0, Math.PI); ctx.fill();
+      } else if (mood === "wronged") {
+        ctx.beginPath(); ctx.arc(cx, cy + 8, 10, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        circle(cx - 48, eyeY + 16, 4, "#7ab8ff");
+        circle(cx + 48, eyeY + 16, 4, "#7ab8ff");
+      } else if (mood === "speechless") {
+        ctx.beginPath(); ctx.moveTo(cx - 12, cy + 4); ctx.lineTo(cx + 12, cy + 4); ctx.stroke();
+      } else if (mood === "melon") {
+        ctx.fillStyle = "#c0392b";
+        ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI); ctx.fill();
+        ctx.fillStyle = "#2fae4e";
+        ctx.beginPath(); ctx.arc(cx + 40, cy + 42, 14, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = "#ff5c5c";
+        ctx.beginPath(); ctx.arc(cx + 40, cy + 42, 10, Math.PI, 0); ctx.fill();
+      } else if (mood === "cheer") {
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 14, 0, Math.PI); ctx.stroke();
+        circle(cx + 48, cy - 34, 8, "#ffd94d");
+      } else if (mood === "night") {
+        ctx.beginPath(); ctx.arc(cx, cy + 2, 8, 0, Math.PI); ctx.stroke();
+        ctx.fillStyle = "#7ab8ff";
+        ctx.font = "bold 20px sans-serif";
+        ctx.fillText("Z", cx + 42, cy - 30);
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("z", cx + 56, cy - 44);
+      } else if (mood === "angry") {
+        circle(cx - 44, cy + 22, 12, "rgba(255,120,140,0.7)");
+        circle(cx + 44, cy + 22, 12, "rgba(255,120,140,0.7)");
+        ctx.beginPath(); ctx.moveTo(cx - 10, cy + 6); ctx.lineTo(cx + 10, cy + 6); ctx.stroke();
+      } else if (mood === "love") {
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 14, 0, Math.PI); ctx.stroke();
+        ctx.fillStyle = "#ff5c8a";
+        ctx.beginPath();
+        ctx.moveTo(cx + 44, cy - 40);
+        ctx.bezierCurveTo(cx + 30, cy - 54, cx + 22, cy - 40, cx + 44, cy - 24);
+        ctx.bezierCurveTo(cx + 66, cy - 40, cx + 58, cy - 54, cx + 44, cy - 40);
+        ctx.fill();
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+  const frogGrid = $("frogGrid");
+  FROG_MOODS.forEach((mood) => {
+    const card = document.createElement("div");
+    card.className = "frog-card";
+    const cv = document.createElement("canvas");
+    cv.width = 200; cv.height = 200;
+    cv.setAttribute("data-mood", mood.id);
+    card.appendChild(cv);
+    const label = document.createElement("p");
+    label.className = "frog-name";
+    label.textContent = mood.name;
+    card.appendChild(label);
+    const btn = document.createElement("button");
+    btn.className = "btn small gold-btn";
+    btn.textContent = "下载 ⬇";
+    btn.addEventListener("click", () => {
+      if (typeof cv.toDataURL !== "function") { $("frogResult").textContent = "当前环境不支持下载。"; return; }
+      const a = document.createElement("a");
+      a.href = cv.toDataURL("image/png");
+      a.download = mood.file;
+      a.click();
+      $("frogResult").textContent = "已下载「" + mood.name + "」。";
+    });
+    card.appendChild(btn);
+    frogGrid.appendChild(card);
+    drawFrog(cv, mood.id);
+  });
+
   renderTimer();
 })();

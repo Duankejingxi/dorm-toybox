@@ -320,3 +320,30 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .beads-legend { margin-top: 12px; }
 .beads-legend-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); }
 .beads-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .3); flex-shrink: 0; }
+
+/* v1.7：亲戚计算器 + 汇率 + 翻译 + 指南针 + 噪音检测 + 奶蛙表情包 */
+.kin-chain { font-size: 20px; font-weight: 800; line-height: 1.6; margin: 12px 0; }
+.kin-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.fx-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.fx-row input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 15px; }
+.fx-row select { padding: 10px 6px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 14px; max-width: 110px; }
+.fx-arrow { font-weight: 800; color: var(--gold); }
+#transInput { width: 100%; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin-top: 12px; resize: vertical; }
+.trans-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.trans-row select { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 15px; }
+.trans-output { margin-top: 12px; padding: 12px; border-radius: 12px; background: rgba(245, 197, 66, .08); border: 1px solid var(--line); line-height: 1.6; min-height: 48px; }
+.compass-dial { position: relative; width: 240px; height: 240px; border-radius: 50%; border: 2px solid var(--gold); margin: 14px auto; background: rgba(0, 0, 0, .3); }
+.compass-label { position: absolute; font-size: 20px; font-weight: 800; color: var(--ink); }
+.compass-label.north { top: 8px; left: 50%; transform: translateX(-50%); color: var(--gold); }
+.compass-label.south { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.compass-label.east { right: 12px; top: 50%; transform: translateY(-50%); }
+.compass-label.west { left: 12px; top: 50%; transform: translateY(-50%); }
+.compass-needle { position: absolute; inset: 0; display: flex; justify-content: center; padding-top: 26px; font-size: 30px; color: #ff5c5c; transition: transform .2s ease; }
+.compass-center { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); transform: translate(-50%, -50%); }
+.noise-db { font-size: 52px; font-weight: 900; color: var(--gold); text-align: center; margin: 12px 0 4px; }
+.noise-meter-wrap { height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; margin-top: 10px; }
+.noise-meter { height: 100%; width: 0; background: linear-gradient(90deg, #7dff9b, #ffd94d, #ff5c5c); transition: width .15s ease; }
+.frog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+.frog-card { border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; background: rgba(255, 255, 255, .03); }
+.frog-card canvas { width: 100%; height: auto; display: block; }
+.frog-name { font-weight: 800; margin: 6px 0 8px; }

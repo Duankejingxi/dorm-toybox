@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">二十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">二十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -370,10 +370,88 @@
     <p class="result-line" id="beadsResult">主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。</p>
     <button class="btn gold-btn" id="beadsExportBtn">导出图纸图片 ⬇</button>
   </section>
+
+  <!-- 亲戚计算器 -->
+  <section class="panel toy hidden" id="toy-kin">
+    <h2>👨‍👩‍👧 亲戚计算器</h2>
+    <p class="hint">过年走亲戚再也不怕叫错人。点关系，一层一层加上去，最多算 4 层。</p>
+    <p class="kin-chain" id="kinChain">我</p>
+    <p class="result-line" id="kinResult">点下面的关系，算算他该叫什么。</p>
+    <div class="kin-btns" id="kinButtons"></div>
+    <p class="count-line">快捷示例：</p>
+    <div class="kin-btns" id="kinPresets"></div>
+    <button class="btn ghost-btn small" id="kinClearBtn">清除重来 ↺</button>
+  </section>
+
+  <!-- 汇率计算器 -->
+  <section class="panel toy hidden" id="toy-fx">
+    <h2>💱 汇率计算器</h2>
+    <p class="hint">出国玩、海淘算账用。联网时每天自动更新一次汇率，存你手机里；离线就用备用汇率。</p>
+    <div class="fx-row">
+      <input id="fxAmount" type="number" placeholder="金额" aria-label="金额" min="0" step="0.01" value="100">
+      <select id="fxFrom" aria-label="从这种货币"></select>
+      <span class="fx-arrow">→</span>
+      <select id="fxTo" aria-label="换成这种货币"></select>
+    </div>
+    <p class="result-line" id="fxResult">先填个金额。</p>
+    <p class="count-line" id="fxMeta"></p>
+    <button class="btn ghost-btn small" id="fxSwapBtn">互换 ⇄</button>
+    <button class="btn ghost-btn small" id="fxRefreshBtn">刷新汇率 ↻</button>
+  </section>
+
+  <!-- 中英日韩翻译器 -->
+  <section class="panel toy hidden" id="toy-trans">
+    <h2>🌐 中英日韩翻译</h2>
+    <p class="hint">中文、英语、日语、韩语互翻。用免费翻译接口，联网才能用，翻译结果仅供参考。</p>
+    <textarea id="transInput" rows="3" placeholder="输入要翻译的内容，比如：你好，今天天气不错" aria-label="要翻译的内容"></textarea>
+    <div class="trans-row">
+      <select id="transFrom" aria-label="源语言"></select>
+      <button class="btn ghost-btn small" id="transSwapBtn">⇄</button>
+      <select id="transTo" aria-label="目标语言"></select>
+    </div>
+    <button class="btn gold-btn" id="transBtn">翻译 ▶</button>
+    <p class="trans-output" id="transOutput">翻译结果会出现在这里。</p>
+  </section>
+
+  <!-- 指南针 -->
+  <section class="panel toy hidden" id="toy-compass">
+    <h2>🧭 指南针</h2>
+    <p class="hint">手机自带方向传感器才能用，电脑上没有。打开后把手机平放，慢慢转一圈校准。</p>
+    <div class="compass-dial" id="compassDial">
+      <span class="compass-label north" id="compassN">北</span>
+      <span class="compass-label east" id="compassE">东</span>
+      <span class="compass-label south" id="compassS">南</span>
+      <span class="compass-label west" id="compassW">西</span>
+      <div class="compass-needle" id="compassNeedle">▲</div>
+      <div class="compass-center"></div>
+    </div>
+    <p class="result-line" id="compassDeg">--°</p>
+    <p class="result-line" id="compassResult">还没开启。</p>
+    <button class="btn gold-btn" id="compassBtn">开启指南针 🧭</button>
+  </section>
+
+  <!-- 噪音检测 -->
+  <section class="panel toy hidden" id="toy-noise">
+    <h2>🔊 噪音检测</h2>
+    <p class="hint">测测宿舍现在多少分贝。声音只在你手机里算，不上传。数值是估算，仅供参考。</p>
+    <p class="noise-db" id="noiseDb">0 dB</p>
+    <div class="noise-meter-wrap"><div class="noise-meter" id="noiseMeter"></div></div>
+    <p class="result-line" id="noiseLevel">还没开始。</p>
+    <p class="result-line" id="noiseResult">点开始，允许麦克风权限就能测。</p>
+    <button class="btn gold-btn" id="noiseBtn">开始检测 🎙</button>
+  </section>
+
+  <!-- 奶蛙表情包 -->
+  <section class="panel toy hidden" id="toy-frog">
+    <h2>🐸 奶蛙表情包</h2>
+    <p class="hint">最近很火的奶呼呼小青蛙，8 张原画表情，点一下就能下载 PNG，发群里用。图是现画的，不是网上搬的。</p>
+    <div class="frog-grid" id="frogGrid"></div>
+    <p class="result-line" id="frogResult">喜欢哪张就下载哪张。</p>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.6 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.7 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

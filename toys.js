@@ -5,48 +5,61 @@
   const $ = (id) => document.getElementById(id);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-  /* ---------- 玩具切换：首页 8 个常玩的，其余进左上角侧边栏 ---------- */
-  const nav = $("toyNav");
-  const drawerNav = $("drawerNav");
-  TOYS.forEach((t) => {
-    const btn = document.createElement("button");
-    btn.className = "pill" + (t.id === "wheel" ? " active" : "");
-    btn.textContent = t.label;
-    btn.setAttribute("data-toy", t.id);
-    btn.addEventListener("click", () => { showToy(t.id); closeDrawer(); });
-    if (FEATURED_IDS.includes(t.id)) nav.appendChild(btn);
-    else drawerNav.appendChild(btn);
-  });
-  function allPills() {
-    return [...nav.querySelectorAll(".pill"), ...drawerNav.querySelectorAll(".pill")];
+  /* ---------- 主页：全部玩具都是正方形大方块，一行两个，点进玩法 ---------- */
+  const homeGrid = $("homeGrid");
+  function splitLabel(label) {
+    const i = label.indexOf(" ");
+    return i >= 0 ? { emoji: label.slice(0, i), name: label.slice(i + 1) } : { emoji: "🧸", name: label };
   }
-  let currentToy = "wheel";
+  TOYS.forEach((t) => {
+    const parts = splitLabel(t.label);
+    const btn = document.createElement("button");
+    btn.className = "tile";
+    btn.setAttribute("data-toy", t.id);
+    const em = document.createElement("span");
+    em.className = "tile-emoji";
+    em.textContent = parts.emoji;
+    const nm = document.createElement("span");
+    nm.className = "tile-name";
+    nm.textContent = parts.name;
+    btn.appendChild(em);
+    btn.appendChild(nm);
+    btn.addEventListener("click", () => showToy(t.id));
+    homeGrid.appendChild(btn);
+  });
+  function allTiles() {
+    return [...homeGrid.querySelectorAll(".tile")];
+  }
+  let currentToy = null;
+  function showHome() {
+    currentToy = null;
+    document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
+    $("backBar").classList.add("hidden");
+    $("heroHeader").classList.remove("hidden");
+    if (window.location.hash) {
+      try { window.history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) { /* 忽略 */ }
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   function showToy(id) {
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-" + id).classList.remove("hidden");
-    allPills().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
+    $("backBar").classList.remove("hidden");
+    $("heroHeader").classList.add("hidden");
     currentToy = id;
     if (window.location.hash !== "#" + id) window.location.hash = id;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function openDrawer() {
-    $("sideDrawer").classList.add("open");
-    $("drawerOverlay").classList.remove("hidden");
-  }
-  function closeDrawer() {
-    $("sideDrawer").classList.remove("open");
-    $("drawerOverlay").classList.add("hidden");
-  }
-  $("menuBtn").addEventListener("click", openDrawer);
-  $("drawerCloseBtn").addEventListener("click", closeDrawer);
-  $("drawerOverlay").addEventListener("click", closeDrawer);
+  $("backBtn").addEventListener("click", showHome);
   window.addEventListener("hashchange", () => {
     const id = window.location.hash.slice(1);
+    if (!id) { showHome(); return; }
     if (TOYS.some((t) => t.id === id) && id !== currentToy) showToy(id);
   });
-  // 深链：打开 #guess 就直接进猜数字，分享给宿舍不用再教怎么点
-  showToy(TOYS.some((t) => t.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "wheel");
+  // 深链：打开 #guess 就直接进猜数字，分享给宿舍不用再教怎么点；没 hash 就停在主页
+  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
+  else showHome();
 
   /* ---------- 1. 命运大转盘 ---------- */
   const WHEEL_COLORS = ["#f5c542", "#7b5cff", "#ff9d00", "#3ec6a7", "#ff7a6b", "#7ab8ff", "#e58cff", "#8bc34a"];
@@ -833,7 +846,7 @@
   $("typingNextBtn").addEventListener("click", typingNewSentence);
   typingNewSentence();
 
-  /* ---------- 13. 滑块拼图 ---------- */
+  /* ---------- 13. 华容道 ---------- */
   const PUZZLE_BEST_KEY = "dorm-toybox-puzzle-best-v1";
   const PUZZLE_SOLVED = [1, 2, 3, 4, 5, 6, 7, 8, 0];
   let puzzleTiles = PUZZLE_SOLVED.slice();
@@ -1024,10 +1037,10 @@
   slotsResultEl("b").textContent = "等你拉。";
   renderSlotsStats();
 
-  /* ---------- 玩具搜索（小优化：玩具多了，搜名字直达） ---------- */
+  /* ---------- 玩具搜索：搜名字，直达方块 ---------- */
   $("toySearch").addEventListener("input", () => {
     const q = $("toySearch").value.trim();
-    allPills().forEach((b) => {
+    allTiles().forEach((b) => {
       b.classList.toggle("hidden", q !== "" && !b.textContent.includes(q));
     });
   });
@@ -1388,69 +1401,30 @@
     $("ledResult").textContent = ledRunning ? "滚动中，举起手机给大家看。" : "已暂停。";
   });
 
-  /* 全屏展示：弹幕要占满整个屏幕、字够大，远处才看得清 */
+  /* 全屏展示：横屏全黑背景，双击屏幕退出；进全屏前规则已经写在玩法介绍了 */
   function ledSyncFull() {
     $("ledFullText").textContent = $("ledText").textContent;
     $("ledFullText").style.color = $("ledText").style.color || LED_COLORS[0];
     $("ledFullText").style.animationDuration = ledDuration;
   }
-  $("ledFullBtn").addEventListener("click", () => {
+  function ledOpenFull() {
     ledSyncFull();
     $("ledOverlay").classList.remove("hidden");
     $("ledFullText").classList.add("scrolling");
-  });
-  $("ledOverlay").addEventListener("click", () => {
+    try {
+      const p = screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape");
+      if (p && p.catch) p.catch(() => { /* 不支持自动转横屏，用户手动横过来也一样 */ });
+    } catch (e) { /* 忽略 */ }
+  }
+  function ledCloseFull() {
     $("ledOverlay").classList.add("hidden");
     $("ledFullText").classList.remove("scrolling");
-  });
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* 忽略 */ }
+  }
+  $("ledFullBtn").addEventListener("click", ledOpenFull);
+  $("ledOverlay").addEventListener("dblclick", ledCloseFull);
 
-  /* ---------- 19. MBTI 性格测试（娱乐版） ---------- */
-  let mbtiIdx = 0;
-  let mbtiAnswers = [];
-  function renderMbtiQuestion() {
-    const q = MBTI_QUESTIONS[mbtiIdx];
-    $("mbtiProgress").textContent = "第 " + (mbtiIdx + 1) + "/12 题";
-    $("mbtiQuestion").textContent = q.q;
-    $("mbtiOptA").textContent = "A. " + q.a;
-    $("mbtiOptB").textContent = "B. " + q.b;
-  }
-  function mbtiShowResult() {
-    const dims = [["E", "I"], ["S", "N"], ["T", "F"], ["J", "P"]];
-    let type = "";
-    const breakdown = [];
-    dims.forEach(([a, b]) => {
-      const ca = mbtiAnswers.filter((x) => x === a).length;
-      const cb = mbtiAnswers.filter((x) => x === b).length;
-      type += ca >= cb ? a : b;
-      breakdown.push(a + " " + ca + " : " + cb + " " + b);
-    });
-    const info = MBTI_TYPES[type];
-    $("mbtiType").textContent = type;
-    $("mbtiText").textContent = info ? info.text : "";
-    $("mbtiScores").textContent = breakdown.join(" · ");
-    $("mbtiQuestionBox").classList.add("hidden");
-    $("mbtiResult").classList.remove("hidden");
-  }
-  function mbtiAnswer(choice) {
-    const q = MBTI_QUESTIONS[mbtiIdx];
-    mbtiAnswers.push(choice === "A" ? q.dim[0] : q.dim[1]);
-    mbtiIdx++;
-    if (mbtiIdx >= MBTI_QUESTIONS.length) { mbtiShowResult(); return; }
-    renderMbtiQuestion();
-  }
-  function mbtiReset() {
-    mbtiIdx = 0;
-    mbtiAnswers = [];
-    $("mbtiQuestionBox").classList.remove("hidden");
-    $("mbtiResult").classList.add("hidden");
-    renderMbtiQuestion();
-  }
-  $("mbtiOptA").addEventListener("click", () => mbtiAnswer("A"));
-  $("mbtiOptB").addEventListener("click", () => mbtiAnswer("B"));
-  $("mbtiRestartBtn").addEventListener("click", mbtiReset);
-  renderMbtiQuestion();
-
-  /* ---------- 20. 人生小格 ---------- */
+  /* ---------- 19. 人生小格 ---------- */
   const LIFE_TOTAL_MONTHS = 80 * 12;
   function lifeRender() {
     const y = parseInt($("lifeYear").value, 10);

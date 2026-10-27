@@ -4,36 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、自拍补光灯、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、自拍补光灯、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="glitter" aria-hidden="true"></div>
 
-<header class="hero">
+<header class="hero" id="heroHeader">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">三十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
-  <div class="nav-top">
-    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
-  </div>
+  <p class="subtitle">三十一个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
-  <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
+  <div class="home-grid" id="homeGrid" aria-label="全部玩具"></div>
 </header>
 
-<div class="drawer-overlay hidden" id="drawerOverlay"></div>
-<aside class="drawer" id="sideDrawer" aria-label="全部玩具">
-  <div class="drawer-head">
-    <span>全部玩具</span>
-    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
-  </div>
-  <nav class="drawer-list" id="drawerNav" aria-label="更多玩具"></nav>
-</aside>
-
-<div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">点一下退出全屏</p></div>
+<div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">双击屏幕退出</p></div>
 
 <main class="wrap">
+  <div class="back-bar hidden" id="backBar"><button class="btn ghost-btn" id="backBtn">← 返回全部玩具</button></div>
   <!-- 命运大转盘 -->
   <section class="panel toy" id="toy-wheel">
     <h2>🎡 命运大转盘</h2>
@@ -209,9 +198,9 @@
     <button class="btn ghost-btn small" id="typingNextBtn">换一句 ↻</button>
   </section>
 
-  <!-- 滑块拼图 -->
+  <!-- 华容道 -->
   <section class="panel toy hidden" id="toy-puzzle">
-    <h2>🧩 滑块拼图</h2>
+    <h2>🧩 华容道</h2>
     <p class="hint">点数字滑进空格，把 1–8 按顺序排好。步数越少越牛，宿舍纪录等你破。</p>
     <div class="puzzle-grid" id="puzzleGrid"></div>
     <p class="result-line" id="puzzleResult">点一块滑进空格。</p>
@@ -300,7 +289,7 @@
   <!-- 手持弹幕 -->
   <section class="panel toy hidden" id="toy-led">
     <h2>💡 手持弹幕</h2>
-    <p class="hint">接机、演唱会、表白、接人——字打上去，举起手机，全场都看得见。颜色和速度都能调。</p>
+    <p class="hint">接机、演唱会、表白、接人——字打上去，举起手机，全场都看得见。颜色和速度都能调。点「全屏展示」后是横屏全黑背景，双击屏幕退出（手机会自动转横屏，不支持的请手动横过来）。</p>
     <input id="ledInput" type="text" value="我在这里！" placeholder="输入要滚动的字" aria-label="弹幕文字" maxlength="20">
     <div class="led-colors" id="ledColors"></div>
     <div class="led-speeds" id="ledSpeeds"></div>
@@ -308,24 +297,6 @@
     <p class="result-line" id="ledResult">点开始，字就滚起来了。</p>
     <button class="btn gold-btn" id="ledStartBtn">开始滚动 ▶</button>
     <button class="btn ghost-btn" id="ledFullBtn">全屏展示 ⛶</button>
-  </section>
-
-  <!-- MBTI 性格测试 -->
-  <section class="panel toy hidden" id="toy-mbti">
-    <h2>🧠 MBTI 性格测试</h2>
-    <p class="hint">12 道题，选第一反应，不用想太多。娱乐版，别当真——结果仅供宿舍夜聊。</p>
-    <div id="mbtiQuestionBox">
-      <p class="count-line" id="mbtiProgress">第 1/12 题</p>
-      <p class="mbti-question" id="mbtiQuestion"></p>
-      <button class="btn gold-btn mbti-opt" id="mbtiOptA"></button>
-      <button class="btn ghost-btn mbti-opt" id="mbtiOptB"></button>
-    </div>
-    <div id="mbtiResult" class="hidden">
-      <p class="mbti-type" id="mbtiType"></p>
-      <p class="result-line" id="mbtiText"></p>
-      <p class="count-line" id="mbtiScores"></p>
-      <button class="btn gold-btn small" id="mbtiRestartBtn">再测一次 ↺</button>
-    </div>
   </section>
 
   <!-- 人生小格 -->
@@ -519,7 +490,7 @@
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.9 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.10 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

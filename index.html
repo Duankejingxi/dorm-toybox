@@ -4,25 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、自拍补光灯、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、数字炸弹、记忆翻牌、打字测试、华容道、老虎机、数独、舒尔特方格、记分牌、手持弹幕、人生小格、极简记账、拼豆图纸生成、亲戚计算器、汇率计算器、中英日韩翻译、指南针、噪音检测、奶蛙表情包、计时器、BMI 体重管理、白噪音。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="glitter" aria-hidden="true"></div>
 
-<header class="hero" id="heroHeader">
+<header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">三十一个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">三十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <div class="nav-top">
+    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
+  </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
-  <div class="home-grid" id="homeGrid" aria-label="全部玩具"></div>
 </header>
+
+<div class="drawer-overlay hidden" id="drawerOverlay"></div>
+<aside class="drawer" id="sideDrawer" aria-label="全部玩具">
+  <div class="drawer-head">
+    <span>全部玩具</span>
+    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
+  </div>
+  <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
+</aside>
 
 <div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">双击屏幕退出</p></div>
 
 <main class="wrap">
-  <div class="back-bar hidden" id="backBar"><button class="btn ghost-btn" id="backBtn">← 返回全部玩具</button></div>
   <!-- 命运大转盘 -->
   <section class="panel toy" id="toy-wheel">
     <h2>🎡 命运大转盘</h2>
@@ -102,7 +112,8 @@
   <!-- 番茄钟 -->
   <section class="panel toy hidden" id="toy-timer">
     <h2>🍅 番茄钟</h2>
-    <p class="hint">25 分钟只干一件事：写作业、背单词、改 PPT。时间到了就起来活动一下，别硬撑。</p>
+    <p class="hint">选个时长，只干一件事：写作业、背单词、改 PPT。时间到了就起来活动一下，别硬撑。</p>
+    <div class="timer-durations" id="timerDurations"></div>
     <div class="timer-stage" id="timerDisplay">25:00</div>
     <p class="result-line" id="timerStatus">还没开始。先想好这 25 分钟要干什么。</p>
     <div class="btn-row">
@@ -161,10 +172,10 @@
     <button class="btn ghost-btn small hidden" id="rpsResetBtn">再来一场 ↺</button>
   </section>
 
-  <!-- 猜数字 -->
+  <!-- 数字炸弹 -->
   <section class="panel toy hidden" id="toy-guess">
-    <h2>🔢 猜数字</h2>
-    <p class="hint">我想了一个 1–100 的数，猜猜是哪个。猜的次数越少越牛，宿舍纪录等你破。</p>
+    <h2>💣 数字炸弹</h2>
+    <p class="hint">1–100 里藏了个数字炸弹，猜中它就拆掉了。猜的次数越少越牛，宿舍纪录等你破。</p>
     <div class="guess-row">
       <input id="guessInput" type="number" min="1" max="100" placeholder="输入 1–100" aria-label="猜的数字">
       <button class="btn gold-btn" id="guessBtn">猜！</button>
@@ -435,7 +446,7 @@
   <!-- 奶蛙表情包 -->
   <section class="panel toy hidden" id="toy-frog">
     <h2>🐸 奶蛙表情包</h2>
-    <p class="hint">网上火的奶蛙，奶龙家族同款奶呼呼画风：胖身子、奶白大肚皮、小短手小短脚。8 张原画表情，点一下就能下载 PNG，发群里用。图是现画的，不是网上搬的。</p>
+    <p class="hint">8 张真表情包：网上找的奶蛙贴纸裁出来的，有大笑脸、有带字的，点一下就能下载 PNG，发群里用。</p>
     <div class="frog-grid" id="frogGrid"></div>
     <p class="result-line" id="frogResult">喜欢哪张就下载哪张。</p>
   </section>
@@ -466,18 +477,6 @@
     <p class="count-line" id="bmiAdvice"></p>
   </section>
 
-  <!-- 自拍补光灯 -->
-  <section class="panel toy hidden" id="toy-light">
-    <h2>💡 自拍补光灯</h2>
-    <p class="hint">光线不好自拍显黑？把屏幕当补光灯，选个色温，亮度拉满，怼脸自拍。</p>
-    <div class="light-panel" id="lightPanel"></div>
-    <div class="led-colors" id="lightColors"></div>
-    <label class="light-slider-label">亮度
-      <input id="lightSlider" type="range" min="30" max="100" value="100" aria-label="亮度">
-    </label>
-    <p class="result-line" id="lightResult">白色光，亮度 100%。</p>
-  </section>
-
   <!-- 白噪音 -->
   <section class="panel toy hidden" id="toy-whitenoise">
     <h2>🌧 白噪音</h2>
@@ -492,11 +491,12 @@
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.11 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.12 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 
 <script src="data.js"></script>
+<script src="frog-data.js"></script>
 <script src="toys.js"></script>
 </body>
 </html>

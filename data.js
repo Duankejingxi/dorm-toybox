@@ -14,7 +14,7 @@ const TOYS = [
   { id: "groups", label: "👥 随机分组" },
   { id: "reaction", label: "⚡ 反应测试" },
   { id: "rps", label: "✊ 石头剪刀布" },
-  { id: "guess", label: "🔢 猜数字" },
+  { id: "guess", label: "💣 数字炸弹" },
   { id: "memory", label: "🃏 记忆翻牌" },
   { id: "typing", label: "⌨️ 打字测试" },
   { id: "puzzle", label: "🧩 华容道" },
@@ -34,7 +34,6 @@ const TOYS = [
   { id: "frog", label: "🐸 奶蛙表情包" },
   { id: "stopwatch", label: "⏱ 计时器" },
   { id: "bmi", label: "⚖️ BMI 体重管理" },
-  { id: "light", label: "💡 自拍补光灯" },
   { id: "whitenoise", label: "🌧 白噪音" },
 ];
 

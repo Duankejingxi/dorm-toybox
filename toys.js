@@ -5,13 +5,14 @@
   const $ = (id) => document.getElementById(id);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-  /* ---------- 主页：全部玩具都是正方形大方块，一行两个，点进玩法 ---------- */
-  const homeGrid = $("homeGrid");
+  /* ---------- 侧边栏：置顶 7 个在最前面，其余按顺序，一行两个方块 ---------- */
+  const PINNED_IDS = ["wheel", "dice", "reaction", "guess", "score", "beads", "frog"];
+  const drawerNav = $("drawerNav");
   function splitLabel(label) {
     const i = label.indexOf(" ");
     return i >= 0 ? { emoji: label.slice(0, i), name: label.slice(i + 1) } : { emoji: "🧸", name: label };
   }
-  TOYS.forEach((t) => {
+  function makeTile(t) {
     const parts = splitLabel(t.label);
     const btn = document.createElement("button");
     btn.className = "tile";
@@ -24,42 +25,59 @@
     nm.textContent = parts.name;
     btn.appendChild(em);
     btn.appendChild(nm);
-    btn.addEventListener("click", () => showToy(t.id));
-    homeGrid.appendChild(btn);
-  });
+    btn.addEventListener("click", () => { showToy(t.id); closeDrawer(); });
+    return btn;
+  }
+  function drawerLabel(text) {
+    const p = document.createElement("p");
+    p.className = "drawer-label";
+    p.textContent = text;
+    return p;
+  }
+  drawerNav.appendChild(drawerLabel("📌 置顶"));
+  TOYS.filter((t) => PINNED_IDS.includes(t.id)).forEach((t) => drawerNav.appendChild(makeTile(t)));
+  drawerNav.appendChild(drawerLabel("全部玩具"));
+  TOYS.filter((t) => !PINNED_IDS.includes(t.id)).forEach((t) => drawerNav.appendChild(makeTile(t)));
   function allTiles() {
-    return [...homeGrid.querySelectorAll(".tile")];
+    return [...drawerNav.querySelectorAll(".tile")];
+  }
+  /* 退出玩具时收尾：声音、麦克风、待定超时都要停，回来时显示类计时器再续上 */
+  const toyLeaveCleanup = {};
+  const toyEnterResume = {};
+  function leaveToy(id) {
+    if (id && toyLeaveCleanup[id]) toyLeaveCleanup[id]();
+    // 手持弹幕全屏是独立浮层，切玩具时一定关掉
+    if (typeof ledCloseFull === "function") ledCloseFull();
   }
   let currentToy = null;
-  function showHome() {
-    currentToy = null;
-    document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
-    $("backBar").classList.add("hidden");
-    $("heroHeader").classList.remove("hidden");
-    if (window.location.hash) {
-      try { window.history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) { /* 忽略 */ }
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
   function showToy(id) {
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
+    if (currentToy && currentToy !== id) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-" + id).classList.remove("hidden");
-    $("backBar").classList.remove("hidden");
-    $("heroHeader").classList.add("hidden");
+    allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
     currentToy = id;
+    if (toyEnterResume[id]) toyEnterResume[id]();
     if (window.location.hash !== "#" + id) window.location.hash = id;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  $("backBtn").addEventListener("click", showHome);
+  function openDrawer() {
+    $("sideDrawer").classList.add("open");
+    $("drawerOverlay").classList.remove("hidden");
+  }
+  function closeDrawer() {
+    $("sideDrawer").classList.remove("open");
+    $("drawerOverlay").classList.add("hidden");
+  }
+  $("menuBtn").addEventListener("click", openDrawer);
+  $("drawerCloseBtn").addEventListener("click", closeDrawer);
+  $("drawerOverlay").addEventListener("click", closeDrawer);
   window.addEventListener("hashchange", () => {
     const id = window.location.hash.slice(1);
-    if (!id) { showHome(); return; }
     if (TOYS.some((t) => t.id === id) && id !== currentToy) showToy(id);
   });
-  // 深链：打开 #guess 就直接进猜数字，分享给宿舍不用再教怎么点；没 hash 就停在主页
-  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
-  else showHome();
+  // 深链：打开 #guess 就直接进数字炸弹，分享给宿舍不用再教怎么点；没 hash 就进转盘
+  showToy(TOYS.some((t) => t.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "wheel");
 
   /* ---------- 1. 命运大转盘 ---------- */
   const WHEEL_COLORS = ["#f5c542", "#7b5cff", "#ff9d00", "#3ec6a7", "#ff7a6b", "#7ab8ff", "#e58cff", "#8bc34a"];
@@ -338,9 +356,9 @@
   renderPickLeft();
 
   /* ---------- 6. 番茄钟 ---------- */
-  const FOCUS_SECONDS = 25 * 60;
+  let focusSeconds = 25 * 60;
   const TOMATO_KEY = "dorm-toybox-tomatoes-v1";
-  let remaining = FOCUS_SECONDS;
+  let remaining = focusSeconds;
   let timerId = null;
   let tomatoesToday = 0;
   try {
@@ -362,6 +380,25 @@
   function saveTomatoes() {
     localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday }));
   }
+  // 时长可改：15 / 25 / 45 / 60 分钟，改了就重置
+  [15, 25, 45, 60].forEach((m) => {
+    const b = document.createElement("button");
+    b.className = "btn small " + (m === 25 ? "gold-btn" : "ghost-btn");
+    b.textContent = m + " 分钟";
+    b.setAttribute("data-minutes", String(m));
+    b.addEventListener("click", () => {
+      if (timerId) { clearInterval(timerId); timerId = null; }
+      focusSeconds = m * 60;
+      remaining = focusSeconds;
+      $("timerStartBtn").textContent = "开始专注 ▶";
+      $("timerStatus").textContent = "已改成 " + m + " 分钟。先想好这段时间要干什么。";
+      $("timerDurations").querySelectorAll("button").forEach((x) => {
+        x.className = "btn small " + (x === b ? "gold-btn" : "ghost-btn");
+      });
+      renderTimer();
+    });
+    $("timerDurations").appendChild(b);
+  });
   $("timerStartBtn").addEventListener("click", () => {
     if (timerId) {
       clearInterval(timerId);
@@ -370,7 +407,7 @@
       $("timerStatus").textContent = "暂停中。歇一会没关系，回来继续。";
       return;
     }
-    if (remaining === 0) remaining = FOCUS_SECONDS;
+    if (remaining === 0) remaining = focusSeconds;
     $("timerStartBtn").textContent = "暂停 ⏸";
     $("timerStatus").textContent = "专注中……手机翻过去，这 25 分钟只干一件事。";
     timerId = setInterval(() => {
@@ -389,7 +426,7 @@
   });
   $("timerResetBtn").addEventListener("click", () => {
     if (timerId) { clearInterval(timerId); timerId = null; }
-    remaining = FOCUS_SECONDS;
+    remaining = focusSeconds;
     $("timerStartBtn").textContent = "开始专注 ▶";
     $("timerStatus").textContent = "已重置。先想好这 25 分钟要干什么。";
     renderTimer();
@@ -544,6 +581,15 @@
   });
   renderReaction();
 
+  // 退出就停：等绿的超时清掉，回到初始状态，不然回来时已经是绿的、成绩还乱算
+  toyLeaveCleanup.reaction = () => {
+    if (reactionTimerId) { clearTimeout(reactionTimerId); reactionTimerId = null; }
+    if (reactionState !== "idle") {
+      reactionState = "idle";
+      setReactionStage("点我开始", "变绿就点，别抢跑", "");
+    }
+  };
+
   /* ---------- 9. 石头剪刀布 ---------- */
   const RPS_KEY = "dorm-toybox-rps-v1";
   const RPS_HANDS = { rock: "✊ 石头", scissors: "✌️ 剪刀", paper: "✋ 布" };
@@ -589,7 +635,7 @@
   });
   renderRpsScore();
 
-  /* ---------- 10. 猜数字 ---------- */
+  /* ---------- 10. 数字炸弹 ---------- */
   const GUESS_BEST_KEY = "dorm-toybox-guess-best-v1";
   let guessTarget = 1 + Math.floor(Math.random() * 100);
   let guessTries = [];
@@ -623,7 +669,7 @@
     renderGuessChips();
     if (n === guessTarget) {
       const tries = guessTries.length;
-      let msg = "🎉 猜中了！就是 " + guessTarget + "，用了 " + tries + " 次。";
+      let msg = "💣 拆弹成功！就是 " + guessTarget + "，用了 " + tries + " 次。";
       if (guessBest === 0 || tries < guessBest) {
         guessBest = tries;
         try { localStorage.setItem(GUESS_BEST_KEY, String(tries)); } catch (e) { /* 忽略 */ }
@@ -752,6 +798,10 @@
   $("memoryResetBtn").addEventListener("click", buildMemoryDeck);
   buildMemoryDeck();
 
+  // 退出就停：翻牌计时只刷显示，回来再续上（用时按时间戳算，不会丢）
+  toyLeaveCleanup.memory = () => { if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; } };
+  toyEnterResume.memory = () => { if (memoryStartAt && memoryMatched < MEMORY_EMOJIS.length && !memoryTimerId) memoryTimerId = setInterval(renderMemoryStats, 500); };
+
   /* ---------- 12. 打字测试 ---------- */
   const TYPING_BEST_KEY = "dorm-toybox-typing-best-v1";
   let typingTarget = "";
@@ -845,6 +895,10 @@
   });
   $("typingNextBtn").addEventListener("click", typingNewSentence);
   typingNewSentence();
+
+  // 退出就停：打字计时只刷显示，回来再续上（用时按时间戳算，不会丢）
+  toyLeaveCleanup.typing = () => { if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; } };
+  toyEnterResume.typing = () => { if (typingStartAt && !typingDone && !typingTimerId) typingTimerId = setInterval(typingTick, 200); };
 
   /* ---------- 13. 华容道 ---------- */
   const PUZZLE_BEST_KEY = "dorm-toybox-puzzle-best-v1";
@@ -1010,6 +1064,12 @@
         clearInterval(timer);
         const final = [];
         for (let i = 0; i < 9; i++) final.push(pick(SLOTS_SYMBOLS));
+        // 中奖率：近一半的局保底中一条线，不然十把九空太无聊
+        if (Math.random() < 0.45) {
+          const line = pick(SLOTS_LINES);
+          const sym = pick(SLOTS_SYMBOLS);
+          line.forEach((i) => { final[i] = sym; });
+        }
         renderSlotsReels(who, final);
         slotsSpinning = false;
         const { points, lines } = slotsScoreLines(final);
@@ -1037,12 +1097,13 @@
   slotsResultEl("b").textContent = "等你拉。";
   renderSlotsStats();
 
-  /* ---------- 玩具搜索：搜名字，直达方块 ---------- */
+  /* ---------- 玩具搜索：搜名字，抽屉自动打开露出结果 ---------- */
   $("toySearch").addEventListener("input", () => {
     const q = $("toySearch").value.trim();
     allTiles().forEach((b) => {
       b.classList.toggle("hidden", q !== "" && !b.textContent.includes(q));
     });
+    if (q !== "") openDrawer();
   });
 
   /* ---------- 15. 数独 ---------- */
@@ -1231,6 +1292,9 @@
   sudokuNewGame();
 
   /* ---------- 16. 舒尔特方格 ---------- */
+  // 退出就停：舒尔特计时只刷显示，回来再续上（用时按时间戳算，不会丢）
+  toyLeaveCleanup.sudoku = () => { if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; } };
+  toyEnterResume.sudoku = () => { if (sudokuStartAt && !sudokuWon && !sudokuTimerId) sudokuTimerId = setInterval(renderSudokuStats, 1000); };
   const SCHULTE_BEST_KEY = "dorm-toybox-schulte-best-v1";
   let schulteNext = 1;
   let schulteStartAt = 0;
@@ -1302,6 +1366,10 @@
   }
   $("schulteResetBtn").addEventListener("click", schulteNewGame);
   schulteNewGame();
+
+  // 退出就停：舒尔特计时只刷显示，回来再续上（用时按时间戳算，不会丢）
+  toyLeaveCleanup.schulte = () => { if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; } };
+  toyEnterResume.schulte = () => { if (schulteStartAt && !schulteDone && !schulteTimerId) schulteTimerId = setInterval(renderSchulteStats, 100); };
 
   /* ---------- 17. 记分牌 ---------- */
   const SCORE_KEY = "dorm-toybox-score-v1";
@@ -1834,6 +1902,15 @@
   });
 
   /* ---------- 27. 噪音检测 ---------- */
+  // 退出就关传感器，不然一直在后台耗电
+  toyLeaveCleanup.compass = () => {
+    if (compassWatching) {
+      window.removeEventListener("deviceorientation", compassHandler);
+      compassWatching = false;
+      $("compassBtn").textContent = "开启指南针 🧭";
+      $("compassResult").textContent = "已关闭。";
+    }
+  };
   let noiseCtx = null, noiseStream = null, noiseRaf = null, noiseRunning = false;
   function noiseLevel(db) {
     if (db < 30) return "很安静 🤫";
@@ -1890,137 +1967,29 @@
   });
   noiseRender(0);
 
-  /* ---------- 28. 奶蛙表情包（原画手绘风小青蛙，点一下下载 PNG） ---------- */
+  // 退出就关麦克风：不然退出后还在录音
+  toyLeaveCleanup.noise = () => { if (noiseRunning) noiseStop(); };
+
+  /* ---------- 28. 奶蛙表情包（网上找的真贴纸裁出来的，点一下下载 PNG） ---------- */
   const FROG_MOODS = [
-    { id: "happy", name: "开心大笑", file: "奶蛙-开心.png" },
-    { id: "wronged", name: "委屈巴巴", file: "奶蛙-委屈.png" },
-    { id: "melon", name: "吃瓜看戏", file: "奶蛙-吃瓜.png" },
-    { id: "speechless", name: "无语翻白眼", file: "奶蛙-无语.png" },
-    { id: "cheer", name: "加油打气", file: "奶蛙-加油.png" },
-    { id: "night", name: "晚安好梦", file: "奶蛙-晚安.png" },
-    { id: "angry", name: "气鼓鼓", file: "奶蛙-生气.png" },
-    { id: "love", name: "比心", file: "奶蛙-比心.png" },
+    { id: "happy", name: "开心大笑", file: "奶蛙-开心大笑.jpg", src: FROG_IMAGES["frog-01"] },
+    { id: "wronged", name: "委屈巴巴", file: "奶蛙-委屈巴巴.png", src: FROG_IMAGES["frog-02"] },
+    { id: "melon", name: "吃瓜追剧", file: "奶蛙-吃瓜追剧.png", src: FROG_IMAGES["frog-03"] },
+    { id: "speechless", name: "一脸无语", file: "奶蛙-一脸无语.png", src: FROG_IMAGES["frog-04"] },
+    { id: "cheer", name: "加油打气", file: "奶蛙-加油打气.png", src: FROG_IMAGES["frog-05"] },
+    { id: "night", name: "晚安睡觉", file: "奶蛙-晚安睡觉.png", src: FROG_IMAGES["frog-06"] },
+    { id: "angry", name: "生气鼓腮", file: "奶蛙-生气鼓腮.png", src: FROG_IMAGES["frog-07"] },
+    { id: "daze", name: "发呆", file: "奶蛙-发呆.jpg", src: FROG_IMAGES["frog-08"] },
   ];
-  function drawFrog(canvas, mood) {
-    try {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return false;
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2;
-      const green = "#8bd07f", greenDark = "#6fbf68", cream = "#f2f9e8", dark = "#2f6b33";
-      ctx.clearRect(0, 0, W, H);
-      const circle = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
-      const ellipse = (x, y, rx, ry, color, rot) => { ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); ctx.fill(); };
-      // 小短手（加油时举起来）
-      if (mood === "cheer") {
-        ellipse(cx - 52, 78, 10, 18, green, -0.5);
-        ellipse(cx + 52, 78, 10, 18, green, 0.5);
-      } else {
-        ellipse(cx - 58, 128, 9, 16, green, 0.25);
-        ellipse(cx + 58, 128, 9, 16, green, -0.25);
-      }
-      // 小短脚
-      ellipse(cx - 26, 172, 15, 8, greenDark);
-      ellipse(cx + 26, 172, 15, 8, greenDark);
-      // 胖身子（头身一体）+ 头顶两个小鼓包
-      circle(cx - 26, 62, 16, green);
-      circle(cx + 26, 62, 16, green);
-      ellipse(cx, 118, 62, 56, green);
-      // 奶白大肚皮
-      ellipse(cx, 140, 38, 30, cream);
-      // 腮红
-      ellipse(cx - 44, 116, 9, 5, "rgba(255,120,140,0.55)");
-      ellipse(cx + 44, 116, 9, 5, "rgba(255,120,140,0.55)");
-      // 眼睛
-      const eyeY = 96;
-      ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = "round";
-      const eyeX = [cx - 26, cx + 26];
-      if (mood === "happy" || mood === "night") {
-        eyeX.forEach((x) => { ctx.beginPath(); ctx.arc(x, eyeY, 11, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); });
-      } else if (mood === "love") {
-        ctx.fillStyle = "#ff5c8a";
-        eyeX.forEach((x) => {
-          ctx.beginPath();
-          ctx.moveTo(x, eyeY + 8);
-          ctx.bezierCurveTo(x - 11, eyeY - 4, x - 6, eyeY - 12, x, eyeY - 5);
-          ctx.bezierCurveTo(x + 6, eyeY - 12, x + 11, eyeY - 4, x, eyeY + 8);
-          ctx.fill();
-        });
-      } else {
-        eyeX.forEach((x, i) => {
-          circle(x, eyeY, 13, "#ffffff");
-          let px = x, py = eyeY;
-          if (mood === "speechless") py = eyeY - 6;
-          else if (mood === "wronged") py = eyeY + 4;
-          else if (mood === "melon") px = x + (i === 0 ? 4 : -4);
-          circle(px, py, 6.5, "#1e6b34");
-          circle(px - 2, py - 2, 3, "#222222");
-          circle(px - 3, py - 3, 2, "#ffffff");
-          if (mood === "angry") {
-            ctx.beginPath(); ctx.moveTo(x - 13, eyeY - 17); ctx.lineTo(x + 11, eyeY - 10); ctx.stroke();
-          }
-        });
-      }
-      // 嘴
-      const mouthY = 122;
-      if (mood === "happy") {
-        ctx.fillStyle = "#c0392b";
-        ctx.beginPath(); ctx.arc(cx, mouthY - 4, 18, 0, Math.PI); ctx.fill();
-        ctx.fillStyle = "#ff8a80";
-        ctx.beginPath(); ctx.arc(cx, mouthY + 2, 9, 0, Math.PI); ctx.fill();
-      } else if (mood === "wronged") {
-        ctx.beginPath(); ctx.arc(cx, mouthY + 8, 9, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-        circle(cx - 40, eyeY + 18, 4, "#7ab8ff");
-        circle(cx + 40, eyeY + 18, 4, "#7ab8ff");
-      } else if (mood === "speechless") {
-        ctx.beginPath(); ctx.moveTo(cx - 12, mouthY); ctx.lineTo(cx + 12, mouthY); ctx.stroke();
-      } else if (mood === "melon") {
-        ctx.fillStyle = "#c0392b";
-        ctx.beginPath(); ctx.arc(cx, mouthY, 14, 0, Math.PI); ctx.fill();
-        // 肚皮前捧一块西瓜
-        ctx.fillStyle = "#2fae4e";
-        ctx.beginPath(); ctx.arc(cx, 158, 20, Math.PI, 0); ctx.fill();
-        ctx.fillStyle = "#ff5c5c";
-        ctx.beginPath(); ctx.arc(cx, 158, 15, Math.PI, 0); ctx.fill();
-        circle(cx - 6, 152, 1.5, "#222222");
-        circle(cx + 5, 150, 1.5, "#222222");
-      } else if (mood === "cheer") {
-        ctx.beginPath(); ctx.arc(cx, mouthY - 2, 13, 0, Math.PI); ctx.stroke();
-        circle(cx + 46, mouthY - 34, 7, "#ffd94d");
-      } else if (mood === "night") {
-        ctx.beginPath(); ctx.arc(cx, mouthY + 2, 7, 0, Math.PI); ctx.stroke();
-        ctx.fillStyle = "#7ab8ff";
-        ctx.font = "bold 20px sans-serif";
-        ctx.fillText("Z", cx + 42, mouthY - 26);
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("z", cx + 56, mouthY - 40);
-        ctx.fillStyle = "#5b8def";
-        ctx.beginPath(); ctx.moveTo(cx - 20, 62); ctx.lineTo(cx + 8, 34); ctx.lineTo(cx + 30, 58); ctx.closePath(); ctx.fill();
-        circle(cx + 8, 34, 6, "#ffffff");
-      } else if (mood === "angry") {
-        ellipse(cx - 44, 122, 12, 8, "rgba(255,120,140,0.7)");
-        ellipse(cx + 44, 122, 12, 8, "rgba(255,120,140,0.7)");
-        ctx.beginPath(); ctx.moveTo(cx - 9, mouthY + 2); ctx.lineTo(cx + 9, mouthY + 2); ctx.stroke();
-      } else if (mood === "love") {
-        ctx.beginPath(); ctx.arc(cx, mouthY - 2, 13, 0, Math.PI); ctx.stroke();
-        ctx.fillStyle = "#ff5c8a";
-        ctx.beginPath();
-        ctx.moveTo(cx, 152);
-        ctx.bezierCurveTo(cx - 18, 136, cx - 10, 124, cx, 132);
-        ctx.bezierCurveTo(cx + 10, 124, cx + 18, 136, cx, 152);
-        ctx.fill();
-      }
-      return true;
-    } catch (e) { return false; }
-  }
   const frogGrid = $("frogGrid");
   FROG_MOODS.forEach((mood) => {
     const card = document.createElement("div");
     card.className = "frog-card";
-    const cv = document.createElement("canvas");
-    cv.width = 200; cv.height = 200;
-    cv.setAttribute("data-mood", mood.id);
-    card.appendChild(cv);
+    const img = document.createElement("img");
+    img.src = mood.src;
+    img.alt = mood.name;
+    img.setAttribute("data-mood", mood.id);
+    card.appendChild(img);
     const label = document.createElement("p");
     label.className = "frog-name";
     label.textContent = mood.name;
@@ -2029,16 +1998,14 @@
     btn.className = "btn small gold-btn";
     btn.textContent = "下载 ⬇";
     btn.addEventListener("click", () => {
-      if (typeof cv.toDataURL !== "function") { $("frogResult").textContent = "当前环境不支持下载。"; return; }
       const a = document.createElement("a");
-      a.href = cv.toDataURL("image/png");
+      a.href = mood.src;
       a.download = mood.file;
       a.click();
       $("frogResult").textContent = "已下载「" + mood.name + "」。";
     });
     card.appendChild(btn);
     frogGrid.appendChild(card);
-    drawFrog(cv, mood.id);
   });
 
   /* ---------- 29. 计时器（秒表） ---------- */
@@ -2081,6 +2048,10 @@
   });
   swRender();
 
+  // 退出就停：秒表只刷显示，回来再续上（用时按时间戳算，不会丢）
+  toyLeaveCleanup.stopwatch = () => { if (swTimerId) { clearInterval(swTimerId); swTimerId = null; } };
+  toyEnterResume.stopwatch = () => { if (swRunning && !swTimerId) swTimerId = setInterval(swRender, 100); };
+
   /* ---------- 30. BMI 体重管理 ---------- */
   $("bmiCalcBtn").addEventListener("click", () => {
     const h = parseFloat($("bmiHeight").value);
@@ -2102,37 +2073,7 @@
     $("bmiAdvice").textContent = "你这个身高的健康体重是 " + low + "–" + high + " 公斤。" + advice;
   });
 
-  /* ---------- 31. 自拍补光灯 ---------- */
-  const LIGHT_COLORS = [
-    { name: "白色光", hex: "#ffffff" },
-    { name: "暖光", hex: "#ffe0b2" },
-    { name: "冷光", hex: "#d6e9ff" },
-    { name: "粉光", hex: "#ffd6e8" },
-  ];
-  let lightColor = LIGHT_COLORS[0];
-  function lightRender() {
-    const bright = parseInt($("lightSlider").value, 10) || 100;
-    $("lightPanel").style.background = lightColor.hex;
-    $("lightPanel").style.filter = "brightness(" + bright / 100 + ")";
-    $("lightResult").textContent = lightColor.name + "，亮度 " + bright + "%。";
-  }
-  LIGHT_COLORS.forEach((c, i) => {
-    const b = document.createElement("button");
-    b.className = "led-color" + (i === 0 ? " active" : "");
-    b.style.background = c.hex;
-    b.setAttribute("aria-label", "补光灯颜色 " + c.name);
-    b.addEventListener("click", () => {
-      lightColor = c;
-      $("lightColors").querySelectorAll(".led-color").forEach((x) => x.classList.remove("active"));
-      b.classList.add("active");
-      lightRender();
-    });
-    $("lightColors").appendChild(b);
-  });
-  $("lightSlider").addEventListener("input", lightRender);
-  lightRender();
-
-  /* ---------- 32. 白噪音 ---------- */
+  /* ---------- 31. 白噪音 ---------- */
   const WN_SOUNDS = [
     { id: "rain", name: "🌧 雨声", freq: 1200, q: 0.5, gain: 0.5 },
     { id: "white", name: "📻 白噪音", freq: 8000, q: 0.2, gain: 0.35 },
@@ -2194,6 +2135,9 @@
     if (wnNodes) wnNodes.gain.gain.value = (parseInt($("wnVolume").value, 10) / 100 || 0) * 0.5;
   });
   $("wnStopBtn").addEventListener("click", () => wnStopAll(false));
+
+  // 退出就停：不然退出后还在放（就是这次报的 bug）
+  toyLeaveCleanup.whitenoise = () => { if (wnCurrent) wnStopAll(false); };
 
   renderTimer();
 })();

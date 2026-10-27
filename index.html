@@ -344,7 +344,7 @@
   <!-- 拼豆图纸生成 -->
   <section class="panel toy hidden" id="toy-beads">
     <h2>🧵 拼豆图纸生成</h2>
-    <p class="hint">传一张图，自动转成拼豆图纸：每格一个色号，照着拼就行。格数越大越清楚：人脸、合照选 48 或 64 格；主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。图只在你手机里处理，不上传。</p>
+    <p class="hint">传一张图，自动转成拼豆图纸：每种颜色一个字母符号，写在豆子中间，颜色再像也能分清。点图例里的颜色，只亮这一种，照着拼；点一颗豆子，告诉你它是哪种色、第几行第几列。颜色太多就减到 12 色以内再拼。格数越大越清楚：人脸、合照选 48 或 64 格；主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。图只在你手机里处理，不上传。</p>
     <label class="beads-upload">
       <input id="beadsFile" type="file" accept="image/*">
       <span class="btn gold-btn">选一张图 📷</span>
@@ -357,6 +357,13 @@
         <option value="48" selected>48 格 · 约 24cm，清楚</option>
         <option value="64">64 格 · 约 32cm，最清楚</option>
       </select>
+      <select id="beadsMaxColors" aria-label="最多用几种颜色">
+        <option value="0">全部颜色</option>
+        <option value="24">最多 24 色</option>
+        <option value="16">最多 16 色</option>
+        <option value="12" selected>最多 12 色 · 好拼</option>
+        <option value="8">最多 8 色 · 最简单</option>
+      </select>
       <button class="btn ghost-btn small" id="beadsSampleBtn">先看示例 ❤️</button>
     </div>
     <div class="beads-controls">
@@ -366,6 +373,7 @@
     </div>
     <div class="beads-grid" id="beadsGrid"></div>
     <p class="result-line" id="beadsStats">还没生成图纸。</p>
+    <button class="btn ghost-btn small hidden" id="beadsShowAllBtn">显示全部颜色</button>
     <div class="beads-legend" id="beadsLegend"></div>
     <p class="result-line" id="beadsResult">主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。</p>
     <button class="btn gold-btn" id="beadsExportBtn">导出图纸图片 ⬇</button>
@@ -491,7 +499,7 @@
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.13 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.14 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

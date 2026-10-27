@@ -1572,61 +1572,135 @@
   renderLedger();
 
   /* ---------- 22. 拼豆图纸生成 ---------- */
+  // 每种颜色一个符号，写在豆子中间的白孔里：颜色再像，符号也不会认错（I、O 容易和 1、0 搞混，跳过）
+  const BEAD_SYMBOLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "2", "3", "4", "5", "6", "7", "8", "9", "●", "▲", "■", "◆", "★", "✚"];
   let beadsCols = 0, beadsRows = 0, beadsCells = [];
   let beadsCellPx = 22;
+  let beadsFocusN = null; // 正在单独拼的色号，null = 全部显示
+  let beadsLastPixels = null, beadsLastCols = 0, beadsLastRows = 0;
+  let beadsSymbols = {}; // 色号 -> 符号
+  let beadsLegendItems = []; // { n, el }
   function beadRingBg(hex) {
     // 孔是白色的（像穿在白色拼板上），不是透出黑底：颜色才看得清
     return "radial-gradient(circle, #ffffff 0 30%, " + hex + " 31% 100%)";
   }
+  function beadDist(hex1, hex2) {
+    const r1 = parseInt(hex1.slice(1, 3), 16), g1 = parseInt(hex1.slice(3, 5), 16), b1 = parseInt(hex1.slice(5, 7), 16);
+    const r2 = parseInt(hex2.slice(1, 3), 16), g2 = parseInt(hex2.slice(3, 5), 16), b2 = parseInt(hex2.slice(5, 7), 16);
+    return (r1 - r2) * (r1 - r2) * 0.3 + (g1 - g2) * (g1 - g2) * 0.59 + (b1 - b2) * (b1 - b2) * 0.11;
+  }
   function beadsApplyCellSize() {
     const grid = $("beadsGrid");
     if (beadsCols > 0) grid.style.gridTemplateColumns = "repeat(" + beadsCols + ", " + beadsCellPx + "px)";
+    // 注意：children 是 HTMLCollection，没有 forEach，用下标循环
+    for (let i = 0; i < grid.children.length; i++) {
+      const s = grid.children[i].children[0];
+      if (s) s.style.fontSize = Math.round(beadsCellPx * 0.5) + "px";
+    }
     $("beadsZoomLabel").textContent = "每颗 " + beadsCellPx + "px，左右滑着看";
   }
+  function beadsApplyFocus() {
+    // 只亮正在拼的那种色，其他的变暗：再复杂的图，一次也只要找一种豆
+    const grid = $("beadsGrid");
+    for (let i = 0; i < grid.children.length; i++) {
+      grid.children[i].classList.toggle("dim", beadsFocusN !== null && beadsCells[i].n !== beadsFocusN);
+    }
+    beadsLegendItems.forEach(({ n, el }) => el.classList.toggle("active", beadsFocusN !== null && n === beadsFocusN));
+    $("beadsShowAllBtn").classList.toggle("hidden", beadsFocusN === null);
+  }
   function beadNearest(hex) {
-    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     let best = BEAD_COLORS[0], bestD = Infinity;
     BEAD_COLORS.forEach((c) => {
-      const cr = parseInt(c.hex.slice(1, 3), 16), cg = parseInt(c.hex.slice(3, 5), 16), cb = parseInt(c.hex.slice(5, 7), 16);
-      const d = (r - cr) * (r - cr) * 0.3 + (g - cg) * (g - cg) * 0.59 + (b - cb) * (b - cb) * 0.11;
+      const d = beadDist(hex, c.hex);
       if (d < bestD) { bestD = d; best = c; }
     });
     return best;
   }
   function beadsRender(pixels, cols, rows) {
     beadsCols = cols; beadsRows = rows;
+    beadsLastPixels = pixels; beadsLastCols = cols; beadsLastRows = rows;
     beadsCells = pixels.map((hex) => beadNearest(hex));
-    const grid = $("beadsGrid");
-    grid.innerHTML = "";
-    beadsApplyCellSize();
+    // 颜色太多就合并：留用得最多的 N 种，少的并进最近的保留色（默认 12 色，复杂图也拼得动）
+    const maxColors = parseInt($("beadsMaxColors").value, 10) || 0;
+    if (maxColors > 0) {
+      const counts = {};
+      beadsCells.forEach((b) => { counts[b.n] = (counts[b.n] || 0) + 1; });
+      const ranked = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+      if (ranked.length > maxColors) {
+        const keep = ranked.slice(0, maxColors).map((n) => beadsCells.find((b) => b.n === n));
+        const remap = {};
+        ranked.slice(maxColors).forEach((n) => {
+          const src = beadsCells.find((b) => b.n === n);
+          let best = keep[0], bestD = Infinity;
+          keep.forEach((k) => { const d = beadDist(src.hex, k.hex); if (d < bestD) { bestD = d; best = k; } });
+          remap[n] = best;
+        });
+        beadsCells = beadsCells.map((b) => remap[b.n] || b);
+      }
+    }
+    // 每种颜色一个符号，按用量从多到少排：A 给用得最多的色
     const counts = {};
     const order = [];
     beadsCells.forEach((bead) => {
       if (!counts[bead.n]) { counts[bead.n] = { bead, count: 0 }; order.push(bead.n); }
       counts[bead.n].count++;
+    });
+    const used = order.map((n) => counts[n]).sort((a, b) => b.count - a.count);
+    beadsSymbols = {};
+    used.forEach(({ bead }, i) => { beadsSymbols[bead.n] = BEAD_SYMBOLS[i] || ("#" + (i + 1)); });
+    const grid = $("beadsGrid");
+    grid.innerHTML = "";
+    beadsApplyCellSize();
+    beadsCells.forEach((bead, i) => {
       const cell = document.createElement("div");
       cell.className = "beads-cell";
       cell.style.background = beadRingBg(bead.hex);
-      cell.title = bead.n + " " + bead.name;
+      cell.title = beadsSymbols[bead.n] + " " + bead.n + " " + bead.name;
+      const sym = document.createElement("span");
+      sym.className = "beads-symbol";
+      sym.textContent = beadsSymbols[bead.n];
+      sym.style.fontSize = Math.round(beadsCellPx * 0.5) + "px";
+      cell.appendChild(sym);
+      cell.addEventListener("click", () => {
+        beadsFocusN = bead.n;
+        beadsApplyFocus();
+        const row = Math.floor(i / beadsCols) + 1, col = (i % beadsCols) + 1;
+        $("beadsResult").textContent = "第 " + row + " 行第 " + col + " 列 · " + beadsSymbols[bead.n] + " " + bead.n + " " + bead.name + "，这种色共 " + counts[bead.n].count + " 颗，其他颜色已变暗，拼完点「显示全部颜色」换下一个。";
+      });
       grid.appendChild(cell);
     });
     const legend = $("beadsLegend");
     legend.innerHTML = "";
-    const used = order.map((n) => counts[n]).sort((a, b) => b.count - a.count);
+    beadsLegendItems = [];
     used.forEach(({ bead, count }) => {
       const item = document.createElement("div");
       item.className = "beads-legend-item";
+      item.setAttribute("data-n", bead.n);
       const sw = document.createElement("span");
       sw.className = "beads-swatch";
       sw.style.background = beadRingBg(bead.hex);
+      const symTag = document.createElement("span");
+      symTag.className = "beads-symtag";
+      symTag.textContent = beadsSymbols[bead.n];
       const label = document.createElement("span");
       label.textContent = bead.n + " " + bead.name + " × " + count + " 颗";
       item.appendChild(sw);
+      item.appendChild(symTag);
       item.appendChild(label);
+      item.addEventListener("click", () => {
+        beadsFocusN = beadsFocusN === bead.n ? null : bead.n;
+        beadsApplyFocus();
+        $("beadsResult").textContent = beadsFocusN === null
+          ? "点图例里的颜色，只亮这一种，照着拼；点一颗豆子看它是哪种色、第几行第几列。"
+          : "正在拼：" + beadsSymbols[bead.n] + " " + bead.n + " " + bead.name + "，共 " + count + " 颗，其他颜色已变暗，拼完点「显示全部颜色」换下一个。";
+      });
       legend.appendChild(item);
+      beadsLegendItems.push({ n: bead.n, el: item });
     });
+    beadsFocusN = null;
+    beadsApplyFocus();
     $("beadsStats").textContent = "共 " + pixels.length + " 颗 · 用了 " + used.length + " 种颜色 · 按 Hama Midi 5mm 色号匹配";
-    $("beadsResult").textContent = "照着图纸拼就行，颜色按色号去买豆。";
+    $("beadsResult").textContent = "点图例里的颜色，只亮这一种，照着拼；点一颗豆子看它是哪种色、第几行第几列。";
   }
   function beadsFromImage(img) {
     try {
@@ -1684,6 +1758,15 @@
     BEADS_SAMPLE.forEach((row) => { for (const ch of row) pixels.push(charHex[ch] || "#E5ECF1"); });
     beadsRender(pixels, 16, 16);
   });
+  $("beadsMaxColors").addEventListener("change", () => {
+    // 换颜色数上限就按原图重算：少的色并进最近的保留色，图例和符号跟着变
+    if (beadsLastPixels) beadsRender(beadsLastPixels, beadsLastCols, beadsLastRows);
+  });
+  $("beadsShowAllBtn").addEventListener("click", () => {
+    beadsFocusN = null;
+    beadsApplyFocus();
+    $("beadsResult").textContent = "点图例里的颜色，只亮这一种，照着拼；点一颗豆子看它是哪种色、第几行第几列。";
+  });
   $("beadsZoomInBtn").addEventListener("click", () => {
     beadsCellPx = Math.min(40, beadsCellPx + 6);
     beadsApplyCellSize();
@@ -1695,17 +1778,24 @@
   $("beadsExportBtn").addEventListener("click", () => {
     if (!beadsCells.length) { $("beadsResult").textContent = "先传图或点示例，生成图纸再导出。"; return; }
     try {
-      const cell = 24;
+      const cell = 24, margin = 30;
       const canvas = document.createElement("canvas");
       if (typeof canvas.getContext !== "function" || typeof canvas.toDataURL !== "function") { $("beadsResult").textContent = "当前环境不支持导出。"; return; }
-      canvas.width = beadsCols * cell;
-      canvas.height = beadsRows * cell;
+      canvas.width = beadsCols * cell + margin;
+      canvas.height = beadsRows * cell + margin;
       const ctx = canvas.getContext("2d");
       if (!ctx) { $("beadsResult").textContent = "当前环境不支持导出。"; return; }
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // 行列号：每 5 格在图边上标一个，对着纸图也能找到第几行第几列
+      ctx.fillStyle = "#666666";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (let c = 0; c < beadsCols; c += 5) ctx.fillText(String(c + 1), margin + c * cell + cell / 2, margin / 2);
+      for (let r = 0; r < beadsRows; r += 5) ctx.fillText(String(r + 1), margin / 2, margin + r * cell + cell / 2);
       beadsCells.forEach((bead, i) => {
-        const x = (i % beadsCols) * cell, y = Math.floor(i / beadsCols) * cell;
+        const x = margin + (i % beadsCols) * cell, y = margin + Math.floor(i / beadsCols) * cell;
         const cx = x + cell / 2, cy = y + cell / 2, r = cell / 2 - 2;
         ctx.fillStyle = bead.hex;
         ctx.beginPath();
@@ -1715,6 +1805,10 @@
         ctx.beginPath();
         ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
         ctx.fill();
+        // 符号写在孔里：打印出来的图也能靠符号分色，不用只看颜色
+        ctx.fillStyle = "#333333";
+        ctx.font = "bold " + Math.round(cell * 0.45) + "px sans-serif";
+        ctx.fillText(beadsSymbols[bead.n], cx, cy + 1);
       });
       const a = document.createElement("a");
       a.href = canvas.toDataURL("image/png");

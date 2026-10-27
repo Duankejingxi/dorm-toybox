@@ -297,9 +297,14 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .beads-controls { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
 .beads-controls select { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 14px; }
 .beads-grid { display: grid; gap: 1px; margin-top: 12px; background: rgba(255, 255, 255, .08); padding: 2px; border-radius: 8px; }
-.beads-cell { aspect-ratio: 1; border-radius: 50%; }
+.beads-cell { aspect-ratio: 1; border-radius: 50%; position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.beads-cell.dim { opacity: .12; }
+.beads-symbol { color: #333; font-weight: 700; line-height: 1; pointer-events: none; }
 .beads-legend { margin-top: 12px; }
-.beads-legend-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.beads-legend-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); cursor: pointer; }
+.beads-legend-item.active { background: rgba(255, 215, 0, .15); border-radius: 8px; }
+.beads-symtag { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; background: rgba(255, 255, 255, .14); font-weight: 700; font-size: 13px; flex-shrink: 0; }
+#beadsShowAllBtn { margin-top: 10px; }
 .beads-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .3); flex-shrink: 0; }
 
 /* v1.7：亲戚计算器 + 汇率 + 翻译 + 指南针 + 噪音检测 + 奶蛙表情包 */

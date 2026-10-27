@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机、数独、舒尔特方格、记分牌、手持弹幕、MBTI 性格测试、人生小格、极简记账、拼豆图纸生成。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,10 +14,24 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">二十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <div class="nav-top">
+    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
+  </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
   <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
 </header>
+
+<div class="drawer-overlay hidden" id="drawerOverlay"></div>
+<aside class="drawer" id="sideDrawer" aria-label="全部玩具">
+  <div class="drawer-head">
+    <span>全部玩具</span>
+    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
+  </div>
+  <nav class="drawer-list" id="drawerNav" aria-label="更多玩具"></nav>
+</aside>
+
+<div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">点一下退出全屏</p></div>
 
 <main class="wrap">
   <!-- 命运大转盘 -->
@@ -209,11 +223,12 @@
   <!-- 老虎机 -->
   <section class="panel toy hidden" id="toy-slots">
     <h2>🎰 老虎机</h2>
-    <p class="hint">拉一下，三个图案转起来。三个一样就是大奖，两个一样也有小奖——纯属娱乐，不花钱。</p>
+    <p class="hint">三行九格，两个人轮流拉，每轮比谁分高。三条横线加两条斜线，一条线三个一样得 10 分，三个💎得 30 分。纯属娱乐，不花钱。</p>
     <div class="slots-reels" id="slotsReels"></div>
     <p class="result-line" id="slotsResult">拉一下试试手气。</p>
-    <p class="count-line" id="slotsStats">已拉 0 次 · 大奖 0 次</p>
+    <p class="count-line" id="slotsStats">玩家一 0 分 · 玩家二 0 分 · 第 1 轮</p>
     <button class="btn gold-btn" id="slotsSpinBtn">拉一下 🎰</button>
+    <button class="btn ghost-btn small" id="slotsResetBtn">重新开始 ↺</button>
   </section>
 
   <!-- 数独 -->
@@ -245,7 +260,7 @@
   <!-- 记分牌 -->
   <section class="panel toy hidden" id="toy-score">
     <h2>📋 记分牌</h2>
-    <p class="hint">宿舍对抗赛、桌游、羽毛球都用得上。队名能改，分数存在手机里，刷新也不丢。先到 21 分获胜。</p>
+    <p class="hint">宿舍对抗赛、桌游、羽毛球都用得上。队名能改，分数存在手机里，刷新也不丢。没有上限，最高 999 分。</p>
     <div class="score-board">
       <div class="score-team">
         <input id="scoreNameA" type="text" value="红队" aria-label="队伍一名字" maxlength="6">
@@ -267,7 +282,7 @@
         </div>
       </div>
     </div>
-    <p class="result-line" id="scoreResult">先到 21 分获胜。</p>
+    <p class="result-line" id="scoreResult">没有上限，最高 999 分。</p>
     <button class="btn ghost-btn small" id="scoreResetBtn">清零重开 ↺</button>
   </section>
 
@@ -281,11 +296,84 @@
     <div class="led-display" id="ledDisplay"><span id="ledText">我在这里！</span></div>
     <p class="result-line" id="ledResult">点开始，字就滚起来了。</p>
     <button class="btn gold-btn" id="ledStartBtn">开始滚动 ▶</button>
+    <button class="btn ghost-btn" id="ledFullBtn">全屏展示 ⛶</button>
+  </section>
+
+  <!-- MBTI 性格测试 -->
+  <section class="panel toy hidden" id="toy-mbti">
+    <h2>🧠 MBTI 性格测试</h2>
+    <p class="hint">12 道题，选第一反应，不用想太多。娱乐版，别当真——结果仅供宿舍夜聊。</p>
+    <div id="mbtiQuestionBox">
+      <p class="count-line" id="mbtiProgress">第 1/12 题</p>
+      <p class="mbti-question" id="mbtiQuestion"></p>
+      <button class="btn gold-btn mbti-opt" id="mbtiOptA"></button>
+      <button class="btn ghost-btn mbti-opt" id="mbtiOptB"></button>
+    </div>
+    <div id="mbtiResult" class="hidden">
+      <p class="mbti-type" id="mbtiType"></p>
+      <p class="result-line" id="mbtiText"></p>
+      <p class="count-line" id="mbtiScores"></p>
+      <button class="btn gold-btn small" id="mbtiRestartBtn">再测一次 ↺</button>
+    </div>
+  </section>
+
+  <!-- 人生小格 -->
+  <section class="panel toy hidden" id="toy-life">
+    <h2>⏳ 人生小格</h2>
+    <p class="hint">假设人活 80 岁，一个月一格。填出生年月，看看已经过了多少格，还剩多少格。</p>
+    <div class="life-inputs">
+      <input id="lifeYear" type="number" placeholder="出生年份，如 2005" aria-label="出生年份" min="1900" max="2100">
+      <input id="lifeMonth" type="number" placeholder="出生月份 1–12" aria-label="出生月份" min="1" max="12">
+      <button class="btn gold-btn small" id="lifeGenBtn">生成 ✓</button>
+    </div>
+    <div class="life-grid" id="lifeGrid"></div>
+    <p class="result-line" id="lifeStats">先填出生年月，比如 2005 年 9 月。</p>
+  </section>
+
+  <!-- 极简记账 -->
+  <section class="panel toy hidden" id="toy-ledger">
+    <h2>💰 极简记账</h2>
+    <p class="hint">花了多少、收了多少，随手记一笔。只存在你自己手机里，不上传。</p>
+    <div class="ledger-form">
+      <input id="ledgerAmount" type="number" placeholder="金额（元）" aria-label="金额" min="0" step="0.01">
+      <input id="ledgerNote" type="text" placeholder="备注，比如：奶茶" aria-label="备注" maxlength="20">
+    </div>
+    <div class="ledger-type">
+      <button class="btn small ghost-btn" id="ledgerInBtn">收入 ＋</button>
+      <button class="btn small gold-btn" id="ledgerOutBtn">支出 －</button>
+      <button class="btn gold-btn small" id="ledgerAddBtn">记一笔 ✎</button>
+    </div>
+    <p class="result-line" id="ledgerTotals">还没记过账。</p>
+    <ul class="ledger-list" id="ledgerList"></ul>
+    <button class="btn ghost-btn small" id="ledgerClearBtn">全部清空 🗑</button>
+  </section>
+
+  <!-- 拼豆图纸生成 -->
+  <section class="panel toy hidden" id="toy-beads">
+    <h2>🧵 拼豆图纸生成</h2>
+    <p class="hint">传一张图，自动转成拼豆图纸：每格一个色号，照着拼就行。按 Hama Midi 5mm 色号匹配（70 多种颜色），图只在你手机里处理，不上传。</p>
+    <label class="beads-upload">
+      <input id="beadsFile" type="file" accept="image/*">
+      <span class="btn gold-btn">选一张图 📷</span>
+    </label>
+    <div class="beads-controls">
+      <select id="beadsSize" aria-label="图纸格数">
+        <option value="20">20 格 · 小挂件约 10cm</option>
+        <option value="30" selected>30 格 · 约 15cm</option>
+        <option value="40">40 格 · 约 20cm</option>
+      </select>
+      <button class="btn ghost-btn small" id="beadsSampleBtn">先看示例 ❤️</button>
+    </div>
+    <div class="beads-grid" id="beadsGrid"></div>
+    <p class="result-line" id="beadsStats">还没生成图纸。</p>
+    <div class="beads-legend" id="beadsLegend"></div>
+    <p class="result-line" id="beadsResult">主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。</p>
+    <button class="btn gold-btn" id="beadsExportBtn">导出图纸图片 ⬇</button>
   </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.5 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.6 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

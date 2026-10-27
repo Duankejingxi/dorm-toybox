@@ -278,3 +278,45 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 #ledText.scrolling { animation: led-scroll 7s linear infinite; }
 @keyframes led-scroll { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
 #ledInput { width: 100%; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin-top: 12px; }
+
+/* v1.6：MBTI + 人生小格 + 极简记账 */
+.mbti-question { font-size: 19px; font-weight: 700; line-height: 1.6; margin: 12px 0; }
+.mbti-opt { display: block; width: 100%; margin-top: 10px; text-align: left; white-space: normal; height: auto; padding: 12px 14px; }
+.mbti-type { font-size: 44px; font-weight: 900; color: var(--gold); text-align: center; letter-spacing: .1em; margin: 12px 0 4px; }
+.life-inputs { display: flex; gap: 8px; margin-top: 12px; }
+.life-inputs input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 15px; }
+.life-grid { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; margin-top: 14px; }
+.life-cell { aspect-ratio: 1; border-radius: 2px; background: rgba(255, 255, 255, .08); }
+.life-cell.lived { background: var(--gold); }
+.ledger-form { display: flex; gap: 8px; margin-top: 12px; }
+.ledger-form input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 15px; }
+.ledger-type { display: flex; gap: 8px; margin-top: 10px; }
+.ledger-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.ledger-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.ledger-del { border: 1px solid var(--line); background: transparent; color: rgba(255, 255, 255, .6); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+
+/* v1.6：侧边栏 + 弹幕全屏 + 拼图滑块 + 老虎机九格 + 拼豆 */
+.nav-top { display: flex; justify-content: flex-start; margin-top: 10px; }
+.drawer-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 60; }
+.drawer-overlay.hidden { display: none; }
+.drawer { position: fixed; top: 0; left: 0; height: 100%; width: 272px; max-width: 82vw; background: #14102b; border-right: 1px solid var(--line); z-index: 70; transform: translateX(-105%); transition: transform .25s ease; padding: 16px; overflow-y: auto; }
+.drawer.open { transform: translateX(0); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+.drawer-list .pill { display: block; width: 100%; text-align: left; margin-top: 8px; }
+.led-overlay { position: fixed; inset: 0; background: #000; z-index: 80; display: flex; align-items: center; overflow: hidden; }
+.led-overlay.hidden { display: none; }
+#ledFullText { display: inline-block; white-space: nowrap; font-size: 22vw; font-weight: 900; }
+#ledFullText.scrolling { animation: led-scroll 7s linear infinite; }
+.led-overlay-hint { position: absolute; bottom: 24px; left: 0; width: 100%; text-align: center; color: rgba(255, 255, 255, .5); font-size: 14px; }
+.puzzle-grid { display: block; position: relative; aspect-ratio: 1; background: rgba(0, 0, 0, .25); }
+.puzzle-tile { position: absolute; width: 33.3333%; height: 33.3333%; box-sizing: border-box; transition: left .18s ease, top .18s ease; }
+.slots-reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 300px; margin: 12px auto 0; }
+.slots-reels span { font-size: 40px; text-align: center; padding: 8px 0; }
+.beads-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.beads-controls { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.beads-controls select { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font-size: 14px; }
+.beads-grid { display: grid; gap: 1px; margin-top: 12px; background: rgba(255, 255, 255, .08); padding: 2px; border-radius: 8px; }
+.beads-cell { aspect-ratio: 1; border-radius: 50%; }
+.beads-legend { margin-top: 12px; }
+.beads-legend-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.beads-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .3); flex-shrink: 0; }

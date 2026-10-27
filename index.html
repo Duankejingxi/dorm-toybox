@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>宿舍玩具盒 · 打开就能玩</title>
-<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试。纯前端，打开就能玩，不用下载，不用真实数据。">
+<meta name="description" content="宿舍玩具盒：命运大转盘、真心话大冒险、骰子硬币、今日运势、随机点名、番茄钟、随机分组、反应测试、石头剪刀布、猜数字、记忆翻牌、打字测试、滑块拼图、老虎机。纯前端，打开就能玩，不用下载，不用真实数据。">
 <meta name="theme-color" content="#0d0a1a">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">十四个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <nav class="toy-nav" id="toyNav" aria-label="玩具选择"></nav>
 </header>
 
@@ -193,10 +193,31 @@
     <p class="count-line" id="typingBest"></p>
     <button class="btn ghost-btn small" id="typingNextBtn">换一句 ↻</button>
   </section>
+
+  <!-- 滑块拼图 -->
+  <section class="panel toy hidden" id="toy-puzzle">
+    <h2>🧩 滑块拼图</h2>
+    <p class="hint">点数字滑进空格，把 1–8 按顺序排好。步数越少越牛，宿舍纪录等你破。</p>
+    <div class="puzzle-grid" id="puzzleGrid"></div>
+    <p class="result-line" id="puzzleResult">点一块滑进空格。</p>
+    <p class="count-line" id="puzzleStats">步数 0</p>
+    <p class="count-line" id="puzzleBest"></p>
+    <button class="btn gold-btn small" id="puzzleResetBtn">重新打乱 ↺</button>
+  </section>
+
+  <!-- 老虎机 -->
+  <section class="panel toy hidden" id="toy-slots">
+    <h2>🎰 老虎机</h2>
+    <p class="hint">拉一下，三个图案转起来。三个一样就是大奖，两个一样也有小奖——纯属娱乐，不花钱。</p>
+    <div class="slots-reels" id="slotsReels"></div>
+    <p class="result-line" id="slotsResult">拉一下试试手气。</p>
+    <p class="count-line" id="slotsStats">已拉 0 次 · 大奖 0 次</p>
+    <button class="btn gold-btn" id="slotsSpinBtn">拉一下 🎰</button>
+  </section>
 </main>
 
 <footer>
-  <p>宿舍玩具盒 v1.3.1 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.4 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

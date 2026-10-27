@@ -240,3 +240,10 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .typing-char.ok { color: #7dff9b; }
 .typing-char.bad { color: #ff8f8f; background: rgba(255, 122, 107, .15); border-radius: 4px; }
 #typingInput { width: 100%; padding: 12px; border-radius: 12px; font-size: 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin-top: 12px; }
+
+/* v1.4：滑块拼图 + 老虎机 */
+.puzzle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; max-width: 300px; margin-left: auto; margin-right: auto; }
+.puzzle-tile { aspect-ratio: 1; font-size: 30px; font-weight: 800; border-radius: 12px; cursor: pointer; border: 1px solid var(--line); background: rgba(245, 197, 66, .14); color: var(--ink); }
+.puzzle-tile.blank { background: transparent; border-color: transparent; cursor: default; }
+.slots-reels { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.slots-reels span { font-size: 44px; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }

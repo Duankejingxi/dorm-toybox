@@ -17,7 +17,11 @@ const TOYS = [
   { id: "guess", label: "🔢 猜数字" },
   { id: "memory", label: "🃏 记忆翻牌" },
   { id: "typing", label: "⌨️ 打字测试" },
+  { id: "puzzle", label: "🧩 滑块拼图" },
+  { id: "slots", label: "🎰 老虎机" },
 ];
+
+const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];
 
 const MEMORY_EMOJIS = ["🍜", "🎮", "📚", "⚽", "🎵", "🐱", "🚀", "🍕"];
 

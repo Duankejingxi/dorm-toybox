@@ -816,5 +816,143 @@
   $("typingNextBtn").addEventListener("click", typingNewSentence);
   typingNewSentence();
 
+  /* ---------- 13. 滑块拼图 ---------- */
+  const PUZZLE_BEST_KEY = "dorm-toybox-puzzle-best-v1";
+  const PUZZLE_SOLVED = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+  let puzzleTiles = PUZZLE_SOLVED.slice();
+  let puzzleMoves = 0;
+  let puzzleWon = false;
+  function loadPuzzleBest() {
+    try { return parseInt(localStorage.getItem(PUZZLE_BEST_KEY) || "0", 10) || 0; }
+    catch (e) { return 0; }
+  }
+  let puzzleBest = loadPuzzleBest();
+  function renderPuzzleBest() {
+    $("puzzleBest").textContent = puzzleBest > 0
+      ? "宿舍纪录：" + puzzleBest + " 步"
+      : "还没人通关。第一个通关的就是纪录。";
+  }
+  function puzzleBlankAt() { return puzzleTiles.indexOf(0); }
+  function puzzleAdjacent(i) {
+    const b = puzzleBlankAt();
+    const r1 = Math.floor(i / 3), c1 = i % 3, r2 = Math.floor(b / 3), c2 = b % 3;
+    return Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+  }
+  function renderPuzzle() {
+    const grid = $("puzzleGrid");
+    grid.innerHTML = "";
+    puzzleTiles.forEach((n, i) => {
+      const tile = document.createElement("button");
+      tile.className = "puzzle-tile" + (n === 0 ? " blank" : "");
+      tile.textContent = n === 0 ? "" : String(n);
+      tile.setAttribute("data-pos", String(i));
+      tile.addEventListener("click", () => puzzleMove(i));
+      grid.appendChild(tile);
+    });
+    $("puzzleStats").textContent = "步数 " + puzzleMoves;
+  }
+  function puzzleShuffle() {
+    puzzleTiles = PUZZLE_SOLVED.slice();
+    puzzleMoves = 0;
+    puzzleWon = false;
+    let prevBlank = -1;
+    for (let s = 0; s < 60; s++) {
+      const b = puzzleBlankAt();
+      const options = [b - 3, b + 3, b - 1, b + 1].filter((i) => {
+        if (i < 0 || i > 8) return false;
+        if (Math.floor(i / 3) !== Math.floor(b / 3) && Math.abs(i - b) === 1) return false; // 不越行
+        return i !== prevBlank;
+      });
+      const next = pick(options);
+      prevBlank = b;
+      puzzleTiles[b] = puzzleTiles[next];
+      puzzleTiles[next] = 0;
+    }
+    $("puzzleResult").textContent = "点一块滑进空格。";
+    renderPuzzle();
+    renderPuzzleBest();
+  }
+  function puzzleMove(i) {
+    if (puzzleWon || !puzzleAdjacent(i)) return;
+    const b = puzzleBlankAt();
+    puzzleTiles[b] = puzzleTiles[i];
+    puzzleTiles[i] = 0;
+    puzzleMoves++;
+    renderPuzzle();
+    if (puzzleTiles.join(",") === PUZZLE_SOLVED.join(",")) {
+      puzzleWon = true;
+      let msg = "🎉 通关！用了 " + puzzleMoves + " 步。";
+      if (puzzleBest === 0 || puzzleMoves < puzzleBest) {
+        puzzleBest = puzzleMoves;
+        try { localStorage.setItem(PUZZLE_BEST_KEY, String(puzzleMoves)); } catch (e) { /* 忽略 */ }
+        msg += "新纪录！";
+      }
+      $("puzzleResult").textContent = msg;
+      renderPuzzleBest();
+    }
+  }
+  $("puzzleResetBtn").addEventListener("click", puzzleShuffle);
+  puzzleShuffle();
+
+  /* ---------- 14. 老虎机 ---------- */
+  const SLOTS_KEY = "dorm-toybox-slots-v1";
+  let slotsSpinning = false;
+  function loadSlotsStats() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SLOTS_KEY) || "null");
+      return s && typeof s.spins === "number" ? s : { spins: 0, jackpots: 0 };
+    } catch (e) { return { spins: 0, jackpots: 0 }; }
+  }
+  let slotsStats = loadSlotsStats();
+  function renderSlotsStats() {
+    $("slotsStats").textContent = "已拉 " + slotsStats.spins + " 次 · 大奖 " + slotsStats.jackpots + " 次";
+  }
+  function saveSlotsStats() {
+    try { localStorage.setItem(SLOTS_KEY, JSON.stringify(slotsStats)); } catch (e) { /* 忽略 */ }
+  }
+  const reelsBox = $("slotsReels");
+  reelsBox.innerHTML = "";
+  for (let i = 0; i < 3; i++) {
+    const s = document.createElement("span");
+    s.textContent = "🍒";
+    reelsBox.appendChild(s);
+  }
+  function renderSlotsReels(symbols) {
+    const reels = $("slotsReels").children;
+    for (let i = 0; i < 3; i++) reels[i].textContent = symbols[i];
+  }
+  $("slotsSpinBtn").addEventListener("click", () => {
+    if (slotsSpinning) return;
+    slotsSpinning = true;
+    $("slotsSpinBtn").disabled = true;
+    $("slotsResult").textContent = "转着呢……";
+    let ticks = 0;
+    const timer = setInterval(() => {
+      renderSlotsReels([pick(SLOTS_SYMBOLS), pick(SLOTS_SYMBOLS), pick(SLOTS_SYMBOLS)]);
+      ticks++;
+      if (ticks >= 12) {
+        clearInterval(timer);
+        const final = [pick(SLOTS_SYMBOLS), pick(SLOTS_SYMBOLS), pick(SLOTS_SYMBOLS)];
+        renderSlotsReels(final);
+        slotsSpinning = false;
+        $("slotsSpinBtn").disabled = false;
+        slotsStats.spins++;
+        let msg;
+        if (final[0] === final[1] && final[1] === final[2]) {
+          slotsStats.jackpots++;
+          msg = "🎉 三个" + final[0] + "！大奖！全宿舍最有手气就是你。";
+        } else if (final[0] === final[1] || final[1] === final[2] || final[0] === final[2]) {
+          msg = "不错，两个一样，小奖！再拉一次冲大奖。";
+        } else {
+          msg = "差一点，再拉一次。";
+        }
+        $("slotsResult").textContent = msg;
+        renderSlotsStats();
+        saveSlotsStats();
+      }
+    }, 80);
+  });
+  renderSlotsStats();
+
   renderTimer();
 })();

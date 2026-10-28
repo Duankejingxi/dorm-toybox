@@ -59,6 +59,10 @@ const TOYS = [
   { id: "jump", label: "🐸 跳一跳" },
   { id: "spotdiff", label: "🔍 找不同" },
   { id: "catch", label: "🪙 接金币" },
+  { id: "idiom", label: "📖 成语接龙" },
+  { id: "drums", label: "🥁 节奏鼓机" },
+  { id: "stroop", label: "🎨 颜色急转弯" },
+  { id: "riddle", label: "🧩 脑筋急转弯" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

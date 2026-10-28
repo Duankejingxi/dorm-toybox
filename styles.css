@@ -535,3 +535,21 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .catch-stage { position: relative; height: 300px; max-width: 340px; margin: 14px auto 0; background: linear-gradient(180deg, #10101f, #1b1b3a); border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
 .catch-basket { position: absolute; bottom: 8px; left: 140px; font-size: 40px; line-height: 1; }
 .catch-item { position: absolute; font-size: 26px; line-height: 1; }
+
+/* v1.25：成语接龙 / 节奏鼓机 / 颜色急转弯 / 脑筋急转弯 */
+.idiom-current { font-size: 34px; font-weight: 800; color: var(--gold2); text-align: center; margin: 16px 0 4px; letter-spacing: 4px; }
+.idiom-options { display: flex; flex-direction: column; gap: 8px; max-width: 300px; margin: 14px auto 0; }
+.idiom-options .btn { width: 100%; font-size: 18px; letter-spacing: 3px; }
+.drums-grid { display: grid; grid-template-columns: 52px repeat(8, 1fr); gap: 5px; max-width: 340px; margin: 14px auto 0; align-items: center; }
+.drums-label { font-size: 20px; text-align: center; }
+.drums-cell { aspect-ratio: 1; border-radius: 6px; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); cursor: pointer; }
+.drums-cell.on { background: linear-gradient(180deg, var(--gold2), #e8a90c); border-color: var(--gold2); }
+.drums-cell.now { outline: 2px solid #7ec8ff; }
+.stroop-word { font-size: 64px; font-weight: 900; text-align: center; margin: 16px 0; }
+.stroop-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 300px; margin: 0 auto; }
+.stroop-options .btn { width: 100%; font-size: 18px; }
+.riddle-q { font-size: 19px; font-weight: 700; text-align: center; margin: 16px 8px; line-height: 1.5; min-height: 56px; }
+.riddle-options { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin: 0 auto; }
+.riddle-options .btn { width: 100%; font-size: 16px; }
+.riddle-options .btn.correct { background: linear-gradient(180deg, #4caf50, #2e7d32); color: #fff; }
+.riddle-options .btn.wrong { background: linear-gradient(180deg, #e57373, #c62828); color: #fff; }

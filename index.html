@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">五十四个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">五十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -886,8 +886,60 @@
     </div>
   </section>
 
+  <!-- 成语接龙 -->
+  <section class="panel toy hidden" id="toy-idiom">
+    <h2>📖 成语接龙</h2>
+    <p class="hint">上一个成语的最后一个字，就是下一个成语的第一个字。10 轮，看你能接对几个。</p>
+    <p class="idiom-current" id="idiomCurrent">一马当先</p>
+    <div class="idiom-options" id="idiomOptions"></div>
+    <p class="result-line" id="idiomStatus">第 1 / 10 轮 · 得分 0 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="idiomStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="idiomResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 节奏鼓机 -->
+  <section class="panel toy hidden" id="toy-drums">
+    <h2>🥁 节奏鼓机</h2>
+    <p class="hint">点格子排鼓点，4 条音轨 × 8 拍，点播放就循环起来。宿舍里最吵的玩具，慎点。</p>
+    <div class="drums-grid" id="drumsGrid"></div>
+    <p class="result-line" id="drumsStatus">已停 · 第 — 拍</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="drumsPlayBtn">播放 ▶</button>
+      <button class="btn ghost-btn small" id="drumsClearBtn">清空 🧹</button>
+      <button class="btn ghost-btn small" id="drumsDemoBtn">来段示范 🎵</button>
+    </div>
+  </section>
+
+  <!-- 颜色急转弯 -->
+  <section class="panel toy hidden" id="toy-stroop">
+    <h2>🎨 颜色急转弯</h2>
+    <p class="hint">字上写的是一个颜色，字的墨水是另一个颜色。点墨水真正的颜色，别被字骗了。30 秒。</p>
+    <p class="stroop-word" id="stroopWord">红</p>
+    <div class="stroop-options" id="stroopOptions"></div>
+    <p class="result-line" id="stroopStatus">得分 0 · 剩 30 秒 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="stroopStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="stroopResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 脑筋急转弯 -->
+  <section class="panel toy hidden" id="toy-riddle">
+    <h2>🧩 脑筋急转弯</h2>
+    <p class="hint">12 道题，每题 3 个选项，答对 +10 分。别较真，答案都很皮。</p>
+    <p class="riddle-q" id="riddleQ">点开始，出题。</p>
+    <div class="riddle-options" id="riddleOptions"></div>
+    <p class="result-line" id="riddleStatus">第 0 / 12 题 · 得分 0 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="riddleStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="riddleResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.24 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.25 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -4432,6 +4432,293 @@
   $("catchResetBtn").addEventListener("click", catchReset);
   catchReset();
 
+  /* ---------- 55. 成语接龙 ---------- */
+  const IDIOM_KEY = "dorm-toybox-idiom-best-v1";
+  // 接龙链：下一个成语的首字 = 上一个成语的尾字（已逐个核对）
+  const IDIOM_CHAIN = ["一马当先", "先见之明", "明明白白", "白手起家", "家喻户晓", "晓以大义", "义无反顾", "顾全大局", "局外之人", "人山人海", "海阔天空", "空前绝后", "后来居上", "上下其手", "手到擒来", "来龙去脉", "脉脉含情", "情投意合", "合家欢乐", "乐在其中", "中流砥柱", "柱石之坚", "坚不可摧", "摧枯拉朽", "朽木难雕", "雕虫小技", "技高一筹"];
+  let idiomBest = 0;
+  try { idiomBest = parseInt(localStorage.getItem(IDIOM_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let idiomRound = 1, idiomScore = 0, idiomIdx = 0, idiomOptions = [], idiomOver = false, idiomStarted = false;
+  function idiomRender() {
+    $("idiomCurrent").textContent = IDIOM_CHAIN[idiomIdx];
+    const wrap = $("idiomOptions");
+    wrap.innerHTML = "";
+    idiomOptions.forEach((opt, i) => {
+      const b = document.createElement("button");
+      b.className = "btn ghost-btn";
+      b.textContent = opt;
+      b.addEventListener("click", () => idiomPick(i));
+      wrap.appendChild(b);
+    });
+    $("idiomStatus").textContent = idiomOver
+      ? "🏁 10 轮结束！得分 " + idiomScore + "，最好 " + idiomBest + "。"
+      : "第 " + idiomRound + " / 10 轮 · 得分 " + idiomScore + " · 最好 " + idiomBest;
+  }
+  function idiomNewRound() {
+    const cur = IDIOM_CHAIN[idiomIdx];
+    const need = cur.charAt(3);
+    const correct = IDIOM_CHAIN[idiomIdx + 1];
+    // 干扰项：链里不以 need 开头的成语
+    const distract = IDIOM_CHAIN.filter((w) => w !== correct && w.charAt(0) !== need);
+    const d1 = distract[Math.floor(Math.random() * distract.length)];
+    let d2 = distract[Math.floor(Math.random() * distract.length)];
+    while (d2 === d1) d2 = distract[Math.floor(Math.random() * distract.length)];
+    idiomOptions = [correct, d1, d2].sort(() => Math.random() - 0.5);
+    idiomRender();
+  }
+  function idiomPick(i) {
+    if (idiomOver || !idiomStarted) return;
+    const cur = IDIOM_CHAIN[idiomIdx];
+    const correct = IDIOM_CHAIN[idiomIdx + 1];
+    if (idiomOptions[i] === correct) idiomScore += 10;
+    idiomIdx++;
+    idiomRound++;
+    if (idiomRound > 10 || idiomIdx >= IDIOM_CHAIN.length - 1) {
+      idiomOver = true;
+      if (idiomScore > idiomBest) {
+        idiomBest = idiomScore;
+        try { localStorage.setItem(IDIOM_KEY, String(idiomBest)); } catch (e) { /* 忽略 */ }
+      }
+      idiomRender();
+      return;
+    }
+    idiomNewRound();
+  }
+  function idiomStart() {
+    idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0;
+    idiomIdx = Math.floor(Math.random() * (IDIOM_CHAIN.length - 11));
+    idiomNewRound();
+  }
+  $("idiomStartBtn").addEventListener("click", idiomStart);
+  $("idiomResetBtn").addEventListener("click", idiomStart);
+  idiomIdx = 0; idiomOptions = []; idiomRender();
+
+  /* ---------- 56. 节奏鼓机 ---------- */
+  const DRUM_TRACKS = [
+    { id: "kick", icon: "🥁", name: "大鼓", type: "sine", freq: 150, freqEnd: 50, dur: 0.22, gain: 0.5 },
+    { id: "clap", icon: "👏", name: "拍手", type: "square", freq: 180, freqEnd: 120, dur: 0.12, gain: 0.25 },
+    { id: "hihat", icon: "🎩", name: "镲", type: "triangle", freq: 6000, freqEnd: 6000, dur: 0.05, gain: 0.15 },
+    { id: "bongo", icon: "🪘", name: "邦戈", type: "triangle", freq: 400, freqEnd: 250, dur: 0.14, gain: 0.3 },
+  ];
+  let drumsGrid = DRUM_TRACKS.map(() => [false, false, false, false, false, false, false, false]);
+  let drumsStep = 0, drumsPlaying = false, drumsTimerId = null, drumsCtx = null;
+  const drumsCellBtns = {}; // "track-step" -> 按钮
+  function drumsAudio() {
+    if (drumsCtx) return drumsCtx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      drumsCtx = new AC();
+      return drumsCtx;
+    } catch (e) { return null; }
+  }
+  function drumsPlaySound(track) {
+    const ctx = drumsAudio();
+    if (!ctx) return;
+    try {
+      if (ctx.state === "suspended") ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = track.type;
+      osc.frequency.setValueAtTime(track.freq, ctx.currentTime);
+      if (track.freqEnd !== track.freq) osc.frequency.exponentialRampToValueAtTime(track.freqEnd, ctx.currentTime + track.dur);
+      gain.gain.setValueAtTime(track.gain, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + track.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + track.dur);
+    } catch (e) { /* 忽略音频错误 */ }
+  }
+  function drumsRender() {
+    const grid = $("drumsGrid");
+    grid.innerHTML = "";
+    DRUM_TRACKS.forEach((tr, t) => {
+      const label = document.createElement("div");
+      label.className = "drums-label";
+      label.textContent = tr.icon;
+      label.title = tr.name;
+      grid.appendChild(label);
+      for (let s = 0; s < 8; s++) {
+        const cell = document.createElement("button");
+        cell.className = "drums-cell" + (drumsGrid[t][s] ? " on" : "") + (drumsPlaying && s === drumsStep ? " now" : "");
+        cell.setAttribute("aria-label", tr.name + " 第 " + (s + 1) + " 拍");
+        cell.addEventListener("click", () => { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); });
+        drumsCellBtns[t + "-" + s] = cell;
+        grid.appendChild(cell);
+      }
+    });
+    $("drumsStatus").textContent = drumsPlaying ? "▶ 播放中 · 第 " + (drumsStep + 1) + " 拍" : "已停 · 第 — 拍";
+  }
+  function drumsTick() {
+    DRUM_TRACKS.forEach((tr, t) => { if (drumsGrid[t][drumsStep]) drumsPlaySound(tr); });
+    drumsStep = (drumsStep + 1) % 8;
+    drumsRender();
+  }
+  function drumsPlay() {
+    if (drumsPlaying) return;
+    drumsPlaying = true; drumsStep = 0;
+    if (drumsTimerId) clearInterval(drumsTimerId);
+    drumsTimerId = setInterval(drumsTick, 250);
+    $("drumsPlayBtn").textContent = "停止 ⏹";
+    drumsRender();
+  }
+  function drumsStop() {
+    drumsPlaying = false;
+    if (drumsTimerId) { clearInterval(drumsTimerId); drumsTimerId = null; }
+    $("drumsPlayBtn").textContent = "播放 ▶";
+    drumsRender();
+  }
+  $("drumsPlayBtn").addEventListener("click", () => { if (drumsPlaying) drumsStop(); else drumsPlay(); });
+  $("drumsClearBtn").addEventListener("click", () => { drumsGrid = DRUM_TRACKS.map(() => [false, false, false, false, false, false, false, false]); drumsRender(); });
+  $("drumsDemoBtn").addEventListener("click", () => {
+    drumsGrid = [
+      [true, false, false, false, true, false, false, false], // 大鼓：1、5 拍
+      [false, false, true, false, false, false, true, false], // 拍手：3、7 拍
+      [true, true, true, true, true, true, true, true], // 镲：每拍
+      [false, false, false, true, false, false, false, true], // 邦戈：4、8 拍
+    ];
+    drumsRender();
+  });
+  drumsRender();
+
+  /* ---------- 57. 颜色急转弯 ---------- */
+  const STROOP_KEY = "dorm-toybox-stroop-best-v1";
+  const STROOP_COLORS = [
+    { name: "红", css: "#ff5a5a" },
+    { name: "绿", css: "#4caf50" },
+    { name: "蓝", css: "#4a90d9" },
+    { name: "黄", css: "#f5c542" },
+  ];
+  let stroopBest = 0;
+  try { stroopBest = parseInt(localStorage.getItem(STROOP_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let stroopScore = 0, stroopTime = 30, stroopWord = "红", stroopInk = "蓝", stroopRunning = false, stroopTimerId = null;
+  function stroopNewRound() {
+    const word = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
+    let ink = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
+    while (ink.name === word.name) ink = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
+    stroopWord = word.name; stroopInk = ink.name;
+    stroopRender();
+  }
+  function stroopRender() {
+    const w = $("stroopWord");
+    w.textContent = stroopWord;
+    const ink = STROOP_COLORS.find((c) => c.name === stroopInk);
+    w.style.color = ink ? ink.css : "#fff";
+    const wrap = $("stroopOptions");
+    wrap.innerHTML = "";
+    STROOP_COLORS.forEach((c) => {
+      const b = document.createElement("button");
+      b.className = "btn ghost-btn";
+      b.textContent = c.name;
+      b.addEventListener("click", () => stroopPick(c.name));
+      wrap.appendChild(b);
+    });
+    $("stroopStatus").textContent = "得分 " + stroopScore + " · 剩 " + stroopTime + " 秒 · 最好 " + stroopBest;
+  }
+  function stroopPick(name) {
+    if (!stroopRunning) return;
+    if (name === stroopInk) stroopScore += 10;
+    else stroopScore = Math.max(0, stroopScore - 5);
+    stroopNewRound();
+  }
+  function stroopStart() {
+    if (stroopRunning) return;
+    stroopRunning = true;
+    if (stroopTimerId) clearInterval(stroopTimerId);
+    stroopTimerId = setInterval(() => {
+      stroopTime--;
+      if (stroopTime <= 0) {
+        stroopTime = 0; stroopRunning = false;
+        clearInterval(stroopTimerId); stroopTimerId = null;
+        if (stroopScore > stroopBest) {
+          stroopBest = stroopScore;
+          try { localStorage.setItem(STROOP_KEY, String(stroopBest)); } catch (e) { /* 忽略 */ }
+        }
+        $("stroopStatus").textContent = "⏰ 时间到！得分 " + stroopScore + "，最好 " + stroopBest + "。";
+        return;
+      }
+      stroopRender();
+    }, 1000);
+  }
+  function stroopReset() {
+    if (stroopTimerId) { clearInterval(stroopTimerId); stroopTimerId = null; }
+    stroopScore = 0; stroopTime = 30; stroopRunning = false;
+    stroopNewRound();
+    $("stroopStatus").textContent = "得分 0 · 剩 30 秒 · 最好 " + stroopBest;
+  }
+  $("stroopStartBtn").addEventListener("click", stroopStart);
+  $("stroopResetBtn").addEventListener("click", stroopReset);
+  stroopReset();
+
+  /* ---------- 58. 脑筋急转弯 ---------- */
+  const RIDDLE_KEY = "dorm-toybox-riddle-best-v1";
+  const RIDDLES = [
+    { q: "什么东西越洗越脏？", options: ["衣服", "水", "手"], answer: 1 },
+    { q: "什么东西早上四条腿，中午两条腿，晚上三条腿？", options: ["狗", "人", "椅子"], answer: 1 },
+    { q: "什么东西能装下全世界，却装不下一粒沙？", options: ["袋子", "箱子", "眼睛"], answer: 2 },
+    { q: "什么东西越长越短？", options: ["蜡烛", "头发", "绳子"], answer: 0 },
+    { q: "什么东西不用的时候朝下，用的时候朝上？", options: ["碗", "帽子", "伞"], answer: 2 },
+    { q: "什么东西有口无牙？", options: ["井", "河", "杯子"], answer: 0 },
+    { q: "什么东西天一黑就出来，天一亮就消失？", options: ["月亮", "星星", "萤火虫"], answer: 1 },
+    { q: "什么东西越热越爱出来，越冷越躲起来？", options: ["冰", "汗", "火"], answer: 1 },
+    { q: "什么东西前面是平的，后面是尖的？", options: ["刀", "笔", "针"], answer: 2 },
+    { q: "什么东西你天天见，却从来没见过它的真面目？", options: ["天空", "自己的脸", "影子"], answer: 1 },
+    { q: "什么东西一到手就变小？", options: ["肥皂", "糖", "冰块"], answer: 2 },
+    { q: "什么东西你越是想留住它，它走得越快？", options: ["时间", "水", "风"], answer: 0 },
+  ];
+  let riddleBest = 0;
+  try { riddleBest = parseInt(localStorage.getItem(RIDDLE_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let riddleOrder = [], riddleIdx = 0, riddleScore = 0, riddleOver = false, riddleStarted = false;
+  function riddleRender() {
+    if (riddleOver || riddleIdx >= riddleOrder.length) {
+      $("riddleQ").textContent = "🏁 12 题答完了！";
+      $("riddleOptions").innerHTML = "";
+      $("riddleStatus").textContent = "得分 " + riddleScore + " · 最好 " + riddleBest + "。";
+      return;
+    }
+    const r = RIDDLES[riddleOrder[riddleIdx]];
+    $("riddleQ").textContent = r.q;
+    const wrap = $("riddleOptions");
+    wrap.innerHTML = "";
+    r.options.forEach((opt, i) => {
+      const b = document.createElement("button");
+      b.className = "btn ghost-btn";
+      b.textContent = opt;
+      b.addEventListener("click", () => riddlePick(i));
+      wrap.appendChild(b);
+    });
+    $("riddleStatus").textContent = "第 " + (riddleIdx + 1) + " / 12 题 · 得分 " + riddleScore + " · 最好 " + riddleBest;
+  }
+  function riddlePick(i) {
+    if (riddleOver || !riddleStarted || riddleIdx >= riddleOrder.length) return;
+    const r = RIDDLES[riddleOrder[riddleIdx]];
+    const wrap = $("riddleOptions");
+    const btns = wrap.children;
+    if (btns[r.answer]) btns[r.answer].classList.add("correct");
+    if (i !== r.answer && btns[i]) btns[i].classList.add("wrong");
+    if (i === r.answer) riddleScore += 10;
+    riddleIdx++;
+    setTimeout(() => {
+      if (riddleIdx >= riddleOrder.length) {
+        riddleOver = true;
+        if (riddleScore > riddleBest) {
+          riddleBest = riddleScore;
+          try { localStorage.setItem(RIDDLE_KEY, String(riddleBest)); } catch (e) { /* 忽略 */ }
+        }
+      }
+      riddleRender();
+    }, 600);
+  }
+  function riddleStart() {
+    riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0;
+    riddleOrder = RIDDLES.map((_, i) => i).sort(() => Math.random() - 0.5);
+    riddleRender();
+  }
+  $("riddleStartBtn").addEventListener("click", riddleStart);
+  $("riddleResetBtn").addEventListener("click", riddleStart);
+  riddleOrder = RIDDLES.map((_, i) => i); riddleRender();
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -4482,6 +4769,19 @@
     catchStart() { catchStart(); },
     catchStep() { catchStep(); },
     catchSet(items, basketX) { catchItems = items.map((it) => ({ x: it.x, y: it.y, kind: it.kind, speed: it.speed || 3 })); if (basketX !== undefined) catchBasketX = basketX; catchRunning = true; catchRender(); },
+    get idiom() { return { round: idiomRound, score: idiomScore, current: IDIOM_CHAIN[idiomIdx], options: idiomOptions.slice(), over: idiomOver, best: idiomBest, chain: IDIOM_CHAIN.slice() }; },
+    idiomSet(idx) { idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0; idiomIdx = idx; idiomNewRound(); },
+    idiomPick(i) { idiomPick(i); },
+    get drums() { return { grid: drumsGrid.map((row) => row.slice()), step: drumsStep, playing: drumsPlaying }; },
+    drumsToggle(t, s) { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); },
+    drumsTick() { drumsTick(); },
+    drumsSet(grid) { drumsGrid = grid.map((row) => row.slice()); drumsRender(); },
+    get stroop() { return { score: stroopScore, time: stroopTime, word: stroopWord, ink: stroopInk, running: stroopRunning, best: stroopBest }; },
+    stroopSet(word, ink) { stroopWord = word; stroopInk = ink; stroopRunning = true; stroopRender(); },
+    stroopPick(name) { stroopPick(name); },
+    get riddle() { return { index: riddleIdx, score: riddleScore, total: riddleOrder.length, over: riddleOver, best: riddleBest, current: riddleOrder.length > 0 ? RIDDLES[riddleOrder[riddleIdx]] : null }; },
+    riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleOrder = order.slice(); riddleRender(); },
+    riddlePick(i) { riddlePick(i); },
   };
 
   renderTimer();

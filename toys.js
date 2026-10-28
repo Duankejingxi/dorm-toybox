@@ -3023,6 +3023,8 @@
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
     if (Math.abs(dx) > Math.abs(dy)) g2048Move(dx > 0 ? "right" : "left"); else g2048Move(dy > 0 ? "down" : "up");
   });
+  // 手势被浏览器取消（比如系统手势）时清掉起点，避免下次滑动从旧起点算
+  $("g2048Grid").addEventListener("pointercancel", () => { g2048Swipe = null; });
   if (document.addEventListener) {
     document.addEventListener("keydown", (e) => {
       if ($("toy-game2048").classList.contains("hidden")) return;

@@ -12,20 +12,22 @@
 <div class="glitter" aria-hidden="true"></div>
 
 <header class="hero">
-  <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
+  <p class="eyebrow">THE DORM CLUB · 课间快乐补给站</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">五十八个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">学习有节奏，休息有花样。<br><span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>选一个小玩具，给日常加一点乐趣。</p>
   <div class="nav-top">
-    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
+    <button class="btn ghost-btn small" id="menuBtn" aria-controls="sideDrawer" aria-expanded="false">☰ 全部玩具</button>
   </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
+  <div id="searchResults" class="search-results hidden" aria-label="搜索结果"></div>
+  <nav class="quick-links" aria-label="常用玩具"><a href="#wheel">🎡 随缘决定</a><a href="#timer">🍅 专注一下</a><a href="#snake">🐍 玩一小局</a><a href="#todo">✅ 今日待办</a></nav>
 </header>
 
 <div class="drawer-overlay hidden" id="drawerOverlay"></div>
-<aside class="drawer" id="sideDrawer" aria-label="全部玩具">
+<aside class="drawer" id="sideDrawer" aria-label="全部玩具" role="dialog" aria-modal="true" inert>
   <div class="drawer-head">
     <span>全部玩具</span>
-    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
+    <button class="btn ghost-btn small" id="drawerCloseBtn" aria-label="关闭全部玩具">✕</button>
   </div>
   <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
 </aside>

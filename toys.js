@@ -62,20 +62,11 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function openDrawer() {
-    $("sideDrawer").inert = false;
-    $("menuBtn").setAttribute("aria-expanded", "true");
-    document.body.classList.add("drawer-visible");
     $("sideDrawer").classList.add("open");
-    $("drawerCloseBtn").focus();
     $("drawerOverlay").classList.remove("hidden");
   }
   function closeDrawer() {
-    const wasOpen = $("sideDrawer").classList.contains("open");
     $("sideDrawer").classList.remove("open");
-    $("sideDrawer").inert = true;
-    document.body.classList.remove("drawer-visible");
-    $("menuBtn").setAttribute("aria-expanded", "false");
-    if (wasOpen) $("menuBtn").focus();
     $("drawerOverlay").classList.add("hidden");
   }
   $("menuBtn").addEventListener("click", openDrawer);
@@ -289,7 +280,7 @@
   $("drawFortuneBtn").addEventListener("click", () => {
     const f = pick(FORTUNES);
     const saved = { day: todayStr(), tier: f.tier, text: f.text };
-    try { localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved)); } catch (e) { /* 存储不可用时仍可抽签 */ }
+    localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved));
     renderFortune(saved);
   });
   renderFortune(loadFortune());
@@ -370,8 +361,6 @@
   let remaining = focusSeconds;
   let timerId = null;
   let tomatoesToday = 0;
-  let timerDeadline = null;
-  let tomatoDay = todayStr();
   try {
     const saved = JSON.parse(localStorage.getItem(TOMATO_KEY) || "null");
     if (saved && saved.day === todayStr()) tomatoesToday = saved.count || 0;
@@ -389,7 +378,7 @@
     $("tomatoCount").textContent = "今天已完成 " + tomatoesToday + " 个番茄";
   }
   function saveTomatoes() {
-    try { localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: tomatoDay, count: tomatoesToday })); } catch (e) { /* 存储不可用不影响计时 */ }
+    localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday }));
   }
   // 时长可改：15 / 25 / 45 / 60 分钟，改了就重置
   [15, 25, 45, 60].forEach((m) => {
@@ -399,7 +388,6 @@
     b.setAttribute("data-minutes", String(m));
     b.addEventListener("click", () => {
       if (timerId) { clearInterval(timerId); timerId = null; }
-      timerDeadline = null;
       focusSeconds = m * 60;
       remaining = focusSeconds;
       $("timerStartBtn").textContent = "开始专注 ▶";
@@ -411,27 +399,8 @@
     });
     $("timerDurations").appendChild(b);
   });
-  function tickTimer() {
-    if (timerDeadline === null) return;
-    remaining = Math.max(0, Math.ceil((timerDeadline - Date.now()) / 1000));
-    if (remaining === 0) {
-      clearInterval(timerId);
-      timerId = null;
-      timerDeadline = null;
-      if (tomatoDay !== todayStr()) { tomatoDay = todayStr(); tomatoesToday = 0; }
-      tomatoesToday++;
-      saveTomatoes();
-      $("timerStartBtn").textContent = "再来一个 🍅";
-      $("timerStatus").textContent = "🎉 到点了！起来走走、喝口水，完成了第 " + tomatoesToday + " 个番茄。";
-    }
-    renderTimer();
-  }
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) tickTimer(); });
   $("timerStartBtn").addEventListener("click", () => {
     if (timerId) {
-      tickTimer();
-      if (!timerId) return;
-      timerDeadline = null;
       clearInterval(timerId);
       timerId = null;
       $("timerStartBtn").textContent = "继续专注 ▶";
@@ -440,17 +409,26 @@
     }
     if (remaining === 0) remaining = focusSeconds;
     $("timerStartBtn").textContent = "暂停 ⏸";
-    $("timerStatus").textContent = "专注中……手机翻过去，这 " + (focusSeconds / 60) + " 分钟只干一件事。";
-    timerDeadline = Date.now() + remaining * 1000;
-    timerId = setInterval(tickTimer, 250);
-
+    $("timerStatus").textContent = "专注中……手机翻过去，这 25 分钟只干一件事。";
+    timerId = setInterval(() => {
+      remaining--;
+      renderTimer();
+      if (remaining <= 0) {
+        clearInterval(timerId);
+        timerId = null;
+        tomatoesToday++;
+        saveTomatoes();
+        renderTimer();
+        $("timerStartBtn").textContent = "再来一个 🍅";
+        $("timerStatus").textContent = "🎉 到点了！起来走走、喝口水，完成了第 " + tomatoesToday + " 个番茄。";
+      }
+    }, 1000);
   });
   $("timerResetBtn").addEventListener("click", () => {
     if (timerId) { clearInterval(timerId); timerId = null; }
-    timerDeadline = null;
     remaining = focusSeconds;
     $("timerStartBtn").textContent = "开始专注 ▶";
-    $("timerStatus").textContent = "已重置。先想好这 " + (focusSeconds / 60) + " 分钟要干什么。";
+    $("timerStatus").textContent = "已重置。先想好这 25 分钟要干什么。";
     renderTimer();
   });
   /* ---------- 7. 随机分组 ---------- */
@@ -1119,30 +1097,13 @@
   slotsResultEl("b").textContent = "等你拉。";
   renderSlotsStats();
 
-  /* 搜索直接展示在输入框下方，保留输入焦点。 */
+  /* ---------- 玩具搜索：搜名字，抽屉自动打开露出结果 ---------- */
   $("toySearch").addEventListener("input", () => {
-    const q = $("toySearch").value.trim().toLowerCase();
-    const results = $("searchResults");
-    results.replaceChildren();
-    results.classList.toggle("hidden", !q);
-    if (!q) return;
-    const matches = TOYS.filter((t) => t.label.toLowerCase().includes(q));
-    matches.forEach((t) => {
-      const button = makeTile(t);
-      button.addEventListener("click", () => { results.classList.add("hidden"); $("toySearch").value = ""; });
-      results.appendChild(button);
+    const q = $("toySearch").value.trim();
+    allTiles().forEach((b) => {
+      b.classList.toggle("hidden", q !== "" && !b.textContent.includes(q));
     });
-    if (!matches.length) results.textContent = "没有找到这个玩具，试试「番茄钟」或「数独」。";
-  });
-  document.addEventListener("keydown", (e) => {
-    if (!$("sideDrawer").classList.contains("open")) return;
-    if (e.key === "Escape") { e.preventDefault(); closeDrawer(); }
-    if (e.key === "Tab") {
-      const buttons = [...$("sideDrawer").querySelectorAll("button")].filter((b) => !b.classList.contains("hidden"));
-      const first = buttons[0], last = buttons[buttons.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
+    if (q !== "") openDrawer();
   });
 
   /* ---------- 15. 数独 ---------- */
@@ -2734,7 +2695,7 @@
   /* ---------- 39. 倒计时 ---------- */
   const CD_KEY = "dorm-toybox-countdown-v1";
   let cdEvents = [];
-  try { const saved = JSON.parse(localStorage.getItem(CD_KEY) || "[]"); cdEvents = Array.isArray(saved) ? saved.filter((e) => e && typeof e.name === "string" && typeof e.date === "string" && Number.isFinite(new Date(e.date + "T00:00:00").getTime())) : []; } catch (e) { cdEvents = []; }
+  try { cdEvents = JSON.parse(localStorage.getItem(CD_KEY) || "[]") || []; } catch (e) { cdEvents = []; }
   function cdSave() { try { localStorage.setItem(CD_KEY, JSON.stringify(cdEvents)); } catch (e) { /* 忽略 */ } }
   function cdDays(dateStr) {
     const t = new Date(dateStr + "T00:00:00");
@@ -2782,7 +2743,7 @@
   /* ---------- 40. 待办清单 ---------- */
   const TODO_KEY = "dorm-toybox-todo-v1";
   let todoItems = [];
-  try { const saved = JSON.parse(localStorage.getItem(TODO_KEY) || "[]"); todoItems = Array.isArray(saved) ? saved.filter((e) => e && typeof e.text === "string" && typeof e.done === "boolean") : []; } catch (e) { todoItems = []; }
+  try { todoItems = JSON.parse(localStorage.getItem(TODO_KEY) || "[]") || []; } catch (e) { todoItems = []; }
   function todoSave() { try { localStorage.setItem(TODO_KEY, JSON.stringify(todoItems)); } catch (e) { /* 忽略 */ } }
   function todoRender() {
     const list = $("todoList");
@@ -4758,6 +4719,351 @@
   $("riddleResetBtn").addEventListener("click", riddleStart);
   riddleOrder = RIDDLES.map((_, i) => i); riddleRender();
 
+  /* ---------- 59. 太空射击 ---------- */
+  const SHOOTER_KEY = "dorm-toybox-shooter-best-v1";
+  const SHOOT_W = 340, SHOOT_H = 300;
+  let shooterBest = 0;
+  try { shooterBest = parseInt(localStorage.getItem(SHOOTER_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let shooterScore = 0, shooterLives = 3, shooterShipX = 170;
+  let shooterBullets = [], shooterEnemies = [];
+  let shooterRunning = false, shooterOver = false, shooterStepId = null, shooterFireId = null, shooterSpawnId = null;
+  function shooterDraw() {
+    const cv = $("shooterCanvas");
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, SHOOT_W, SHOOT_H);
+    ctx.font = "28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🚀", shooterShipX, 285);
+    ctx.font = "22px sans-serif";
+    shooterBullets.forEach((b) => ctx.fillText("•", b.x, b.y));
+    shooterEnemies.forEach((e) => ctx.fillText("👾", e.x, e.y));
+  }
+  function shooterStep() {
+    if (!shooterRunning || shooterOver) return;
+    shooterBullets.forEach((b) => { b.y -= 6; });
+    shooterBullets = shooterBullets.filter((b) => b.y > 0);
+    shooterEnemies.forEach((e) => { e.y += e.speed; });
+    // 子弹打怪兽
+    shooterBullets = shooterBullets.filter((b) => {
+      const hit = shooterEnemies.findIndex((e) => Math.abs(e.x - b.x) < 20 && Math.abs(e.y - b.y) < 20);
+      if (hit !== -1) {
+        shooterEnemies.splice(hit, 1);
+        shooterScore += 10;
+        return false;
+      }
+      return true;
+    });
+    // 怪兽撞飞船 / 掉出底边
+    shooterEnemies = shooterEnemies.filter((e) => {
+      if (Math.abs(e.x - shooterShipX) < 24 && Math.abs(e.y - 270) < 24) {
+        shooterLives--;
+        $("shooterStatus").textContent = "💥 被撞了！还剩 " + shooterLives + " 条命。";
+        if (shooterLives <= 0) shooterEnd("💔 飞船被撞毁了。");
+        return false;
+      }
+      return e.y <= SHOOT_H;
+    });
+    shooterRender();
+  }
+  function shooterFire() {
+    if (!shooterRunning || shooterOver) return;
+    shooterBullets.push({ x: shooterShipX, y: 260 });
+  }
+  function shooterSpawn() {
+    if (!shooterRunning || shooterOver) return;
+    shooterEnemies.push({ x: 20 + Math.floor(Math.random() * (SHOOT_W - 40)), y: -20, speed: 1 + Math.random() * 1.5 });
+  }
+  function shooterRender() {
+    $("shooterScore").textContent = "得分 " + shooterScore + " · 命 " + shooterLives + " · 最好 " + shooterBest;
+    shooterDraw();
+  }
+  function shooterEnd(msg) {
+    shooterOver = true; shooterRunning = false;
+    [shooterStepId, shooterFireId, shooterSpawnId].forEach((id) => { if (id) clearInterval(id); });
+    shooterStepId = shooterFireId = shooterSpawnId = null;
+    if (shooterScore > shooterBest) {
+      shooterBest = shooterScore;
+      try { localStorage.setItem(SHOOTER_KEY, String(shooterBest)); } catch (e) { /* 忽略 */ }
+    }
+    $("shooterStatus").textContent = msg + "得分 " + shooterScore + "，最好 " + shooterBest + "。";
+    shooterRender();
+  }
+  function shooterStart() {
+    if (shooterRunning) return;
+    if (shooterOver) shooterReset();
+    shooterRunning = true;
+    $("shooterStatus").textContent = "怪兽来了，开火！";
+    if (shooterStepId) clearInterval(shooterStepId);
+    if (shooterFireId) clearInterval(shooterFireId);
+    if (shooterSpawnId) clearInterval(shooterSpawnId);
+    shooterStepId = setInterval(shooterStep, 16);
+    shooterFireId = setInterval(shooterFire, 300);
+    shooterSpawnId = setInterval(shooterSpawn, 900);
+  }
+  function shooterReset() {
+    [shooterStepId, shooterFireId, shooterSpawnId].forEach((id) => { if (id) clearInterval(id); });
+    shooterStepId = shooterFireId = shooterSpawnId = null;
+    shooterScore = 0; shooterLives = 3; shooterShipX = 170;
+    shooterBullets = []; shooterEnemies = []; shooterRunning = false; shooterOver = false;
+    $("shooterStatus").textContent = "点开始，怪兽就下来了。";
+    shooterRender();
+  }
+  function shooterMoveShip(clientX) {
+    const cv = $("shooterCanvas");
+    const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: SHOOT_W };
+    const scale = SHOOT_W / (rect.width || SHOOT_W);
+    shooterShipX = Math.max(16, Math.min(SHOOT_W - 16, (clientX - rect.left) * scale));
+    shooterDraw();
+  }
+  $("shooterCanvas").addEventListener("pointerdown", (e) => shooterMoveShip(e.clientX));
+  $("shooterCanvas").addEventListener("pointermove", (e) => { if (e.buttons) shooterMoveShip(e.clientX); });
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-shooter").classList.contains("hidden")) return;
+      if (e.key === "ArrowLeft") { shooterShipX = Math.max(16, shooterShipX - 20); shooterDraw(); if (e.preventDefault) e.preventDefault(); }
+      if (e.key === "ArrowRight") { shooterShipX = Math.min(SHOOT_W - 16, shooterShipX + 20); shooterDraw(); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  $("shooterStartBtn").addEventListener("click", shooterStart);
+  $("shooterResetBtn").addEventListener("click", shooterReset);
+  shooterReset();
+
+  /* ---------- 60. 一笔画 ---------- */
+  // 每关一张图：点 + 边。欧拉轨迹保证可解（奇点 0 或 2 个）
+  const ONESTROKE_LEVELS = [
+    { name: "三角形", nodes: [[150, 40], [50, 200], [250, 200]],
+      edges: [[0, 1], [1, 2], [2, 0]] },
+    { name: "正方形 + 对角线", nodes: [[60, 60], [240, 60], [240, 200], [60, 200]],
+      edges: [[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]] },
+    { name: "小房子", nodes: [[150, 40], [70, 120], [230, 120], [230, 210], [70, 210]],
+      edges: [[0, 1], [0, 2], [1, 2], [1, 4], [4, 3], [3, 2]] },
+  ];
+  let onestrokeLevel = 0, onestrokePath = [], onestrokeUsed = new Set(), onestrokeDone = false;
+  function onestrokeEdgeKey(a, b) { return Math.min(a, b) + "-" + Math.max(a, b); }
+  function onestrokeRender() {
+    const lv = ONESTROKE_LEVELS[onestrokeLevel];
+    const board = $("onestrokeBoard");
+    board.innerHTML = "";
+    // 已画的线
+    onestrokeUsed.forEach((key) => {
+      const [a, b] = key.split("-").map(Number);
+      const [x1, y1] = lv.nodes[a], [x2, y2] = lv.nodes[b];
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+      const line = document.createElement("div");
+      line.className = "onestroke-line";
+      line.style.left = x1 + "px"; line.style.top = y1 + "px";
+      line.style.width = len + "px"; line.style.transform = "rotate(" + ang + "deg)";
+      board.appendChild(line);
+    });
+    // 点
+    lv.nodes.forEach((pt, i) => {
+      const d = document.createElement("button");
+      d.className = "onestroke-dot";
+      d.style.left = pt[0] + "px"; d.style.top = pt[1] + "px";
+      d.setAttribute("aria-label", "点 " + (i + 1));
+      d.addEventListener("click", () => onestrokePick(i));
+      board.appendChild(d);
+    });
+    $("onestrokeStatus").textContent = onestrokeDone
+      ? "🎉 第 " + (onestrokeLevel + 1) + " 关画完了！" + (onestrokeLevel < 2 ? " 点重画进下一关。" : " 全部通关！")
+      : "第 " + (onestrokeLevel + 1) + " / 3 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线";
+  }
+  function onestrokePick(i) {
+    if (onestrokeDone) return;
+    const lv = ONESTROKE_LEVELS[onestrokeLevel];
+    if (onestrokePath.length === 0) { onestrokePath = [i]; onestrokeRender(); return; }
+    const cur = onestrokePath[onestrokePath.length - 1];
+    const key = onestrokeEdgeKey(cur, i);
+    const edgeExists = lv.edges.some((e) => onestrokeEdgeKey(e[0], e[1]) === key);
+    if (!edgeExists || onestrokeUsed.has(key)) return; // 不是相邻的点，或这条线已经画过
+    onestrokeUsed.add(key);
+    onestrokePath.push(i);
+    if (onestrokeUsed.size === lv.edges.length) onestrokeDone = true;
+    onestrokeRender();
+  }
+  function onestrokeReset(level) {
+    if (level !== undefined) onestrokeLevel = level;
+    onestrokePath = []; onestrokeUsed = new Set(); onestrokeDone = false;
+    onestrokeRender();
+  }
+  $("onestrokeUndoBtn").addEventListener("click", () => {
+    if (onestrokePath.length <= 1) return;
+    const last = onestrokePath.pop();
+    const prev = onestrokePath[onestrokePath.length - 1];
+    onestrokeUsed.delete(onestrokeEdgeKey(prev, last));
+    onestrokeDone = false;
+    onestrokeRender();
+  });
+  $("onestrokeResetBtn").addEventListener("click", () => {
+    if (onestrokeDone && onestrokeLevel < 2) onestrokeReset(onestrokeLevel + 1);
+    else onestrokeReset(onestrokeLevel);
+  });
+  onestrokeReset(0);
+
+  /* ---------- 61. 弹珠机 ---------- */
+  const MARBLE_KEY = "dorm-toybox-marble-best-v1";
+  const MARBLE_SLOTS = [10, 50, 100, 500, 100, 50]; // 6 个格子，中间 500 分最难进
+  const MARBLE_ROWS = 5;
+  let marbleBest = 0;
+  try { marbleBest = parseInt(localStorage.getItem(MARBLE_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let marbleScore = 0, marbleLeft = 10, marbleBall = null, marbleDirs = [], marbleOver = false;
+  function marbleRender() {
+    const board = $("marbleBoard");
+    // 每次重建：钉子 + 格子 + 珠子（冒烟桩没有 removeChild/querySelector，用 innerHTML 清空最稳）
+    board.innerHTML = "";
+    const pegRows = [
+      [50, 100, 150, 200, 250], [75, 125, 175, 225], [50, 100, 150, 200, 250], [75, 125, 175, 225], [50, 100, 150, 200, 250],
+    ];
+    pegRows.forEach((row, r) => {
+      row.forEach((x) => {
+        const p = document.createElement("div");
+        p.className = "marble-peg";
+        p.style.left = x + "px"; p.style.top = (40 + r * 40) + "px";
+        board.appendChild(p);
+      });
+    });
+    MARBLE_SLOTS.forEach((score, i) => {
+      const s = document.createElement("div");
+      s.className = "marble-slot";
+      s.style.left = (i * 50) + "px"; s.style.width = "50px";
+      s.textContent = score;
+      board.appendChild(s);
+    });
+    if (marbleBall) {
+      const b = document.createElement("div");
+      b.className = "marble-ball";
+      b.style.left = marbleBall.x + "px"; b.style.top = marbleBall.y + "px";
+      board.appendChild(b);
+    }
+    $("marbleScore").textContent = marbleOver
+      ? "🏁 10 颗放完了！得分 " + marbleScore + "，最好 " + marbleBest + "。"
+      : "得分 " + marbleScore + " · 剩 " + marbleLeft + " 颗 · 最好 " + marbleBest;
+  }
+  function marbleDrop() {
+    if (marbleOver || marbleBall || marbleLeft <= 0) return;
+    marbleBall = { x: 150, y: 10, row: 0 };
+    marbleDirs = [];
+    for (let r = 0; r < MARBLE_ROWS; r++) marbleDirs.push(Math.random() < 0.5 ? -1 : 1);
+    marbleRender();
+    setTimeout(marbleStep, 150); // 第一步靠定时器走，测试可先 marbleSetDirs 再手动 marbleStep
+  }
+  function marbleStep() {
+    if (!marbleBall) return;
+    if (marbleBall.row < MARBLE_ROWS) {
+      marbleBall.x = Math.max(15, Math.min(285, marbleBall.x + marbleDirs[marbleBall.row] * 25));
+      marbleBall.y = 40 + (marbleBall.row + 1) * 40;
+      marbleBall.row++;
+      marbleRender();
+      if (marbleBall.row < MARBLE_ROWS) {
+        setTimeout(marbleStep, 150);
+        return;
+      }
+    }
+    // 落到底：按 x 定格子
+    const slot = Math.max(0, Math.min(5, Math.floor(marbleBall.x / 50)));
+    marbleScore += MARBLE_SLOTS[slot];
+    marbleLeft--;
+    marbleBall = null;
+    if (marbleLeft <= 0) {
+      marbleOver = true;
+      if (marbleScore > marbleBest) {
+        marbleBest = marbleScore;
+        try { localStorage.setItem(MARBLE_KEY, String(marbleBest)); } catch (e) { /* 忽略 */ }
+      }
+    }
+    marbleRender();
+  }
+  function marbleReset() {
+    marbleScore = 0; marbleLeft = 10; marbleBall = null; marbleDirs = []; marbleOver = false;
+    marbleRender();
+  }
+  $("marbleDropBtn").addEventListener("click", marbleDrop);
+  $("marbleResetBtn").addEventListener("click", marbleReset);
+  marbleRender();
+
+  /* ---------- 62. 24点 ---------- */
+  const MAKE24_KEY = "dorm-toybox-make24-best-v1";
+  // 12 组题：每组都用暴力求解验过可解（[1,6,7,8] 无解，已排除）
+  const MAKE24_SETS = [[3, 3, 8, 8], [1, 5, 5, 5], [2, 3, 4, 6], [1, 2, 3, 4], [3, 4, 5, 6], [2, 4, 6, 8], [1, 3, 4, 6], [2, 2, 3, 9], [4, 5, 6, 7], [3, 5, 7, 9], [2, 3, 7, 10], [4, 4, 4, 4]];
+  let make24Best = 0;
+  try { make24Best = parseInt(localStorage.getItem(MAKE24_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let make24SetIdx = 0, make24Nums = [], make24Sel = [], make24Solved = 0, make24History = [];
+  function make24Fmt(v) {
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    return String(Math.round(v * 100) / 100);
+  }
+  function make24Render() {
+    const wrap = $("make24Nums");
+    wrap.innerHTML = "";
+    make24Nums.forEach((v, i) => {
+      const b = document.createElement("button");
+      b.className = "make24-num" + (make24Sel.indexOf(i) !== -1 ? " sel" : "");
+      b.textContent = make24Fmt(v);
+      b.addEventListener("click", () => make24PickNum(i));
+      wrap.appendChild(b);
+    });
+    const ops = $("make24Ops");
+    ops.innerHTML = "";
+    ["+", "-", "×", "÷"].forEach((op) => {
+      const b = document.createElement("button");
+      b.className = "btn gold-btn make24-op";
+      b.textContent = op;
+      b.addEventListener("click", () => make24Combine(op));
+      ops.appendChild(b);
+    });
+    $("make24Status").textContent = "第 " + (make24SetIdx + 1) + " / 12 组 · 已解 " + make24Solved + " 组 · 最好 " + make24Best + " 组";
+  }
+  function make24PickNum(i) {
+    if (make24Sel.indexOf(i) !== -1) { make24Sel = make24Sel.filter((x) => x !== i); make24Render(); return; }
+    if (make24Sel.length >= 2) make24Sel = [make24Sel[1]];
+    make24Sel.push(i);
+    make24Render();
+  }
+  function make24Combine(op) {
+    if (make24Sel.length !== 2) return;
+    const [i, j] = make24Sel;
+    const a = make24Nums[i], b = make24Nums[j];
+    let v = null;
+    if (op === "+") v = a + b;
+    else if (op === "-") v = a - b;
+    else if (op === "×") v = a * b;
+    else if (op === "÷") { if (Math.abs(b) < 1e-9) return; v = a / b; }
+    make24History.push(make24Nums.slice());
+    make24Nums = make24Nums.filter((_, k) => k !== i && k !== j);
+    make24Nums.push(v);
+    make24Sel = [];
+    if (make24Nums.length === 1) {
+      if (Math.abs(make24Nums[0] - 24) < 1e-6) {
+        make24Solved++;
+        if (make24Solved > make24Best) {
+          make24Best = make24Solved;
+          try { localStorage.setItem(MAKE24_KEY, String(make24Best)); } catch (e) { /* 忽略 */ }
+        }
+        $("make24Status").textContent = "🎉 等于 24！第 " + (make24SetIdx + 1) + " 组解出来了，已解 " + make24Solved + " 组。点换一组继续。";
+        return;
+      }
+      $("make24Status").textContent = "❌ 最后剩 " + make24Fmt(make24Nums[0]) + "，不是 24。点撤销回去重算。";
+    }
+    make24Render();
+  }
+  function make24LoadSet(idx) {
+    make24SetIdx = idx;
+    make24Nums = MAKE24_SETS[idx].slice();
+    make24Sel = []; make24History = [];
+    make24Render();
+  }
+  $("make24UndoBtn").addEventListener("click", () => {
+    if (make24History.length === 0) return;
+    make24Nums = make24History.pop();
+    make24Sel = [];
+    make24Render();
+  });
+  $("make24ResetBtn").addEventListener("click", () => make24LoadSet((make24SetIdx + 1) % MAKE24_SETS.length));
+  make24LoadSet(0);
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -4821,6 +5127,22 @@
     get riddle() { return { index: riddleIdx, score: riddleScore, total: riddleOrder.length, over: riddleOver, best: riddleBest, current: riddleOrder.length > 0 ? RIDDLES[riddleOrder[riddleIdx]] : null }; },
     riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleOrder = order.slice(); riddleRender(); },
     riddlePick(i) { riddlePick(i); },
+    get shooter() { return { score: shooterScore, lives: shooterLives, shipX: shooterShipX, bullets: shooterBullets.map((b) => ({ x: b.x, y: b.y })), enemies: shooterEnemies.map((e) => ({ x: e.x, y: e.y, speed: e.speed })), running: shooterRunning, over: shooterOver, best: shooterBest }; },
+    shooterStart() { shooterStart(); },
+    shooterStep() { shooterStep(); },
+    shooterSet(bullets, enemies, shipX) { shooterBullets = bullets.map((b) => ({ x: b.x, y: b.y })); shooterEnemies = enemies.map((e) => ({ x: e.x, y: e.y, speed: e.speed || 1 })); if (shipX !== undefined) shooterShipX = shipX; shooterRunning = true; shooterOver = false; shooterRender(); },
+    shooterMoveShip(x) { shooterShipX = x; },
+    get onestroke() { return { level: onestrokeLevel, path: onestrokePath.slice(), used: [...onestrokeUsed], totalEdges: ONESTROKE_LEVELS[onestrokeLevel].edges.length, done: onestrokeDone }; },
+    onestrokePick(i) { onestrokePick(i); },
+    onestrokeSet(level) { onestrokeReset(level); },
+    get marble() { return { score: marbleScore, left: marbleLeft, ball: marbleBall ? { x: marbleBall.x, y: marbleBall.y, row: marbleBall.row } : null, dirs: marbleDirs.slice(), over: marbleOver, best: marbleBest }; },
+    marbleSetDirs(dirs) { marbleDirs = dirs.slice(); },
+    marbleDrop() { marbleDrop(); },
+    marbleStep() { marbleStep(); },
+    get make24() { return { setIdx: make24SetIdx, nums: make24Nums.slice(), sel: make24Sel.slice(), solved: make24Solved, best: make24Best, sets: MAKE24_SETS.map((s) => s.slice()) }; },
+    make24LoadSet(idx) { make24LoadSet(idx); },
+    make24PickNum(i) { make24PickNum(i); },
+    make24Combine(op) { make24Combine(op); },
   };
 
   renderTimer();

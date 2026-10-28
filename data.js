@@ -63,6 +63,10 @@ const TOYS = [
   { id: "drums", label: "🥁 节奏鼓机" },
   { id: "stroop", label: "🎨 颜色急转弯" },
   { id: "riddle", label: "🧩 脑筋急转弯" },
+  { id: "shooter", label: "🚀 太空射击" },
+  { id: "onestroke", label: "✏️ 一笔画" },
+  { id: "marble", label: "🔮 弹珠机" },
+  { id: "make24", label: "🧮 24点" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

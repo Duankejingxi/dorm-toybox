@@ -12,22 +12,20 @@
 <div class="glitter" aria-hidden="true"></div>
 
 <header class="hero">
-  <p class="eyebrow">THE DORM CLUB · 课间快乐补给站</p>
+  <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">学习有节奏，休息有花样。<br><span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>选一个小玩具，给日常加一点乐趣。</p>
+  <p class="subtitle">六十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
-    <button class="btn ghost-btn small" id="menuBtn" aria-controls="sideDrawer" aria-expanded="false">☰ 全部玩具</button>
+    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
-  <div id="searchResults" class="search-results hidden" aria-label="搜索结果"></div>
-  <nav class="quick-links" aria-label="常用玩具"><a href="#wheel">🎡 随缘决定</a><a href="#timer">🍅 专注一下</a><a href="#snake">🐍 玩一小局</a><a href="#todo">✅ 今日待办</a></nav>
 </header>
 
 <div class="drawer-overlay hidden" id="drawerOverlay"></div>
-<aside class="drawer" id="sideDrawer" aria-label="全部玩具" role="dialog" aria-modal="true" inert>
+<aside class="drawer" id="sideDrawer" aria-label="全部玩具">
   <div class="drawer-head">
     <span>全部玩具</span>
-    <button class="btn ghost-btn small" id="drawerCloseBtn" aria-label="关闭全部玩具">✕</button>
+    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
   </div>
   <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
 </aside>
@@ -940,8 +938,58 @@
     </div>
   </section>
 
+  <!-- 太空射击 -->
+  <section class="panel toy hidden" id="toy-shooter">
+    <h2>🚀 太空射击</h2>
+    <p class="hint">左右拖动飞船（或按方向键），子弹自动发射，打掉 👾 得分。别让怪兽撞到你，3 条命。</p>
+    <canvas class="shooter-canvas" id="shooterCanvas" width="340" height="300"></canvas>
+    <p class="result-line" id="shooterScore">得分 0 · 命 3 · 最好 0</p>
+    <p class="result-line" id="shooterStatus">点开始，怪兽就下来了。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="shooterStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="shooterResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 一笔画 -->
+  <section class="panel toy hidden" id="toy-onestroke">
+    <h2>✏️ 一笔画</h2>
+    <p class="hint">点一个点起笔，再点相邻的点画线，每条线只能画一次，全部画完就过关。3 关。</p>
+    <div class="onestroke-board" id="onestrokeBoard"></div>
+    <p class="result-line" id="onestrokeStatus">第 1 / 3 关 · 已画 0 / 5 条线</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="onestrokeUndoBtn">撤销 ↩</button>
+      <button class="btn ghost-btn small" id="onestrokeResetBtn">重画 ↺</button>
+    </div>
+  </section>
+
+  <!-- 弹珠机 -->
+  <section class="panel toy hidden" id="toy-marble">
+    <h2>🔮 弹珠机</h2>
+    <p class="hint">点一下放一颗珠子，它一路往下弹，最后掉进哪个格子就得多少分。10 颗珠子，看你运气。</p>
+    <div class="marble-board" id="marbleBoard"></div>
+    <p class="result-line" id="marbleScore">得分 0 · 剩 10 颗 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="marbleDropBtn">放珠子 🔮</button>
+      <button class="btn ghost-btn small" id="marbleResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 24点 -->
+  <section class="panel toy hidden" id="toy-make24">
+    <h2>🧮 24点</h2>
+    <p class="hint">点两个数，再点一个运算符，把它们合成一个新数。最后只剩一个数，等于 24 就赢。12 组题。</p>
+    <div class="make24-nums" id="make24Nums"></div>
+    <div class="make24-ops" id="make24Ops"></div>
+    <p class="result-line" id="make24Status">第 1 / 12 组 · 已解 0 组 · 最好 0 组</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="make24UndoBtn">撤销 ↩</button>
+      <button class="btn ghost-btn small" id="make24ResetBtn">换一组 🔀</button>
+    </div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.25 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.26 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

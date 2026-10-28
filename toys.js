@@ -4119,6 +4119,319 @@
   $("linkupResetBtn").addEventListener("click", linkupReset);
   linkupReset();
 
+  /* ---------- 51. 数字华容道 ---------- */
+  const SLIDE15_KEY = "dorm-toybox-slide15-best-v1";
+  let slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
+  let slide15Moves = 0, slide15Best = null;
+  try { const b = parseInt(localStorage.getItem(SLIDE15_KEY) || "", 10); if (b > 0) slide15Best = b; } catch (e) { /* 忽略 */ }
+  function slide15Render() {
+    const grid = $("slide15Grid");
+    grid.innerHTML = "";
+    slide15Board.forEach((v, i) => {
+      const cell = document.createElement("button");
+      cell.className = "slide15-cell" + (v === 0 ? " empty" : "");
+      cell.textContent = v === 0 ? "" : String(v);
+      cell.setAttribute("aria-label", v === 0 ? "空格" : "数字 " + v);
+      cell.addEventListener("click", () => slide15Move(i));
+      grid.appendChild(cell);
+    });
+    $("slide15Status").textContent = "已走 " + slide15Moves + " 步 · 最好 " + (slide15Best === null ? "—" : slide15Best + " 步");
+  }
+  function slide15Move(i) {
+    const empty = slide15Board.indexOf(0);
+    const ex = empty % 4, ey = Math.floor(empty / 4);
+    const ix = i % 4, iy = Math.floor(i / 4);
+    if (Math.abs(ex - ix) + Math.abs(ey - iy) !== 1) return; // 只能滑空格旁边的
+    [slide15Board[i], slide15Board[empty]] = [slide15Board[empty], slide15Board[i]];
+    slide15Moves++;
+    if (slide15Board.every((v, j) => v === (j === 15 ? 0 : j + 1))) {
+      if (slide15Best === null || slide15Moves < slide15Best) {
+        slide15Best = slide15Moves;
+        try { localStorage.setItem(SLIDE15_KEY, String(slide15Best)); } catch (e) { /* 忽略 */ }
+      }
+      $("slide15Status").textContent = "🎉 拼好了！用了 " + slide15Moves + " 步，最好 " + slide15Best + " 步。";
+    }
+    slide15Render();
+  }
+  function slide15Shuffle() {
+    // 从已解状态随机走 100 步（保证可解）
+    slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
+    slide15Moves = 0;
+    for (let n = 0; n < 100; n++) {
+      const empty = slide15Board.indexOf(0);
+      const ex = empty % 4, ey = Math.floor(empty / 4);
+      const opts = [];
+      if (ex > 0) opts.push(empty - 1);
+      if (ex < 3) opts.push(empty + 1);
+      if (ey > 0) opts.push(empty - 4);
+      if (ey < 3) opts.push(empty + 4);
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      [slide15Board[pick], slide15Board[empty]] = [slide15Board[empty], slide15Board[pick]];
+    }
+    slide15Render();
+  }
+  $("slide15ShuffleBtn").addEventListener("click", slide15Shuffle);
+  $("slide15ResetBtn").addEventListener("click", () => { slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0]; slide15Moves = 0; slide15Render(); });
+  slide15Shuffle();
+
+  /* ---------- 52. 跳一跳 ---------- */
+  const JUMP_KEY = "dorm-toybox-jump-best-v1";
+  const JUMP_W = 340, JUMP_MAX = 280;
+  let jumpBest = 0;
+  try { jumpBest = parseInt(localStorage.getItem(JUMP_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null;
+  let jumpPlatA = { x: 20, w: 60 }, jumpPlatB = { x: 180, w: 56 }, jumpCharX = 34;
+  function jumpNewPlatB() {
+    const w = 40 + Math.floor(Math.random() * 31);
+    const x = 120 + Math.floor(Math.random() * (JUMP_W - 40 - w - 120));
+    return { x, w };
+  }
+  function jumpRender() {
+    const pa = $("jumpPlatA"), pb = $("jumpPlatB"), ch = $("jumpChar");
+    pa.style.left = jumpPlatA.x + "px"; pa.style.width = jumpPlatA.w + "px";
+    pb.style.left = jumpPlatB.x + "px"; pb.style.width = jumpPlatB.w + "px";
+    ch.style.left = jumpCharX + "px";
+    $("jumpPowerFill").style.width = jumpPower + "%";
+    $("jumpScore").textContent = "得分 " + jumpScore + " · 最好 " + jumpBest;
+  }
+  function jumpReset() {
+    if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
+    jumpScore = 0; jumpPower = 0; jumpOver = false; jumpCharging = false;
+    jumpPlatA = { x: 20, w: 60 }; jumpPlatB = jumpNewPlatB(); jumpCharX = 34;
+    $("jumpStatus").textContent = "按住蓄力，松手起跳。";
+    jumpRender();
+  }
+  function jumpRelease() {
+    if (jumpOver || !jumpCharging && jumpPower === 0) return;
+    if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
+    jumpCharging = false;
+    const dist = (jumpPower / 100) * JUMP_MAX;
+    const newX = jumpCharX + dist;
+    const center = newX + 16;
+    jumpCharX = newX;
+    const ch = $("jumpChar");
+    ch.style.left = newX + "px";
+    ch.style.bottom = "120px";
+    setTimeout(() => { ch.style.bottom = "56px"; }, 160);
+    jumpPower = 0;
+    if (center >= jumpPlatB.x && center <= jumpPlatB.x + jumpPlatB.w) {
+      const isCenter = Math.abs(center - (jumpPlatB.x + jumpPlatB.w / 2)) <= 8;
+      jumpScore += isCenter ? 2 : 1;
+      if (jumpScore > jumpBest) {
+        jumpBest = jumpScore;
+        try { localStorage.setItem(JUMP_KEY, String(jumpBest)); } catch (e) { /* 忽略 */ }
+      }
+      $("jumpStatus").textContent = isCenter ? "🎯 正中心！+2 分！" : "稳稳落下，+1 分。";
+      // 场景左移：落脚的台子变成起点，再生成下一个
+      setTimeout(() => {
+        if (jumpOver) return;
+        jumpPlatA = { x: 20, w: jumpPlatB.w };
+        jumpCharX = 20 + Math.floor((jumpPlatA.w - 32) / 2);
+        jumpPlatB = jumpNewPlatB();
+        jumpRender();
+      }, 350);
+    } else {
+      jumpOver = true;
+      ch.style.bottom = "-40px";
+      $("jumpStatus").textContent = "💔 掉下去了！得分 " + jumpScore + "，点再来一局。";
+    }
+    jumpRender();
+  }
+  const jumpStageEl = $("jumpStage");
+  jumpStageEl.addEventListener("pointerdown", (e) => {
+    if (jumpOver) return;
+    if (e.preventDefault) e.preventDefault();
+    jumpCharging = true; jumpPower = 0;
+    if (jumpChargeId) clearInterval(jumpChargeId);
+    jumpChargeId = setInterval(() => {
+      jumpPower = Math.min(100, jumpPower + 1.4);
+      $("jumpPowerFill").style.width = jumpPower + "%";
+    }, 16);
+  });
+  jumpStageEl.addEventListener("pointerup", () => jumpRelease());
+  jumpStageEl.addEventListener("pointercancel", () => { if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; } jumpCharging = false; jumpPower = 0; jumpRender(); });
+  $("jumpResetBtn").addEventListener("click", jumpReset);
+  jumpReset();
+
+  /* ---------- 53. 找不同 ---------- */
+  const SPOTDIFF_KEY = "dorm-toybox-spotdiff-best-v1";
+  const SPOTDIFF_PAIRS = [["🐸", "🐵"], ["🍎", "🍏"], ["😀", "😃"], ["🐶", "🐱"], ["⚽", "🏀"], ["🍕", "🍔"], ["🌸", "🌺"], ["🐟", "🐠"], ["🚗", "🚙"], ["🍓", "🍒"], ["🐼", "🐨"], ["🌙", "⭐"]];
+  let spotdiffBest = 0;
+  try { spotdiffBest = parseInt(localStorage.getItem(SPOTDIFF_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let spotdiffLevel = 1, spotdiffScore = 0, spotdiffTime = 60, spotdiffOdd = -1, spotdiffBase = "", spotdiffOddEmoji = "";
+  let spotdiffRunning = false, spotdiffTimerId = null, spotdiffGridSize = 3;
+  function spotdiffGridForLevel(level) { return level <= 2 ? 3 : level <= 4 ? 4 : 5; }
+  function spotdiffNewRound() {
+    spotdiffGridSize = spotdiffGridForLevel(spotdiffLevel);
+    const pair = SPOTDIFF_PAIRS[Math.floor(Math.random() * SPOTDIFF_PAIRS.length)];
+    spotdiffBase = pair[0]; spotdiffOddEmoji = pair[1];
+    const total = spotdiffGridSize * spotdiffGridSize;
+    spotdiffOdd = Math.floor(Math.random() * total);
+    spotdiffRender();
+  }
+  function spotdiffRender() {
+    const grid = $("spotdiffGrid");
+    grid.style.gridTemplateColumns = "repeat(" + spotdiffGridSize + ", 1fr)";
+    grid.innerHTML = "";
+    const total = spotdiffGridSize * spotdiffGridSize;
+    for (let i = 0; i < total; i++) {
+      const cell = document.createElement("button");
+      cell.className = "spotdiff-cell";
+      cell.textContent = i === spotdiffOdd ? spotdiffOddEmoji : spotdiffBase;
+      cell.setAttribute("aria-label", "格子 " + (i + 1));
+      cell.addEventListener("click", () => spotdiffPick(i));
+      grid.appendChild(cell);
+    }
+    $("spotdiffStatus").textContent = "第 " + spotdiffLevel + " 关 · 得分 " + spotdiffScore + " · 剩 " + spotdiffTime + " 秒";
+  }
+  function spotdiffPick(i) {
+    if (!spotdiffRunning) return;
+    if (i === spotdiffOdd) {
+      spotdiffScore += 10;
+      spotdiffLevel++;
+      spotdiffNewRound();
+    } else {
+      spotdiffScore = Math.max(0, spotdiffScore - 5);
+      const cells = $("spotdiffGrid").children;
+      if (cells[i]) { cells[i].classList.add("wrong"); setTimeout(() => cells[i].classList.remove("wrong"), 300); }
+      $("spotdiffStatus").textContent = "第 " + spotdiffLevel + " 关 · 得分 " + spotdiffScore + " · 剩 " + spotdiffTime + " 秒";
+    }
+  }
+  function spotdiffStart() {
+    if (spotdiffRunning) return;
+    spotdiffRunning = true;
+    if (spotdiffTimerId) clearInterval(spotdiffTimerId);
+    spotdiffTimerId = setInterval(() => {
+      spotdiffTime--;
+      if (spotdiffTime <= 0) {
+        spotdiffTime = 0;
+        spotdiffRunning = false;
+        clearInterval(spotdiffTimerId); spotdiffTimerId = null;
+        if (spotdiffScore > spotdiffBest) {
+          spotdiffBest = spotdiffScore;
+          try { localStorage.setItem(SPOTDIFF_KEY, String(spotdiffBest)); } catch (e) { /* 忽略 */ }
+        }
+        $("spotdiffStatus").textContent = "⏰ 时间到！得分 " + spotdiffScore + "，最好 " + spotdiffBest + "。";
+        return;
+      }
+      $("spotdiffStatus").textContent = "第 " + spotdiffLevel + " 关 · 得分 " + spotdiffScore + " · 剩 " + spotdiffTime + " 秒";
+    }, 1000);
+  }
+  function spotdiffReset() {
+    if (spotdiffTimerId) { clearInterval(spotdiffTimerId); spotdiffTimerId = null; }
+    spotdiffLevel = 1; spotdiffScore = 0; spotdiffTime = 60; spotdiffRunning = false;
+    spotdiffNewRound();
+    $("spotdiffStatus").textContent = "第 1 关 · 得分 0 · 剩 60 秒 · 最好 " + spotdiffBest;
+  }
+  $("spotdiffStartBtn").addEventListener("click", spotdiffStart);
+  $("spotdiffResetBtn").addEventListener("click", spotdiffReset);
+  spotdiffReset();
+
+  /* ---------- 54. 接金币 ---------- */
+  const CATCH_KEY = "dorm-toybox-catch-best-v1";
+  const CATCH_W = 340, CATCH_H = 300;
+  let catchBest = 0;
+  try { catchBest = parseInt(localStorage.getItem(CATCH_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let catchScore = 0, catchLives = 3, catchTime = 30, catchBasketX = 140;
+  let catchItems = [], catchRunning = false, catchStepId = null, catchSpawnId = null, catchTimerId = null;
+  function catchRender() {
+    const stage = $("catchStage");
+    const basket = $("catchBasket");
+    // 重建舞台内容：先清空再把篮子加回来（不用 el.remove()，冒烟桩里没有这个方法）
+    stage.innerHTML = "";
+    stage.appendChild(basket);
+    catchItems.forEach((it) => {
+      const d = document.createElement("div");
+      d.className = "catch-item";
+      d.textContent = it.kind === "bomb" ? "💣" : "🪙";
+      d.style.left = it.x + "px";
+      d.style.top = it.y + "px";
+      stage.appendChild(d);
+    });
+    basket.style.left = catchBasketX + "px";
+    $("catchScore").textContent = "得分 " + catchScore + " · 命 " + catchLives + " · 剩 " + catchTime + " 秒";
+  }
+  function catchSpawn() {
+    if (!catchRunning) return;
+    const kind = Math.random() < 0.3 ? "bomb" : "coin";
+    catchItems.push({ x: 10 + Math.floor(Math.random() * (CATCH_W - 40)), y: -30, kind, speed: 2 + Math.random() * 2 });
+  }
+  function catchStep() {
+    if (!catchRunning) return;
+    const basketL = catchBasketX, basketR = catchBasketX + 48;
+    catchItems.forEach((it) => { it.y += it.speed; });
+    // 结算：掉到篮子高度的算接住，掉出底边的消失
+    catchItems = catchItems.filter((it) => {
+      if (it.y >= CATCH_H - 50 && it.y <= CATCH_H - 10) {
+        const cx = it.x + 13;
+        if (cx >= basketL - 6 && cx <= basketR + 6) {
+          if (it.kind === "coin") catchScore += 10;
+          else {
+            catchLives--;
+            $("catchStatus").textContent = "💥 接到炸弹了！还剩 " + catchLives + " 条命。";
+            if (catchLives <= 0) catchEnd("💔 没命了。");
+          }
+          return false;
+        }
+      }
+      return it.y <= CATCH_H;
+    });
+    catchRender();
+  }
+  function catchEnd(msg) {
+    catchRunning = false;
+    [catchStepId, catchSpawnId, catchTimerId].forEach((id) => { if (id) clearInterval(id); });
+    catchStepId = catchSpawnId = catchTimerId = null;
+    if (catchScore > catchBest) {
+      catchBest = catchScore;
+      try { localStorage.setItem(CATCH_KEY, String(catchBest)); } catch (e) { /* 忽略 */ }
+    }
+    $("catchStatus").textContent = msg + "得分 " + catchScore + "，最好 " + catchBest + "。";
+    catchRender();
+  }
+  function catchStart() {
+    if (catchRunning) return;
+    if (catchLives <= 0 || catchTime <= 0) catchReset();
+    catchRunning = true;
+    $("catchStatus").textContent = "金币掉下来了，快接！";
+    if (catchStepId) clearInterval(catchStepId);
+    if (catchSpawnId) clearInterval(catchSpawnId);
+    if (catchTimerId) clearInterval(catchTimerId);
+    catchStepId = setInterval(catchStep, 16);
+    catchSpawnId = setInterval(catchSpawn, 700);
+    catchTimerId = setInterval(() => {
+      catchTime--;
+      if (catchTime <= 0) { catchTime = 0; catchEnd("⏰ 时间到！"); return; }
+      catchRender();
+    }, 1000);
+  }
+  function catchReset() {
+    [catchStepId, catchSpawnId, catchTimerId].forEach((id) => { if (id) clearInterval(id); });
+    catchStepId = catchSpawnId = catchTimerId = null;
+    catchScore = 0; catchLives = 3; catchTime = 30; catchBasketX = 140; catchItems = []; catchRunning = false;
+    $("catchStatus").textContent = "点开始，金币就往下掉。";
+    catchRender();
+  }
+  function catchMoveBasket(clientX) {
+    const stage = $("catchStage");
+    const rect = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, width: CATCH_W };
+    const scale = CATCH_W / (rect.width || CATCH_W);
+    catchBasketX = Math.max(0, Math.min(CATCH_W - 48, (clientX - rect.left) * scale - 24));
+    $("catchBasket").style.left = catchBasketX + "px";
+  }
+  $("catchStage").addEventListener("pointerdown", (e) => catchMoveBasket(e.clientX));
+  $("catchStage").addEventListener("pointermove", (e) => { if (e.buttons) catchMoveBasket(e.clientX); });
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-catch").classList.contains("hidden")) return;
+      if (e.key === "ArrowLeft") { catchBasketX = Math.max(0, catchBasketX - 20); $("catchBasket").style.left = catchBasketX + "px"; if (e.preventDefault) e.preventDefault(); }
+      if (e.key === "ArrowRight") { catchBasketX = Math.min(CATCH_W - 48, catchBasketX + 20); $("catchBasket").style.left = catchBasketX + "px"; if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  $("catchStartBtn").addEventListener("click", catchStart);
+  $("catchResetBtn").addEventListener("click", catchReset);
+  catchReset();
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -4155,6 +4468,20 @@
     linkupSet(board) { linkupBoard = board.slice(); linkupLeft = new Set(linkupBoard.filter(Boolean)).size; linkupPicked = -1; linkupOver = false; linkupRender(); },
     linkupCanConnect(a, b) { return linkupCanConnect(a, b); },
     linkupPick(i) { linkupPick(i); },
+    get slide15() { return { board: slide15Board.slice(), moves: slide15Moves, best: slide15Best }; },
+    slide15Move(i) { slide15Move(i); },
+    slide15Set(board) { slide15Board = board.slice(); slide15Moves = 0; slide15Render(); },
+    get jump() { return { score: jumpScore, power: jumpPower, charX: jumpCharX, platA: { x: jumpPlatA.x, w: jumpPlatA.w }, platB: { x: jumpPlatB.x, w: jumpPlatB.w }, over: jumpOver, best: jumpBest }; },
+    jumpSet(platB, charX) { jumpPlatB = { x: platB.x, w: platB.w }; jumpCharX = charX; jumpOver = false; jumpRender(); },
+    jumpCharge(power) { jumpCharging = true; jumpPower = power; },
+    jumpRelease() { jumpRelease(); },
+    get spotdiff() { return { level: spotdiffLevel, score: spotdiffScore, time: spotdiffTime, gridSize: spotdiffGridSize, odd: spotdiffOdd, base: spotdiffBase, oddEmoji: spotdiffOddEmoji, running: spotdiffRunning, best: spotdiffBest }; },
+    spotdiffSet(base, oddEmoji, odd, gridSize) { spotdiffBase = base; spotdiffOddEmoji = oddEmoji; spotdiffOdd = odd; spotdiffGridSize = gridSize; spotdiffRunning = true; spotdiffRender(); },
+    spotdiffPick(i) { spotdiffPick(i); },
+    get catchGame() { return { score: catchScore, lives: catchLives, time: catchTime, basketX: catchBasketX, items: catchItems.map((it) => ({ x: it.x, y: it.y, kind: it.kind })), running: catchRunning, best: catchBest }; },
+    catchStart() { catchStart(); },
+    catchStep() { catchStep(); },
+    catchSet(items, basketX) { catchItems = items.map((it) => ({ x: it.x, y: it.y, kind: it.kind, speed: it.speed || 3 })); if (basketX !== undefined) catchBasketX = basketX; catchRunning = true; catchRender(); },
   };
 
   renderTimer();

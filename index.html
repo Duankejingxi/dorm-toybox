@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">五十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">五十四个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -832,8 +832,62 @@
     </div>
   </section>
 
+  <!-- 数字华容道 -->
+  <section class="panel toy hidden" id="toy-slide15">
+    <h2>🔢 数字华容道</h2>
+    <p class="hint">点空格旁边的数字滑过去，把 1–15 按顺序排好。步数越少越厉害，最好成绩存本机。</p>
+    <div class="slide15-grid" id="slide15Grid"></div>
+    <p class="result-line" id="slide15Status">已走 0 步 · 最好 — 步</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="slide15ShuffleBtn">打乱 🔀</button>
+      <button class="btn ghost-btn small" id="slide15ResetBtn">复原 ↺</button>
+    </div>
+  </section>
+
+  <!-- 跳一跳 -->
+  <section class="panel toy hidden" id="toy-jump">
+    <h2>🐸 跳一跳</h2>
+    <p class="hint">按住屏幕蓄力，松手起跳。跳到下一个台子上 +1 分，跳到正中心 +2 分。掉下去就结束。</p>
+    <div class="jump-stage" id="jumpStage">
+      <div class="jump-platform" id="jumpPlatA"></div>
+      <div class="jump-platform" id="jumpPlatB"></div>
+      <div class="jump-char" id="jumpChar">🐸</div>
+      <div class="jump-power"><div class="jump-power-fill" id="jumpPowerFill"></div></div>
+    </div>
+    <p class="result-line" id="jumpScore">得分 0 · 最好 0</p>
+    <p class="result-line" id="jumpStatus">按住蓄力，松手起跳。</p>
+    <button class="btn gold-btn small" id="jumpResetBtn">再来一局 ↺</button>
+  </section>
+
+  <!-- 找不同 -->
+  <section class="panel toy hidden" id="toy-spotdiff">
+    <h2>🔍 找不同</h2>
+    <p class="hint">一堆图案里藏着一个不一样的，点出来就过关。格子越来越大，60 秒内看你能过几关。</p>
+    <div class="spotdiff-grid" id="spotdiffGrid"></div>
+    <p class="result-line" id="spotdiffStatus">第 1 关 · 得分 0 · 剩 60 秒</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="spotdiffStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="spotdiffResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 接金币 -->
+  <section class="panel toy hidden" id="toy-catch">
+    <h2>🪙 接金币</h2>
+    <p class="hint">左右拖动篮子接金币（+10 分），别接炸弹（扣 1 条命）。30 秒，看你能接多少。</p>
+    <div class="catch-stage" id="catchStage">
+      <div class="catch-basket" id="catchBasket">🧺</div>
+    </div>
+    <p class="result-line" id="catchScore">得分 0 · 命 3 · 剩 30 秒</p>
+    <p class="result-line" id="catchStatus">点开始，金币就往下掉。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="catchStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="catchResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.23 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.24 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

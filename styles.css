@@ -518,3 +518,20 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .linkup-cell.picked { border-color: var(--gold); background: rgba(245, 197, 66, .25); box-shadow: 0 0 10px rgba(245, 197, 66, .4); }
 .linkup-cell.hint { border-color: #7ec8ff; background: rgba(126, 200, 255, .25); }
 .linkup-cell.gone { visibility: hidden; }
+
+/* v1.24：数字华容道 / 跳一跳 / 找不同 / 接金币 */
+.slide15-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-width: 300px; margin: 14px auto 0; }
+.slide15-cell { aspect-ratio: 1; border-radius: 10px; background: linear-gradient(180deg, var(--gold2), #e8a90c); color: #231303; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.slide15-cell.empty { background: rgba(255, 255, 255, .05); cursor: default; }
+.jump-stage { position: relative; height: 220px; max-width: 340px; margin: 14px auto 0; background: linear-gradient(180deg, #1b1b3a, #2a2a55); border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.jump-platform { position: absolute; bottom: 40px; height: 16px; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #8a6d3b, #5d4720); }
+.jump-char { position: absolute; bottom: 56px; left: 20px; font-size: 32px; line-height: 1; transition: left .3s ease-out, bottom .3s ease-out; }
+.jump-power { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, .15); overflow: hidden; }
+.jump-power-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #7ec8ff, #f5c542, #ff5a5a); }
+.spotdiff-grid { display: grid; gap: 6px; max-width: 340px; margin: 14px auto 0; }
+.spotdiff-cell { aspect-ratio: 1; border-radius: 8px; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); font-size: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.spotdiff-cell.wrong { animation: spotdiff-shake .3s ease-out; }
+@keyframes spotdiff-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.catch-stage { position: relative; height: 300px; max-width: 340px; margin: 14px auto 0; background: linear-gradient(180deg, #10101f, #1b1b3a); border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.catch-basket { position: absolute; bottom: 8px; left: 140px; font-size: 40px; line-height: 1; }
+.catch-item { position: absolute; font-size: 26px; line-height: 1; }

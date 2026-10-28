@@ -55,6 +55,10 @@ const TOYS = [
   { id: "breakout", label: "🧱 打砖块" },
   { id: "tictactoe", label: "⭕ 井字棋" },
   { id: "linkup", label: "🔗 连连看" },
+  { id: "slide15", label: "🔢 数字华容道" },
+  { id: "jump", label: "🐸 跳一跳" },
+  { id: "spotdiff", label: "🔍 找不同" },
+  { id: "catch", label: "🪙 接金币" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">四十六个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">五十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -779,8 +779,61 @@
     <button class="btn ghost-btn small" id="gachaResetBtn">清空记录 🧹</button>
   </section>
 
+  <!-- 推箱子 -->
+  <section class="panel toy hidden" id="toy-sokoban">
+    <h2>📦 推箱子</h2>
+    <p class="hint">把所有箱子推到🎯上。手指滑动或方向键移动，箱子只能推不能拉，别推到墙角卡死。共 3 关。</p>
+    <div class="seg-row" id="sokobanLevelRow">
+      <button class="btn seg-btn picked" id="sokobanL1Btn">第 1 关</button>
+      <button class="btn seg-btn" id="sokobanL2Btn">第 2 关</button>
+      <button class="btn seg-btn" id="sokobanL3Btn">第 3 关</button>
+    </div>
+    <div class="sokoban-grid" id="sokobanGrid"></div>
+    <p class="result-line" id="sokobanStatus">滑动或按方向键，开始推箱子。</p>
+    <p class="count-line" id="sokobanStats">已走 0 步</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="sokobanResetBtn">重开本关 ↺</button>
+    </div>
+  </section>
+
+  <!-- 打砖块 -->
+  <section class="panel toy hidden" id="toy-breakout">
+    <h2>🧱 打砖块</h2>
+    <p class="hint">手指或鼠标拖动挡板接住小球，撞碎所有砖块就过关。掉下去扣一条命，共 3 条命。</p>
+    <canvas id="breakoutCanvas" width="340" height="300"></canvas>
+    <p class="result-line" id="breakoutScore">得分 0 · 砖块 18 · 命 3</p>
+    <p class="result-line" id="breakoutStatus">点开始，小球就出发。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="breakoutStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="breakoutResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 井字棋 -->
+  <section class="panel toy hidden" id="toy-tictactoe">
+    <h2>⭕ 井字棋</h2>
+    <p class="hint">你执 ❌ 先手，电脑执 ⭕。电脑算满了所有走法，赢它不容易，能逼平就是高手。</p>
+    <div class="tictactoe-grid" id="tictactoeGrid"></div>
+    <p class="result-line" id="tictactoeStatus">轮到你（❌）落子。</p>
+    <p class="count-line" id="tictactoeStats">胜 0 · 平 0 · 负 0</p>
+    <button class="btn gold-btn small" id="tictactoeResetBtn">再来一局 ↺</button>
+  </section>
+
+  <!-- 连连看 -->
+  <section class="panel toy hidden" id="toy-linkup">
+    <h2>🔗 连连看</h2>
+    <p class="hint">点两个相同的图案，中间的路最多拐 2 个弯就能消掉。全部消完就赢，卡住了可以洗牌或看提示。</p>
+    <div class="linkup-grid" id="linkupGrid"></div>
+    <p class="result-line" id="linkupStatus">剩 12 对 · 用时 0 秒</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="linkupHintBtn">提示 💡</button>
+      <button class="btn ghost-btn small" id="linkupShuffleBtn">洗牌 🔀</button>
+      <button class="btn ghost-btn small" id="linkupResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.22.2 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.23 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

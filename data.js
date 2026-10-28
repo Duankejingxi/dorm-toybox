@@ -51,6 +51,10 @@ const TOYS = [
   { id: "gomoku", label: "⚫ 五子棋" },
   { id: "piano", label: "🎹 迷你钢琴" },
   { id: "gacha", label: "🎴 抽卡模拟器" },
+  { id: "sokoban", label: "📦 推箱子" },
+  { id: "breakout", label: "🧱 打砖块" },
+  { id: "tictactoe", label: "⭕ 井字棋" },
+  { id: "linkup", label: "🔗 连连看" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

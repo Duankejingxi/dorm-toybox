@@ -3700,6 +3700,425 @@
   gachaRenderRates();
   gachaRenderStats();
 
+  /* ---------- 通用滑动绑定（推箱子用；2048 保持原样不动） ---------- */
+  // pointer + touch 双路径，一次触摸只触发一次方向（去重），顺带禁掉页面滚动
+  function bindSwipe(el, onDir) {
+    let start = null, fired = false;
+    function s(x, y) { start = { x, y }; fired = false; }
+    function e(x, y) {
+      if (!start || fired) return;
+      fired = true;
+      const dx = x - start.x, dy = y - start.y;
+      start = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      onDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+    }
+    el.addEventListener("pointerdown", (ev) => s(ev.clientX, ev.clientY));
+    el.addEventListener("pointerup", (ev) => e(ev.clientX, ev.clientY));
+    el.addEventListener("pointercancel", () => { /* 保留起点，等 touchend 兜底 */ });
+    el.addEventListener("touchmove", (ev) => { if (ev.cancelable) ev.preventDefault(); }, { passive: false });
+    el.addEventListener("touchstart", (ev) => { const t = ev.touches && ev.touches[0]; if (t) s(t.clientX, t.clientY); }, { passive: true });
+    el.addEventListener("touchend", (ev) => { const t = ev.changedTouches && ev.changedTouches[0]; if (t) e(t.clientX, t.clientY); });
+  }
+
+  /* ---------- 47. 推箱子 ---------- */
+  const SOKOBAN_LEVELS = [
+    ["#######", "#     #", "# ..  #", "# $$  #", "#  @  #", "#     #", "#######"],
+    ["########", "#      #", "# .  . #", "# $  $ #", "#   $  #", "#  .@  #", "#      #", "########"],
+    ["#########", "#       #", "# . . . #", "# $ $ $ #", "#    #  #", "#  @    #", "#########"],
+  ];
+  let sokobanLevel = 0, sokobanW = 0, sokobanH = 0;
+  let sokobanWalls = null, sokobanTargets = null, sokobanBoxes = [], sokobanPlayer = null;
+  let sokobanMoves = 0, sokobanWon = false;
+  function sokobanLoad(level) {
+    sokobanLevel = level;
+    const rows = SOKOBAN_LEVELS[level];
+    sokobanH = rows.length; sokobanW = rows[0].length;
+    sokobanWalls = new Set(); sokobanTargets = new Set(); sokobanBoxes = [];
+    rows.forEach((r, y) => { [...r].forEach((c, x) => {
+      const k = x + "," + y;
+      if (c === "#") sokobanWalls.add(k);
+      if (c === "." || c === "*" || c === "+") sokobanTargets.add(k);
+      if (c === "@" || c === "+") sokobanPlayer = { x, y };
+      if (c === "$" || c === "*") sokobanBoxes.push({ x, y });
+    }); });
+    sokobanMoves = 0; sokobanWon = false;
+    ["sokobanL1Btn", "sokobanL2Btn", "sokobanL3Btn"].forEach((id, i) => $(id).classList.toggle("picked", i === level));
+    sokobanRender();
+    $("sokobanStatus").textContent = "第 " + (level + 1) + " 关：把所有箱子推到🎯上。";
+    $("sokobanStats").textContent = "已走 0 步";
+  }
+  function sokobanRender() {
+    const grid = $("sokobanGrid");
+    grid.style.gridTemplateColumns = "repeat(" + sokobanW + ", 1fr)";
+    grid.innerHTML = "";
+    for (let y = 0; y < sokobanH; y++) {
+      for (let x = 0; x < sokobanW; x++) {
+        const k = x + "," + y;
+        const cell = document.createElement("div");
+        const isBox = sokobanBoxes.some((b) => b.x === x && b.y === y);
+        const isPlayer = sokobanPlayer && sokobanPlayer.x === x && sokobanPlayer.y === y;
+        const isTarget = sokobanTargets.has(k);
+        cell.className = "sokoban-cell"
+          + (sokobanWalls.has(k) ? " wall" : "")
+          + (isTarget ? " target" : "")
+          + (isBox && isTarget ? " boxdone" : "");
+        if (sokobanWalls.has(k)) cell.textContent = "🧱";
+        else if (isPlayer) cell.textContent = "🧑";
+        else if (isBox) cell.textContent = isTarget ? "✅" : "📦";
+        else if (isTarget) cell.textContent = "🎯";
+        grid.appendChild(cell);
+      }
+    }
+    $("sokobanStats").textContent = "已走 " + sokobanMoves + " 步";
+  }
+  const SOKOBAN_DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  function sokobanMove(dir) {
+    if (sokobanWon || !SOKOBAN_DIRS[dir]) return;
+    const [dx, dy] = SOKOBAN_DIRS[dir];
+    const nx = sokobanPlayer.x + dx, ny = sokobanPlayer.y + dy;
+    if (sokobanWalls.has(nx + "," + ny)) return;
+    const bi = sokobanBoxes.findIndex((b) => b.x === nx && b.y === ny);
+    if (bi !== -1) {
+      const bx = nx + dx, by = ny + dy;
+      if (sokobanWalls.has(bx + "," + by)) return;
+      if (sokobanBoxes.some((b) => b.x === bx && b.y === by)) return;
+      sokobanBoxes[bi] = { x: bx, y: by };
+    }
+    sokobanPlayer = { x: nx, y: ny };
+    sokobanMoves++;
+    if (sokobanBoxes.every((b) => sokobanTargets.has(b.x + "," + b.y))) {
+      sokobanWon = true;
+      $("sokobanStatus").textContent = "🎉 第 " + (sokobanLevel + 1) + " 关通过！用了 " + sokobanMoves + " 步。"
+        + (sokobanLevel < 2 ? " 点第 " + (sokobanLevel + 2) + " 关继续。" : " 三关全通，你是推箱子大师！");
+    }
+    sokobanRender();
+  }
+  bindSwipe($("sokobanGrid"), sokobanMove);
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-sokoban").classList.contains("hidden")) return;
+      const k = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+      if (k) { sokobanMove(k); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  $("sokobanL1Btn").addEventListener("click", () => sokobanLoad(0));
+  $("sokobanL2Btn").addEventListener("click", () => sokobanLoad(1));
+  $("sokobanL3Btn").addEventListener("click", () => sokobanLoad(2));
+  $("sokobanResetBtn").addEventListener("click", () => sokobanLoad(sokobanLevel));
+  sokobanLoad(0);
+
+  /* ---------- 48. 打砖块 ---------- */
+  const BREAKOUT_W = 340, BREAKOUT_H = 300;
+  const BREAKOUT_ROWS = 3, BREAKOUT_COLS = 6;
+  let breakoutBricks = [], breakoutBall = null, breakoutPaddleX = 140;
+  let breakoutScore = 0, breakoutLives = 3, breakoutRunning = false, breakoutTimerId = null;
+  const breakoutCanvas = $("breakoutCanvas");
+  const breakoutCtx = breakoutCanvas.getContext ? breakoutCanvas.getContext("2d") : null;
+  function breakoutBuildBricks() {
+    breakoutBricks = [];
+    for (let r = 0; r < BREAKOUT_ROWS; r++)
+      for (let c = 0; c < BREAKOUT_COLS; c++)
+        breakoutBricks.push({ x: 10 + c * 54, y: 10 + r * 24, w: 48, h: 18, alive: true });
+  }
+  function breakoutReset() {
+    breakoutBuildBricks();
+    breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 };
+    breakoutPaddleX = 140;
+    breakoutScore = 0; breakoutLives = 3; breakoutRunning = false;
+    if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
+    breakoutRender();
+    $("breakoutScore").textContent = "得分 0 · 砖块 18 · 命 3";
+    $("breakoutStatus").textContent = "点开始，小球就出发。";
+  }
+  function breakoutRender() {
+    if (!breakoutCtx) return;
+    breakoutCtx.clearRect(0, 0, BREAKOUT_W, BREAKOUT_H);
+    breakoutCtx.fillStyle = "#f5c542";
+    breakoutBricks.forEach((b) => { if (b.alive) breakoutCtx.fillRect(b.x, b.y, b.w, b.h); });
+    breakoutCtx.fillStyle = "#fff";
+    breakoutCtx.fillRect(breakoutPaddleX, BREAKOUT_H - 14, 60, 10);
+    breakoutCtx.beginPath();
+    breakoutCtx.arc(breakoutBall.x, breakoutBall.y, breakoutBall.r, 0, Math.PI * 2);
+    breakoutCtx.fill();
+  }
+  function breakoutStep() {
+    if (!breakoutRunning) return;
+    const b = breakoutBall;
+    b.x += b.dx; b.y += b.dy;
+    if (b.x - b.r < 0) { b.x = b.r; b.dx = -b.dx; }
+    if (b.x + b.r > BREAKOUT_W) { b.x = BREAKOUT_W - b.r; b.dx = -b.dx; }
+    if (b.y - b.r < 0) { b.y = b.r; b.dy = -b.dy; }
+    // 挡板
+    if (b.dy > 0 && b.y + b.r >= BREAKOUT_H - 14 && b.y + b.r <= BREAKOUT_H - 2
+      && b.x >= breakoutPaddleX - b.r && b.x <= breakoutPaddleX + 60 + b.r) {
+      b.dy = -Math.abs(b.dy);
+      b.dx += ((b.x - (breakoutPaddleX + 30)) / 30) * 0.8; // 打在挡板边缘会变向
+      b.y = BREAKOUT_H - 14 - b.r;
+    }
+    // 砖块
+    for (const br of breakoutBricks) {
+      if (!br.alive) continue;
+      if (b.x + b.r > br.x && b.x - b.r < br.x + br.w && b.y + b.r > br.y && b.y - b.r < br.y + br.h) {
+        br.alive = false;
+        breakoutScore += 10;
+        b.dy = -b.dy;
+        break;
+      }
+    }
+    const left = breakoutBricks.filter((br) => br.alive).length;
+    $("breakoutScore").textContent = "得分 " + breakoutScore + " · 砖块 " + left + " · 命 " + breakoutLives;
+    if (left === 0) {
+      breakoutRunning = false;
+      if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
+      $("breakoutStatus").textContent = "🎉 通关！得分 " + breakoutScore + "，砖块全碎了。";
+      breakoutRender();
+      return;
+    }
+    if (b.y - b.r > BREAKOUT_H) {
+      breakoutLives--;
+      if (breakoutLives <= 0) {
+        breakoutRunning = false;
+        if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
+        $("breakoutStatus").textContent = "💔 没命了。得分 " + breakoutScore + "，点重开再来。";
+      } else {
+        breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 };
+        $("breakoutStatus").textContent = "掉了一个球，还剩 " + breakoutLives + " 条命。";
+      }
+    }
+    breakoutRender();
+  }
+  function breakoutStart() {
+    if (breakoutRunning) return;
+    if (breakoutLives <= 0 || breakoutBricks.filter((b) => b.alive).length === 0) breakoutReset();
+    breakoutRunning = true;
+    $("breakoutStatus").textContent = "小球出发了，别让它掉下去！";
+    if (breakoutTimerId) clearInterval(breakoutTimerId);
+    breakoutTimerId = setInterval(breakoutStep, 16);
+  }
+  function breakoutMovePaddle(clientX) {
+    const rect = breakoutCanvas.getBoundingClientRect ? breakoutCanvas.getBoundingClientRect() : { left: 0, width: BREAKOUT_W };
+    const scale = BREAKOUT_W / (rect.width || BREAKOUT_W);
+    breakoutPaddleX = Math.max(0, Math.min(BREAKOUT_W - 60, (clientX - rect.left) * scale - 30));
+    breakoutRender();
+  }
+  breakoutCanvas.addEventListener("pointerdown", (e) => breakoutMovePaddle(e.clientX));
+  breakoutCanvas.addEventListener("pointermove", (e) => { if (e.buttons) breakoutMovePaddle(e.clientX); });
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-breakout").classList.contains("hidden")) return;
+      if (e.key === "ArrowLeft") { breakoutPaddleX = Math.max(0, breakoutPaddleX - 18); breakoutRender(); if (e.preventDefault) e.preventDefault(); }
+      if (e.key === "ArrowRight") { breakoutPaddleX = Math.min(BREAKOUT_W - 60, breakoutPaddleX + 18); breakoutRender(); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  $("breakoutStartBtn").addEventListener("click", breakoutStart);
+  $("breakoutResetBtn").addEventListener("click", breakoutReset);
+  breakoutReset();
+
+  /* ---------- 49. 井字棋 ---------- */
+  const TICTACTOE_KEY = "dorm-toybox-tictactoe-v1";
+  let tttBoard = new Array(9).fill("");
+  let tttOver = false;
+  let tttRecord = { win: 0, draw: 0, lose: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(TICTACTOE_KEY) || "null");
+    if (saved && typeof saved.win === "number") tttRecord = saved;
+  } catch (e) { /* 忽略 */ }
+  function tttSave() { try { localStorage.setItem(TICTACTOE_KEY, JSON.stringify(tttRecord)); } catch (e) { /* 忽略 */ } }
+  const TTT_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  function tttWinner(bd) {
+    for (const [a, b, c] of TTT_LINES) if (bd[a] && bd[a] === bd[b] && bd[a] === bd[c]) return bd[a];
+    return bd.every((v) => v) ? "draw" : null;
+  }
+  // 极小极大：电脑算满所有走法，永远不输
+  function tttMinimax(bd, isMax, depth) {
+    const w = tttWinner(bd);
+    if (w === "O") return 10 - depth;
+    if (w === "X") return depth - 10;
+    if (w === "draw") return 0;
+    let best = isMax ? -Infinity : Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (bd[i]) continue;
+      bd[i] = isMax ? "O" : "X";
+      const s = tttMinimax(bd, !isMax, depth + 1);
+      bd[i] = "";
+      best = isMax ? Math.max(best, s) : Math.min(best, s);
+    }
+    return best;
+  }
+  function tttAiMove() {
+    let bestScore = -Infinity, bestIdx = -1;
+    for (let i = 0; i < 9; i++) {
+      if (tttBoard[i]) continue;
+      tttBoard[i] = "O";
+      const s = tttMinimax(tttBoard, false, 0);
+      tttBoard[i] = "";
+      if (s > bestScore) { bestScore = s; bestIdx = i; }
+    }
+    if (bestIdx >= 0) tttBoard[bestIdx] = "O";
+    return bestIdx;
+  }
+  function tttRender() {
+    const grid = $("tictactoeGrid");
+    grid.innerHTML = "";
+    const winLine = tttWinner(tttBoard);
+    let winCells = [];
+    if (winLine && winLine !== "draw") {
+      for (const line of TTT_LINES) if (tttBoard[line[0]] === winLine && tttBoard[line[1]] === winLine && tttBoard[line[2]] === winLine) winCells = line;
+    }
+    for (let i = 0; i < 9; i++) {
+      const cell = document.createElement("button");
+      cell.className = "tictactoe-cell" + (winCells.includes(i) ? " win" : "");
+      cell.textContent = tttBoard[i] === "X" ? "❌" : tttBoard[i] === "O" ? "⭕" : "";
+      cell.setAttribute("aria-label", "格子 " + (i + 1));
+      cell.addEventListener("click", () => tttMove(i));
+      grid.appendChild(cell);
+    }
+    $("tictactoeStats").textContent = "胜 " + tttRecord.win + " · 平 " + tttRecord.draw + " · 负 " + tttRecord.lose;
+  }
+  function tttMove(i) {
+    if (tttOver || tttBoard[i]) return;
+    tttBoard[i] = "X";
+    let w = tttWinner(tttBoard);
+    if (w) { tttFinish(w); return; }
+    tttAiMove();
+    w = tttWinner(tttBoard);
+    if (w) tttFinish(w);
+    else $("tictactoeStatus").textContent = "轮到你（❌）落子。";
+    tttRender();
+  }
+  function tttFinish(w) {
+    tttOver = true;
+    if (w === "X") { tttRecord.win++; $("tictactoeStatus").textContent = "🎉 你赢了！电脑也有失手的时候。"; }
+    else if (w === "O") { tttRecord.lose++; $("tictactoeStatus").textContent = "😢 电脑赢了。再来一局报仇？"; }
+    else { tttRecord.draw++; $("tictactoeStatus").textContent = "🤝 平局！能逼平满算的电脑，你很强。"; }
+    tttSave();
+    tttRender();
+  }
+  function tttReset() { tttBoard = new Array(9).fill(""); tttOver = false; $("tictactoeStatus").textContent = "轮到你（❌）落子。"; tttRender(); }
+  $("tictactoeResetBtn").addEventListener("click", tttReset);
+  tttRender();
+
+  /* ---------- 50. 连连看 ---------- */
+  const LINKUP_EMOJIS = ["🐸", "🍜", "📚", "🎮", "🏀", "🎸", "🍕", "🐱", "🚲", "🎧", "🍉", "⚽"];
+  const LINKUP_COLS = 6, LINKUP_ROWS = 4;
+  let linkupBoard = [], linkupPicked = -1, linkupLeft = 0, linkupSeconds = 0, linkupTimerId = null, linkupOver = false;
+  function linkupNewBoard() {
+    const tiles = [];
+    LINKUP_EMOJIS.forEach((em) => { tiles.push(em, em); });
+    for (let i = tiles.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [tiles[i], tiles[j]] = [tiles[j], tiles[i]]; }
+    linkupBoard = tiles;
+    linkupLeft = LINKUP_EMOJIS.length;
+    linkupPicked = -1; linkupOver = false;
+  }
+  function linkupReset() {
+    linkupNewBoard();
+    linkupSeconds = 0;
+    if (linkupTimerId) { clearInterval(linkupTimerId); linkupTimerId = null; }
+    linkupRender();
+    $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 0 秒";
+  }
+  // 计时从第一次翻牌开始算，不在加载时就启动 interval（会抢别的玩具的计时器）
+  function linkupStartTimer() {
+    if (linkupTimerId || linkupOver) return;
+    linkupTimerId = setInterval(() => {
+      if (linkupOver) return;
+      linkupSeconds++;
+      $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 " + linkupSeconds + " 秒";
+    }, 1000);
+  }
+  function linkupRender() {
+    const grid = $("linkupGrid");
+    grid.innerHTML = "";
+    for (let i = 0; i < linkupBoard.length; i++) {
+      const cell = document.createElement("button");
+      cell.className = "linkup-cell" + (linkupPicked === i ? " picked" : "") + (!linkupBoard[i] ? " gone" : "");
+      cell.textContent = linkupBoard[i] || "";
+      cell.setAttribute("aria-label", "牌 " + (i + 1));
+      cell.addEventListener("click", () => linkupPick(i));
+      grid.appendChild(cell);
+    }
+  }
+  function linkupPos(i) { return { x: (i % LINKUP_COLS) + 1, y: Math.floor(i / LINKUP_COLS) + 1 }; }
+  function linkupCellAt(x, y) {
+    if (x < 0 || y < 0 || x > LINKUP_COLS + 1 || y > LINKUP_ROWS + 1) return "#";
+    if (x === 0 || y === 0 || x === LINKUP_COLS + 1 || y === LINKUP_ROWS + 1) return "";
+    return linkupBoard[(y - 1) * LINKUP_COLS + (x - 1)];
+  }
+  // 最多拐 2 个弯能不能连上（BFS，带方向和拐弯数）
+  function linkupCanConnect(a, b) {
+    if (a === b || !linkupBoard[a] || !linkupBoard[b] || linkupBoard[a] !== linkupBoard[b]) return false;
+    const pa = linkupPos(a), pb = linkupPos(b);
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const seen = new Map();
+    const q = [[pa.x, pa.y, -1, 0]];
+    while (q.length) {
+      const [x, y, dir, turns] = q.shift();
+      for (let d = 0; d < 4; d++) {
+        const nt = dir === -1 || dir === d ? turns : turns + 1;
+        if (nt > 2) continue;
+        const nx = x + dirs[d][0], ny = y + dirs[d][1];
+        if (nx === pb.x && ny === pb.y) return true;
+        if (linkupCellAt(nx, ny) !== "") continue;
+        const key = nx + "," + ny + "," + d;
+        if ((seen.get(key) || 99) <= nt) continue;
+        seen.set(key, nt);
+        q.push([nx, ny, d, nt]);
+      }
+    }
+    return false;
+  }
+  function linkupFindPair() {
+    for (let i = 0; i < linkupBoard.length; i++) {
+      if (!linkupBoard[i]) continue;
+      for (let j = i + 1; j < linkupBoard.length; j++) {
+        if (linkupBoard[j] && linkupBoard[i] === linkupBoard[j] && linkupCanConnect(i, j)) return [i, j];
+      }
+    }
+    return null;
+  }
+  function linkupPick(i) {
+    if (linkupOver || !linkupBoard[i]) return;
+    linkupStartTimer();
+    if (linkupPicked === -1) { linkupPicked = i; linkupRender(); return; }
+    if (linkupPicked === i) { linkupPicked = -1; linkupRender(); return; }
+    if (linkupCanConnect(linkupPicked, i)) {
+      linkupBoard[linkupPicked] = ""; linkupBoard[i] = "";
+      linkupLeft--;
+      linkupPicked = -1;
+      if (linkupLeft === 0) {
+        linkupOver = true;
+        if (linkupTimerId) { clearInterval(linkupTimerId); linkupTimerId = null; }
+        $("linkupStatus").textContent = "🎉 全消完了！用时 " + linkupSeconds + " 秒。";
+      } else {
+        $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 " + linkupSeconds + " 秒";
+      }
+    } else {
+      linkupPicked = i;
+    }
+    linkupRender();
+  }
+  $("linkupHintBtn").addEventListener("click", () => {
+    if (linkupOver) return;
+    const pair = linkupFindPair();
+    if (!pair) { $("linkupStatus").textContent = "没有能连的对子了，点洗牌。"; return; }
+    linkupRender();
+    const cells = $("linkupGrid").children;
+    if (cells[pair[0]]) cells[pair[0]].classList.add("hint");
+    if (cells[pair[1]]) cells[pair[1]].classList.add("hint");
+  });
+  $("linkupShuffleBtn").addEventListener("click", () => {
+    if (linkupOver) return;
+    const rest = linkupBoard.filter(Boolean);
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    let k = 0;
+    linkupBoard = linkupBoard.map((v) => (v ? rest[k++] : ""));
+    linkupPicked = -1;
+    linkupRender();
+  });
+  $("linkupResetBtn").addEventListener("click", linkupReset);
+  linkupReset();
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -3722,6 +4141,20 @@
     gachaSetPity(n) { gachaState.pity = n; gachaSave(); },
     gachaPull(n) { gachaPull(n); },
     gachaSetRates(ssr, sr) { gachaSetRates(ssr, sr); },
+    get sokoban() { return { level: sokobanLevel, player: { x: sokobanPlayer.x, y: sokobanPlayer.y }, boxes: sokobanBoxes.map((b) => ({ x: b.x, y: b.y })), moves: sokobanMoves, won: sokobanWon }; },
+    sokobanLoad(level) { sokobanLoad(level); },
+    sokobanMove(dir) { sokobanMove(dir); },
+    get breakout() { return { ball: { x: breakoutBall.x, y: breakoutBall.y, dx: breakoutBall.dx, dy: breakoutBall.dy }, paddleX: breakoutPaddleX, bricks: breakoutBricks.filter((b) => b.alive).length, score: breakoutScore, lives: breakoutLives, running: breakoutRunning }; },
+    breakoutStart() { breakoutStart(); },
+    breakoutStep() { breakoutStep(); },
+    breakoutSet(ball, paddleX) { breakoutBall = { x: ball.x, y: ball.y, dx: ball.dx, dy: ball.dy, r: 6 }; breakoutPaddleX = paddleX; },
+    get tictactoe() { return { board: tttBoard.slice(), over: tttOver, record: { win: tttRecord.win, draw: tttRecord.draw, lose: tttRecord.lose } }; },
+    tictactoeMove(i) { tttMove(i); },
+    tictactoeSet(board) { tttBoard = board.slice(); tttOver = false; tttRender(); },
+    get linkup() { return { board: linkupBoard.slice(), left: linkupLeft, picked: linkupPicked, seconds: linkupSeconds, over: linkupOver }; },
+    linkupSet(board) { linkupBoard = board.slice(); linkupLeft = new Set(linkupBoard.filter(Boolean)).size; linkupPicked = -1; linkupOver = false; linkupRender(); },
+    linkupCanConnect(a, b) { return linkupCanConnect(a, b); },
+    linkupPick(i) { linkupPick(i); },
   };
 
   renderTimer();

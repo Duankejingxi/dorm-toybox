@@ -472,3 +472,33 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .gacha-card.r-ssr { border-color: #f5c542; background: linear-gradient(180deg, rgba(245, 197, 66, .4), rgba(245, 197, 66, .1)); box-shadow: 0 0 14px rgba(245, 197, 66, .5); color: #ffd76a; }
 .gacha-card.r-sr { border-color: #c084fc; background: linear-gradient(180deg, rgba(192, 132, 252, .3), rgba(192, 132, 252, .08)); color: #d8b4fe; }
 .gacha-card.r-r { border-color: var(--line); color: var(--muted); }
+
+/* v1.22：五子棋双人模式 / 抽卡概率自调 / 2048 滑动式 + UI 优化 */
+.seg-row { display: flex; gap: 8px; margin: 12px 0 4px; }
+.seg-btn { flex: 1; padding: 10px 4px; font-size: 14px; margin-top: 0; }
+.seg-btn.picked { background: linear-gradient(180deg, var(--gold2), #e8a90c); color: #231303; border: none; box-shadow: 0 0 14px rgba(245, 197, 66, .4); }
+.gomoku-turn { text-align: center; font-size: 16px; font-weight: 800; color: var(--gold2); margin: 8px 0 0; }
+.gacha-rates { margin-top: 12px; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
+.rate-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.rate-row label { width: 86px; font-size: 14px; font-weight: 800; white-space: nowrap; }
+.rate-row label span { color: var(--gold2); }
+.rate-row input[type="range"] { flex: 1; accent-color: var(--gold2); }
+/* 2048：大数字自动缩小字号，高分格子带金光 */
+.g2048-tile.big { font-size: 20px; }
+.g2048-tile.huge { font-size: 16px; }
+.g2048-tile.glow { box-shadow: 0 0 14px rgba(245, 197, 66, .55); }
+/* 打地鼠：冒头弹一下 */
+@keyframes mole-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.mole-hole.up { animation: mole-pop .18s ease-out; }
+/* 抽卡：入场淡入上浮，SSR 金光呼吸 */
+@keyframes gacha-in { from { opacity: 0; transform: translateY(10px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.gacha-card { animation: gacha-in .25s ease-out; }
+@keyframes ssr-glow { 0%, 100% { box-shadow: 0 0 10px rgba(245, 197, 66, .4); } 50% { box-shadow: 0 0 22px rgba(245, 197, 66, .8); } }
+.gacha-card.r-ssr { animation: gacha-in .25s ease-out, ssr-glow 1.6s ease-in-out infinite; }
+/* 抽屉方块：淡淡的底色 + 金色描边，点中更亮 */
+.tile { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02)); }
+.tile:hover { border-color: rgba(245, 197, 66, .5); }
+.tile.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(245, 197, 66, .35); }
+/* 玩具标题：金色小横线 */
+.toy h2 { position: relative; padding-bottom: 8px; }
+.toy h2::after { content: ""; position: absolute; left: 0; bottom: 0; width: 44px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--gold2), transparent); }

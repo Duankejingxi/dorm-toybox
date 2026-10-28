@@ -2942,7 +2942,7 @@
     g2048 = new Array(16).fill(0); gScore = 0; gOver = false; gWon = false;
     g2048Spawn(); g2048Spawn();
     g2048Render();
-    $("g2048Status").textContent = "滑动或者按方向键，开始合并。";
+    $("g2048Status").textContent = "滑动开始合并。";
   }
   function g2048Render() {
     const grid = $("g2048Grid");
@@ -2950,7 +2950,9 @@
     for (let i = 0; i < 16; i++) {
       const cell = document.createElement("div");
       const v = g2048[i];
-      cell.className = "g2048-tile" + (v ? " filled" : "");
+      cell.className = "g2048-tile" + (v ? " filled" : "")
+        + (v >= 1024 ? " huge" : v >= 128 ? " big" : "")
+        + (v >= 128 ? " glow" : "");
       if (v) {
         cell.textContent = v;
         cell.style.background = G2048_COLORS[v] || "#3c3a32";
@@ -3012,10 +3014,6 @@
     return false;
   }
   $("g2048NewBtn").addEventListener("click", g2048New);
-  $("g2048UpBtn").addEventListener("click", () => g2048Move("up"));
-  $("g2048DownBtn").addEventListener("click", () => g2048Move("down"));
-  $("g2048LeftBtn").addEventListener("click", () => g2048Move("left"));
-  $("g2048RightBtn").addEventListener("click", () => g2048Move("right"));
   let g2048Swipe = null;
   $("g2048Grid").addEventListener("pointerdown", (e) => { g2048Swipe = { x: e.clientX, y: e.clientY }; });
   $("g2048Grid").addEventListener("pointerup", (e) => {
@@ -3325,10 +3323,11 @@
   /* ---------- 44. 五子棋 ---------- */
   const GOMOKU_SIZE = 15;
   let gBoard = new Array(GOMOKU_SIZE * GOMOKU_SIZE).fill(0); // 0 空 1 黑 2 白
-  let gTurn = 1; // 1 黑（你）2 白（电脑）
+  let gTurn = 1; // 1 黑 2 白
   let gWinner = 0; // 0 未分 1 黑胜 2 白胜 3 平
   let gMoves = 0;
   let gLast = -1;
+  let gMode = "solo"; // solo：单人对电脑；duo：双人对战
   const gomokuBoardEl = $("gomokuBoard");
   const gomokuCells = [];
   for (let i = 0; i < GOMOKU_SIZE * GOMOKU_SIZE; i++) {
@@ -3351,10 +3350,17 @@
     const black = gBoard.filter((v) => v === 1).length;
     const white = gBoard.filter((v) => v === 2).length;
     $("gomokuStats").textContent = "已下 " + gMoves + " 手 · 黑 " + black + " : " + white + " 白";
-    if (gWinner === 1) $("gomokuResult").textContent = "🎉 你赢了！五子连珠！";
-    else if (gWinner === 2) $("gomokuResult").textContent = "🤖 电脑赢了。再来一局？";
-    else if (gWinner === 3) $("gomokuResult").textContent = "🤝 平局，棋盘下满了。";
-    else $("gomokuResult").textContent = gTurn === 1 ? "轮到你落子（黑）。" : "电脑思考中……";
+    const turnEl = $("gomokuTurn");
+    if (gWinner === 1) { $("gomokuResult").textContent = gMode === "duo" ? "🎉 黑方赢了！五子连珠！" : "🎉 你赢了！五子连珠！"; turnEl.textContent = "🏁 黑方获胜"; }
+    else if (gWinner === 2) { $("gomokuResult").textContent = gMode === "duo" ? "🎉 白方赢了！五子连珠！" : "🤖 电脑赢了。再来一局？"; turnEl.textContent = "🏁 白方获胜"; }
+    else if (gWinner === 3) { $("gomokuResult").textContent = "🤝 平局，棋盘下满了。"; turnEl.textContent = "🤝 平局"; }
+    else if (gMode === "duo") {
+      $("gomokuResult").textContent = gTurn === 1 ? "轮到黑方落子。" : "轮到白方落子。";
+      turnEl.textContent = gTurn === 1 ? "⚫ 轮到黑方落子" : "⚪ 轮到白方落子";
+    } else {
+      $("gomokuResult").textContent = gTurn === 1 ? "轮到你落子（黑）。" : "电脑思考中……";
+      turnEl.textContent = gTurn === 1 ? "⚫ 轮到你（黑）" : "⚪ 电脑（白）思考中";
+    }
   }
   function gomokuLineLen(idx, color) {
     // 以 idx 为中心，四方向连子数（含自己）
@@ -3413,21 +3419,32 @@
     gomokuRender();
   }
   function gomokuPlace(idx) {
-    if (gWinner !== 0 || gTurn !== 1 || gBoard[idx] !== 0) return;
-    gBoard[idx] = 1;
+    if (gWinner !== 0 || gBoard[idx] !== 0) return;
+    // 单人模式：只接受黑方（你）落子，白方是电脑；双人模式：黑白轮流落子
+    if (gMode === "solo" && gTurn !== 1) return;
+    gBoard[idx] = gTurn;
     gLast = idx;
     gMoves++;
-    if (gomokuLineLen(idx, 1) >= 5) { gWinner = 1; gomokuRender(); return; }
+    if (gomokuLineLen(idx, gTurn) >= 5) { gWinner = gTurn; gomokuRender(); return; }
     if (gBoard.every((v) => v !== 0)) { gWinner = 3; gomokuRender(); return; }
-    gTurn = 2;
+    gTurn = gTurn === 1 ? 2 : 1;
     gomokuRender();
-    setTimeout(gomokuAiMove, 250);
+    if (gMode === "solo") setTimeout(gomokuAiMove, 250);
   }
   function gomokuReset() {
     gBoard = new Array(GOMOKU_SIZE * GOMOKU_SIZE).fill(0);
     gTurn = 1; gWinner = 0; gMoves = 0; gLast = -1;
     gomokuRender();
   }
+  function gomokuSetMode(mode) {
+    if (mode !== "solo" && mode !== "duo") return;
+    gMode = mode;
+    $("gomokuSoloBtn").classList.toggle("picked", mode === "solo");
+    $("gomokuDuoBtn").classList.toggle("picked", mode === "duo");
+    gomokuReset();
+  }
+  $("gomokuSoloBtn").addEventListener("click", () => gomokuSetMode("solo"));
+  $("gomokuDuoBtn").addEventListener("click", () => gomokuSetMode("duo"));
   $("gomokuResetBtn").addEventListener("click", gomokuReset);
   gomokuRender();
 
@@ -3542,6 +3559,37 @@
 
   /* ---------- 46. 抽卡模拟器 ---------- */
   const GACHA_KEY = "dorm-toybox-gacha-v1";
+  const GACHA_RATES_KEY = "dorm-toybox-gacha-rates-v1";
+  const GACHA_DEFAULT_RATES = { ssr: 3, sr: 15 }; // R = 100 - ssr - sr
+  let gachaRates = { ssr: 3, sr: 15 };
+  try {
+    const savedRates = JSON.parse(localStorage.getItem(GACHA_RATES_KEY) || "null");
+    if (savedRates && typeof savedRates.ssr === "number" && typeof savedRates.sr === "number"
+      && savedRates.ssr >= 0 && savedRates.sr >= 0 && savedRates.ssr + savedRates.sr <= 100) gachaRates = savedRates;
+  } catch (e) { /* 忽略 */ }
+  function gachaSaveRates() {
+    try { localStorage.setItem(GACHA_RATES_KEY, JSON.stringify(gachaRates)); } catch (e) { /* 忽略 */ }
+  }
+  function gachaRenderRates() {
+    const r = 100 - gachaRates.ssr - gachaRates.sr;
+    $("gachaSsrVal").textContent = gachaRates.ssr + "%";
+    $("gachaSrVal").textContent = gachaRates.sr + "%";
+    $("gachaRatesLine").textContent = "R " + r + "%（自动补齐到 100%）";
+    $("gachaSsrRange").value = String(gachaRates.ssr);
+    $("gachaSrRange").value = String(gachaRates.sr);
+  }
+  function gachaSetRates(ssr, sr) {
+    // 钳制：SSR 0-50，SR 0-80，两者之和 ≤ 100（R 不能为负）
+    ssr = Math.max(0, Math.min(50, Math.round(ssr)));
+    sr = Math.max(0, Math.min(80, Math.round(sr)));
+    if (ssr + sr > 100) sr = 100 - ssr;
+    gachaRates = { ssr, sr };
+    gachaSaveRates();
+    gachaRenderRates();
+  }
+  $("gachaSsrRange").addEventListener("input", (e) => gachaSetRates(parseInt(e.target.value, 10), gachaRates.sr));
+  $("gachaSrRange").addEventListener("input", (e) => gachaSetRates(gachaRates.ssr, parseInt(e.target.value, 10)));
+  $("gachaRatesResetBtn").addEventListener("click", () => { gachaSetRates(GACHA_DEFAULT_RATES.ssr, GACHA_DEFAULT_RATES.sr); });
   const GACHA_POOL = {
     SSR: [
       { name: "传奇学霸", emoji: "🌟" }, { name: "龙系锦鲤", emoji: "🐉" }, { name: "宿舍之王", emoji: "👑" },
@@ -3564,12 +3612,13 @@
     try { localStorage.setItem(GACHA_KEY, JSON.stringify(gachaState)); } catch (e) { /* 忽略 */ }
   }
   function gachaRollRarity(forceMinSR) {
-    // 90 抽保底 SSR；十连最后一张保底 SR
+    // 90 抽保底 SSR；十连最后一张保底 SR；概率按用户自调的来
     if (gachaState.pity >= 89) return "SSR";
     const roll = Math.random();
-    if (forceMinSR) return roll < 0.18 ? "SSR" : "SR";
-    if (roll < 0.03) return "SSR";
-    if (roll < 0.18) return "SR";
+    const ssrP = gachaRates.ssr / 100, srP = (gachaRates.ssr + gachaRates.sr) / 100;
+    if (forceMinSR) return roll < ssrP ? "SSR" : "SR";
+    if (roll < ssrP) return "SSR";
+    if (roll < srP) return "SR";
     return "R";
   }
   function gachaDrawOne(forceMinSR) {
@@ -3633,6 +3682,7 @@
     gachaRenderStats();
     $("gachaResult").textContent = "记录已清空。";
   });
+  gachaRenderRates();
   gachaRenderStats();
 
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
@@ -3641,19 +3691,22 @@
     tetrisSetCur(x, y) { if (tCur) { tCur.x = x; tCur.y = y; } },
     get g2048() { return { board: g2048.slice(), score: gScore, over: gOver, won: gWon }; },
     g2048Set(board) { g2048 = board.slice(); g2048Render(); },
+    g2048Move(dir) { g2048Move(dir); },
     get mines() { return { cells: mCells, started: mStarted, over: mOver }; },
     get schedule() { return { courses: schCourses.slice() }; },
     get mole() { return { score: moleScore, timeLeft: moleTimeLeft, running: moleRunning, active: [...moleActive], best: moleBest }; },
     moleStart() { moleStart(); },
     moleForce(i) { if (moleRunning && !moleActive.has(i)) { moleActive.add(i); moleHoles[i].classList.add("up"); moleHoles[i].textContent = "🐹"; } },
-    get gomoku() { return { board: gBoard.slice(), turn: gTurn, winner: gWinner, moves: gMoves }; },
+    get gomoku() { return { board: gBoard.slice(), turn: gTurn, winner: gWinner, moves: gMoves, mode: gMode }; },
     gomokuSet(board, turn) { gBoard = board.slice(); gTurn = turn || 1; gWinner = 0; gMoves = gBoard.filter((v) => v !== 0).length; gLast = -1; gomokuRender(); },
     gomokuAiMove() { gomokuAiMove(); },
+    gomokuSetMode(mode) { gomokuSetMode(mode); },
     get piano() { return { lastNote: pianoLastNote }; },
     pianoPlay(name) { pianoPlay(name); },
-    get gacha() { return { total: gachaState.total, ssr: gachaState.ssr, sr: gachaState.sr, r: gachaState.r, pity: gachaState.pity, owned: gachaState.owned.length, lastPull: gachaLastPull.map((c) => c.rarity) }; },
+    get gacha() { return { total: gachaState.total, ssr: gachaState.ssr, sr: gachaState.sr, r: gachaState.r, pity: gachaState.pity, owned: gachaState.owned.length, lastPull: gachaLastPull.map((c) => c.rarity), rates: { ssr: gachaRates.ssr, sr: gachaRates.sr, r: 100 - gachaRates.ssr - gachaRates.sr } }; },
     gachaSetPity(n) { gachaState.pity = n; gachaSave(); },
     gachaPull(n) { gachaPull(n); },
+    gachaSetRates(ssr, sr) { gachaSetRates(ssr, sr); },
   };
 
   renderTimer();

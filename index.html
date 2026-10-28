@@ -658,17 +658,12 @@
   <!-- 2048 -->
   <section class="panel toy hidden" id="toy-game2048">
     <h2>🔢 2048</h2>
-    <p class="hint">方向键或者手指滑动，相同数字的方块撞到一起就合并。拼出 2048 就赢了，拼不下去就输了。最高分存在本机。</p>
+    <p class="hint">手指滑动，相同数字的方块撞到一起就合并。拼出 2048 就赢了，拼不下去就输了。最高分存在本机。电脑上也能用方向键。</p>
     <div class="g2048-grid" id="g2048Grid"></div>
     <p class="result-line" id="g2048Score">得分 0 · 最高 0</p>
-    <p class="result-line" id="g2048Status">滑动或者按方向键，开始合并。</p>
+    <p class="result-line" id="g2048Status">滑动开始合并。</p>
     <div class="beads-controls">
       <button class="btn gold-btn small" id="g2048NewBtn">新一局 🔄</button>
-    </div>
-    <div class="snake-dpad">
-      <span></span><button class="btn ghost-btn" id="g2048UpBtn" aria-label="向上">▲</button><span></span>
-      <button class="btn ghost-btn" id="g2048LeftBtn" aria-label="向左">◀</button><span></span><button class="btn ghost-btn" id="g2048RightBtn" aria-label="向右">▶</button>
-      <span></span><button class="btn ghost-btn" id="g2048DownBtn" aria-label="向下">▼</button><span></span>
     </div>
   </section>
 
@@ -732,7 +727,12 @@
   <!-- 五子棋 -->
   <section class="panel toy hidden" id="toy-gomoku">
     <h2>⚫ 五子棋</h2>
-    <p class="hint">你执黑先行，点棋盘落子；电脑执白，会堵你的四连也会冲自己的五连。五子连珠就赢。</p>
+    <p class="hint">你执黑先行，点棋盘落子；电脑执白，会堵你的四连也会冲自己的五连。五子连珠就赢。也能切双人模式，两个人轮流下。</p>
+    <div class="seg-row" id="gomokuModeRow">
+      <button class="btn seg-btn picked" id="gomokuSoloBtn">🤖 单人对电脑</button>
+      <button class="btn seg-btn" id="gomokuDuoBtn">👥 双人对战</button>
+    </div>
+    <div class="gomoku-turn" id="gomokuTurn">⚫ 轮到黑方落子</div>
     <div class="gomoku-board" id="gomokuBoard"></div>
     <p class="result-line" id="gomokuResult">轮到你落子（黑）。</p>
     <p class="count-line" id="gomokuStats">已下 0 手 · 黑 0 : 0 白</p>
@@ -756,7 +756,19 @@
   <!-- 抽卡模拟器 -->
   <section class="panel toy hidden" id="toy-gacha">
     <h2>🎴 抽卡模拟器</h2>
-    <p class="hint">纯娱乐，不花钱。SSR 3%、SR 15%、R 82%。十连必出 SR 以上，90 抽必出 SSR（保底计数存本机）。抽到的卡都进图鉴。</p>
+    <p class="hint">纯娱乐，不花钱。概率自己调：拉满 SSR 就把把出金，调低就体验非酋。十连必出 SR 以上，90 抽必出 SSR（保底计数存本机）。抽到的卡都进图鉴。</p>
+    <div class="gacha-rates">
+      <div class="rate-row">
+        <label for="gachaSsrRange">SSR <span id="gachaSsrVal">3%</span></label>
+        <input type="range" id="gachaSsrRange" min="0" max="50" value="3" aria-label="SSR 概率">
+      </div>
+      <div class="rate-row">
+        <label for="gachaSrRange">SR <span id="gachaSrVal">15%</span></label>
+        <input type="range" id="gachaSrRange" min="0" max="80" value="15" aria-label="SR 概率">
+      </div>
+      <p class="count-line" id="gachaRatesLine">R 82%（自动补齐到 100%）</p>
+      <button class="btn ghost-btn small" id="gachaRatesResetBtn">概率恢复默认（SSR 3% / SR 15%）</button>
+    </div>
     <div class="gacha-cards" id="gachaCards"></div>
     <p class="result-line" id="gachaResult">还没抽过。先来一发试试手气。</p>
     <p class="count-line" id="gachaStats">已抽 0 · SSR 0 · SR 0 · R 0 · 距 SSR 保底 90 抽</p>
@@ -768,7 +780,7 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.21 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.22 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

@@ -3014,17 +3014,30 @@
     return false;
   }
   $("g2048NewBtn").addEventListener("click", g2048New);
+  // 2048 滑动：pointer + touch 双路径。同一触摸会先后触发 pointerup 和 touchend，
+  // 用 g2048Swiped 去重，只算一次移动。touchmove 里禁掉默认滚动做兜底。
   let g2048Swipe = null;
-  $("g2048Grid").addEventListener("pointerdown", (e) => { g2048Swipe = { x: e.clientX, y: e.clientY }; });
-  $("g2048Grid").addEventListener("pointerup", (e) => {
-    if (!g2048Swipe) return;
-    const dx = e.clientX - g2048Swipe.x, dy = e.clientY - g2048Swipe.y;
+  let g2048Swiped = false;
+  function g2048SwipeStart(x, y) { g2048Swipe = { x, y }; g2048Swiped = false; }
+  function g2048SwipeEnd(x, y) {
+    if (!g2048Swipe || g2048Swiped) return;
+    g2048Swiped = true;
+    const dx = x - g2048Swipe.x, dy = y - g2048Swipe.y;
     g2048Swipe = null;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
     if (Math.abs(dx) > Math.abs(dy)) g2048Move(dx > 0 ? "right" : "left"); else g2048Move(dy > 0 ? "down" : "up");
-  });
-  // 手势被浏览器取消（比如系统手势）时清掉起点，避免下次滑动从旧起点算
-  $("g2048Grid").addEventListener("pointercancel", () => { g2048Swipe = null; });
+  }
+  const g2048GridEl = $("g2048Grid");
+  g2048GridEl.addEventListener("pointerdown", (e) => g2048SwipeStart(e.clientX, e.clientY));
+  g2048GridEl.addEventListener("pointerup", (e) => g2048SwipeEnd(e.clientX, e.clientY));
+  // 手势被浏览器取消（比如系统手势）时不清起点，留给 touchend 兜底完成这一次滑动；
+  // 下一次触摸开始时会重新设起点，不会用旧起点算。
+  g2048GridEl.addEventListener("pointercancel", () => { /* 保留起点，等 touchend 兜底 */ });
+  // 有些手机浏览器不认父元素的 touch-action，手指落在格子上时仍会翻页：
+  // 在 touchmove 里直接禁掉默认滚动（必须是非被动监听，否则 preventDefault 无效）。
+  g2048GridEl.addEventListener("touchmove", (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  g2048GridEl.addEventListener("touchstart", (e) => { const t = e.touches && e.touches[0]; if (t) g2048SwipeStart(t.clientX, t.clientY); }, { passive: true });
+  g2048GridEl.addEventListener("touchend", (e) => { const t = e.changedTouches && e.changedTouches[0]; if (t) g2048SwipeEnd(t.clientX, t.clientY); });
   if (document.addEventListener) {
     document.addEventListener("keydown", (e) => {
       if ($("toy-game2048").classList.contains("hidden")) return;

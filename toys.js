@@ -280,7 +280,7 @@
   $("drawFortuneBtn").addEventListener("click", () => {
     const f = pick(FORTUNES);
     const saved = { day: todayStr(), tier: f.tier, text: f.text };
-    localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved));
+    try { localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved)); } catch (e) { /* 存储不可用时仍可抽签 */ }
     renderFortune(saved);
   });
   renderFortune(loadFortune());
@@ -361,6 +361,8 @@
   let remaining = focusSeconds;
   let timerId = null;
   let tomatoesToday = 0;
+  let timerDeadline = null;
+  let tomatoDay = todayStr();
   try {
     const saved = JSON.parse(localStorage.getItem(TOMATO_KEY) || "null");
     if (saved && saved.day === todayStr()) tomatoesToday = saved.count || 0;
@@ -378,7 +380,7 @@
     $("tomatoCount").textContent = "今天已完成 " + tomatoesToday + " 个番茄";
   }
   function saveTomatoes() {
-    localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday }));
+    try { localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: tomatoDay, count: tomatoesToday })); } catch (e) { /* 存储不可用不影响计时 */ }
   }
   // 时长可改：15 / 25 / 45 / 60 分钟，改了就重置
   [15, 25, 45, 60].forEach((m) => {
@@ -388,6 +390,7 @@
     b.setAttribute("data-minutes", String(m));
     b.addEventListener("click", () => {
       if (timerId) { clearInterval(timerId); timerId = null; }
+      timerDeadline = null;
       focusSeconds = m * 60;
       remaining = focusSeconds;
       $("timerStartBtn").textContent = "开始专注 ▶";
@@ -399,8 +402,27 @@
     });
     $("timerDurations").appendChild(b);
   });
+  function tickTimer() {
+    if (timerDeadline === null) return;
+    remaining = Math.max(0, Math.ceil((timerDeadline - Date.now()) / 1000));
+    if (remaining === 0) {
+      clearInterval(timerId);
+      timerId = null;
+      timerDeadline = null;
+      if (tomatoDay !== todayStr()) { tomatoDay = todayStr(); tomatoesToday = 0; }
+      tomatoesToday++;
+      saveTomatoes();
+      $("timerStartBtn").textContent = "再来一个 🍅";
+      $("timerStatus").textContent = "🎉 到点了！起来走走、喝口水，完成了第 " + tomatoesToday + " 个番茄。";
+    }
+    renderTimer();
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tickTimer(); });
   $("timerStartBtn").addEventListener("click", () => {
     if (timerId) {
+      tickTimer();
+      if (!timerId) return;
+      timerDeadline = null;
       clearInterval(timerId);
       timerId = null;
       $("timerStartBtn").textContent = "继续专注 ▶";
@@ -409,26 +431,17 @@
     }
     if (remaining === 0) remaining = focusSeconds;
     $("timerStartBtn").textContent = "暂停 ⏸";
-    $("timerStatus").textContent = "专注中……手机翻过去，这 25 分钟只干一件事。";
-    timerId = setInterval(() => {
-      remaining--;
-      renderTimer();
-      if (remaining <= 0) {
-        clearInterval(timerId);
-        timerId = null;
-        tomatoesToday++;
-        saveTomatoes();
-        renderTimer();
-        $("timerStartBtn").textContent = "再来一个 🍅";
-        $("timerStatus").textContent = "🎉 到点了！起来走走、喝口水，完成了第 " + tomatoesToday + " 个番茄。";
-      }
-    }, 1000);
+    $("timerStatus").textContent = "专注中……手机翻过去，这 " + (focusSeconds / 60) + " 分钟只干一件事。";
+    timerDeadline = Date.now() + remaining * 1000;
+    timerId = setInterval(tickTimer, 250);
+
   });
   $("timerResetBtn").addEventListener("click", () => {
     if (timerId) { clearInterval(timerId); timerId = null; }
+    timerDeadline = null;
     remaining = focusSeconds;
     $("timerStartBtn").textContent = "开始专注 ▶";
-    $("timerStatus").textContent = "已重置。先想好这 25 分钟要干什么。";
+    $("timerStatus").textContent = "已重置。先想好这 " + (focusSeconds / 60) + " 分钟要干什么。";
     renderTimer();
   });
   /* ---------- 7. 随机分组 ---------- */

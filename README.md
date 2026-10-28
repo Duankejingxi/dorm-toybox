@@ -117,3 +117,21 @@ python3 -m http.server 8000
 - `toys.js` — 每个玩具几十行逻辑，数独带生成器 + 求解器
 
 无框架、无构建、无后端。MIT License。
+
+## 回归验证
+
+测试工具仅用于开发，网页运行仍然零依赖。
+
+```sh
+npm ci
+npx playwright install chromium
+npm test
+```
+
+可通过 `CHROMIUM_PATH` 指定已安装的 Chromium。测试会启动本机临时 HTTP 服务。
+
+### 稳定性更新
+
+- 番茄钟按截止时间计时，后台恢复后自动校准；暂停、重置和切换时长保持一致。
+- 提示语跟随所选时长，跨日完成重置今日计数。
+- 存储不可用时，番茄钟与今日运势仍可正常使用。

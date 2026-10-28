@@ -47,6 +47,10 @@ const TOYS = [
   { id: "game2048", label: "🔢 2048" },
   { id: "mines", label: "💣 扫雷" },
   { id: "schedule", label: "📅 课程表" },
+  { id: "mole", label: "🔨 打地鼠" },
+  { id: "gomoku", label: "⚫ 五子棋" },
+  { id: "piano", label: "🎹 迷你钢琴" },
+  { id: "gacha", label: "🎴 抽卡模拟器" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

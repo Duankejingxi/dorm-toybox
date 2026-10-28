@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">四十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">四十六个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
@@ -719,8 +719,56 @@
     <button class="btn ghost-btn small" id="schClearBtn">清空课程表 🧹</button>
   </section>
 
+  <!-- 打地鼠 -->
+  <section class="panel toy hidden" id="toy-mole">
+    <h2>🔨 打地鼠</h2>
+    <p class="hint">30 秒，看见地鼠冒头就敲它。敲中 +1 分，敲空不扣分。宿舍纪录等你破。</p>
+    <p class="count-line" id="moleStats">得分 0 · 剩余 30 秒 · 最好 0</p>
+    <div class="mole-grid" id="moleGrid"></div>
+    <p class="result-line" id="moleResult">点开始，地鼠就要冒头了。</p>
+    <button class="btn gold-btn" id="moleStartBtn">开始 ▶</button>
+  </section>
+
+  <!-- 五子棋 -->
+  <section class="panel toy hidden" id="toy-gomoku">
+    <h2>⚫ 五子棋</h2>
+    <p class="hint">你执黑先行，点棋盘落子；电脑执白，会堵你的四连也会冲自己的五连。五子连珠就赢。</p>
+    <div class="gomoku-board" id="gomokuBoard"></div>
+    <p class="result-line" id="gomokuResult">轮到你落子（黑）。</p>
+    <p class="count-line" id="gomokuStats">已下 0 手 · 黑 0 : 0 白</p>
+    <button class="btn gold-btn small" id="gomokuResetBtn">重新开局 ↺</button>
+  </section>
+
+  <!-- 迷你钢琴 -->
+  <section class="panel toy hidden" id="toy-piano">
+    <h2>🎹 迷你钢琴</h2>
+    <p class="hint">点琴键就能弹，也能用键盘 A S D F G H J（白键）和 W E T Y U（黑键）。下面有两首现成的儿歌，点一下自动弹。</p>
+    <div class="piano-keys" id="pianoKeys"></div>
+    <p class="result-line" id="pianoResult">还没弹过。</p>
+    <p class="count-line" id="pianoLast"></p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="pianoSong1Btn">🎵 小星星</button>
+      <button class="btn gold-btn small" id="pianoSong2Btn">🐯 两只老虎</button>
+      <button class="btn ghost-btn small" id="pianoStopBtn">停 ⏹</button>
+    </div>
+  </section>
+
+  <!-- 抽卡模拟器 -->
+  <section class="panel toy hidden" id="toy-gacha">
+    <h2>🎴 抽卡模拟器</h2>
+    <p class="hint">纯娱乐，不花钱。SSR 3%、SR 15%、R 82%。十连必出 SR 以上，90 抽必出 SSR（保底计数存本机）。抽到的卡都进图鉴。</p>
+    <div class="gacha-cards" id="gachaCards"></div>
+    <p class="result-line" id="gachaResult">还没抽过。先来一发试试手气。</p>
+    <p class="count-line" id="gachaStats">已抽 0 · SSR 0 · SR 0 · R 0 · 距 SSR 保底 90 抽</p>
+    <div class="btn-row">
+      <button class="btn gold-btn" id="gachaOneBtn">单抽 1 次</button>
+      <button class="btn gold-btn" id="gachaTenBtn">十连 10 次</button>
+    </div>
+    <button class="btn ghost-btn small" id="gachaResetBtn">清空记录 🧹</button>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.20 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.21 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

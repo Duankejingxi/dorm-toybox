@@ -3227,6 +3227,414 @@
   $("schClearBtn").addEventListener("click", () => { schCourses = []; schSave(); schRender(); $("schResult").textContent = "课程表已清空。"; });
   schRender();
 
+  /* ---------- 43. 打地鼠 ---------- */
+  const MOLE_KEY = "dorm-toybox-mole-best-v1";
+  const MOLE_TIME = 30;
+  let moleBest = 0;
+  try { moleBest = parseInt(localStorage.getItem(MOLE_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let moleScore = 0, moleTimeLeft = MOLE_TIME, moleRunning = false;
+  let moleTimerId = null, molePopId = null, moleHideIds = [];
+  const moleActive = new Set();
+  const moleGrid = $("moleGrid");
+  const moleHoles = [];
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement("button");
+    b.className = "mole-hole";
+    b.textContent = "🕳️";
+    b.setAttribute("aria-label", "洞 " + (i + 1));
+    b.addEventListener("click", () => moleWhack(i));
+    moleGrid.appendChild(b);
+    moleHoles.push(b);
+  }
+  function moleRender() {
+    $("moleStats").textContent = "得分 " + moleScore + " · 剩余 " + moleTimeLeft + " 秒 · 最好 " + moleBest;
+  }
+  function molePop() {
+    if (!moleRunning) return;
+    const free = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => !moleActive.has(i));
+    if (free.length === 0) { molePopId = setTimeout(molePop, 400); return; }
+    const i = free[Math.floor(Math.random() * free.length)];
+    moleActive.add(i);
+    moleHoles[i].classList.add("up");
+    moleHoles[i].textContent = "🐹";
+    const hideId = setTimeout(() => {
+      moleActive.delete(i);
+      moleHoles[i].classList.remove("up");
+      moleHoles[i].textContent = "🕳️";
+    }, 800 + Math.random() * 500);
+    moleHideIds.push(hideId);
+    molePopId = setTimeout(molePop, 350 + Math.random() * 450);
+  }
+  function moleWhack(i) {
+    if (!moleRunning) return;
+    if (moleActive.has(i)) {
+      moleActive.delete(i);
+      moleHoles[i].classList.remove("up");
+      moleHoles[i].textContent = "🕳️";
+      moleScore++;
+      $("moleResult").textContent = "🔨 敲中！得分 " + moleScore + "。";
+      moleRender();
+    }
+  }
+  function moleEnd() {
+    moleRunning = false;
+    if (moleTimerId) { clearInterval(moleTimerId); moleTimerId = null; }
+    if (molePopId) { clearTimeout(molePopId); molePopId = null; }
+    moleHideIds.forEach((id) => clearTimeout(id));
+    moleHideIds = [];
+    moleActive.forEach((i) => { moleHoles[i].classList.remove("up"); moleHoles[i].textContent = "🕳️"; });
+    moleActive.clear();
+    const isBest = moleScore > moleBest;
+    if (isBest) {
+      moleBest = moleScore;
+      try { localStorage.setItem(MOLE_KEY, String(moleBest)); } catch (e) { /* 忽略 */ }
+    }
+    $("moleResult").textContent = "⏰ 时间到！得分 " + moleScore + (isBest ? "，新纪录！🎉" : "，最好 " + moleBest + "。");
+    $("moleStartBtn").textContent = "再来一局 ↺";
+    moleRender();
+  }
+  function moleStart() {
+    if (moleRunning) return;
+    moleScore = 0;
+    moleTimeLeft = MOLE_TIME;
+    moleRunning = true;
+    $("moleResult").textContent = "地鼠冒头就敲！";
+    $("moleStartBtn").textContent = "进行中……";
+    moleRender();
+    molePopId = setTimeout(molePop, 300);
+    moleTimerId = setInterval(() => {
+      moleTimeLeft--;
+      moleRender();
+      if (moleTimeLeft <= 0) moleEnd();
+    }, 1000);
+  }
+  $("moleStartBtn").addEventListener("click", moleStart);
+  moleRender();
+  toyLeaveCleanup.mole = () => {
+    if (!moleRunning) return;
+    moleRunning = false;
+    if (moleTimerId) { clearInterval(moleTimerId); moleTimerId = null; }
+    if (molePopId) { clearTimeout(molePopId); molePopId = null; }
+    moleHideIds.forEach((id) => clearTimeout(id));
+    moleHideIds = [];
+    moleActive.forEach((i) => { moleHoles[i].classList.remove("up"); moleHoles[i].textContent = "🕳️"; });
+    moleActive.clear();
+    $("moleStartBtn").textContent = "开始 ▶";
+  };
+
+  /* ---------- 44. 五子棋 ---------- */
+  const GOMOKU_SIZE = 15;
+  let gBoard = new Array(GOMOKU_SIZE * GOMOKU_SIZE).fill(0); // 0 空 1 黑 2 白
+  let gTurn = 1; // 1 黑（你）2 白（电脑）
+  let gWinner = 0; // 0 未分 1 黑胜 2 白胜 3 平
+  let gMoves = 0;
+  let gLast = -1;
+  const gomokuBoardEl = $("gomokuBoard");
+  const gomokuCells = [];
+  for (let i = 0; i < GOMOKU_SIZE * GOMOKU_SIZE; i++) {
+    const b = document.createElement("button");
+    b.className = "gomoku-cell";
+    b.setAttribute("aria-label", "第 " + (Math.floor(i / GOMOKU_SIZE) + 1) + " 行第 " + (i % GOMOKU_SIZE + 1) + " 列");
+    b.addEventListener("click", () => gomokuPlace(i));
+    gomokuBoardEl.appendChild(b);
+    gomokuCells.push(b);
+  }
+  function gomokuRender() {
+    gomokuCells.forEach((cell, i) => {
+      cell.innerHTML = "";
+      if (gBoard[i] !== 0) {
+        const s = document.createElement("span");
+        s.className = "gomoku-stone " + (gBoard[i] === 1 ? "black" : "white") + (i === gLast ? " last" : "");
+        cell.appendChild(s);
+      }
+    });
+    const black = gBoard.filter((v) => v === 1).length;
+    const white = gBoard.filter((v) => v === 2).length;
+    $("gomokuStats").textContent = "已下 " + gMoves + " 手 · 黑 " + black + " : " + white + " 白";
+    if (gWinner === 1) $("gomokuResult").textContent = "🎉 你赢了！五子连珠！";
+    else if (gWinner === 2) $("gomokuResult").textContent = "🤖 电脑赢了。再来一局？";
+    else if (gWinner === 3) $("gomokuResult").textContent = "🤝 平局，棋盘下满了。";
+    else $("gomokuResult").textContent = gTurn === 1 ? "轮到你落子（黑）。" : "电脑思考中……";
+  }
+  function gomokuLineLen(idx, color) {
+    // 以 idx 为中心，四方向连子数（含自己）
+    const r = Math.floor(idx / GOMOKU_SIZE), c = idx % GOMOKU_SIZE;
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    let best = 1;
+    dirs.forEach(([dr, dc]) => {
+      let n = 1;
+      for (let k = 1; k < 5; k++) {
+        const rr = r + dr * k, cc = c + dc * k;
+        if (rr < 0 || rr >= GOMOKU_SIZE || cc < 0 || cc >= GOMOKU_SIZE || gBoard[rr * GOMOKU_SIZE + cc] !== color) break;
+        n++;
+      }
+      for (let k = 1; k < 5; k++) {
+        const rr = r - dr * k, cc = c - dc * k;
+        if (rr < 0 || rr >= GOMOKU_SIZE || cc < 0 || cc >= GOMOKU_SIZE || gBoard[rr * GOMOKU_SIZE + cc] !== color) break;
+        n++;
+      }
+      if (n > best) best = n;
+    });
+    return best;
+  }
+  function gomokuScoreCell(idx) {
+    // 电脑（白）落这里的分数：能赢最高，必须堵黑的五连次之，其余按连子数
+    const saved = gBoard[idx];
+    gBoard[idx] = 2;
+    const w = gomokuLineLen(idx, 2);
+    gBoard[idx] = 1;
+    const b = gomokuLineLen(idx, 1);
+    gBoard[idx] = saved;
+    if (w >= 5) return 1000000;
+    if (b >= 5) return 900000;
+    if (w === 4) return 50000;
+    if (b === 4) return 45000;
+    if (w === 3) return 5000;
+    if (b === 3) return 4500;
+    if (w === 2) return 500;
+    if (b === 2) return 450;
+    return 10 + Math.random() * 5;
+  }
+  function gomokuAiMove() {
+    if (gWinner !== 0 || gTurn !== 2) return;
+    let bestIdx = -1, bestScore = -1;
+    for (let i = 0; i < gBoard.length; i++) {
+      if (gBoard[i] !== 0) continue;
+      const s = gomokuScoreCell(i);
+      if (s > bestScore) { bestScore = s; bestIdx = i; }
+    }
+    if (bestIdx === -1) { gWinner = 3; gomokuRender(); return; }
+    gBoard[bestIdx] = 2;
+    gLast = bestIdx;
+    gMoves++;
+    if (gomokuLineLen(bestIdx, 2) >= 5) gWinner = 2;
+    else if (gBoard.every((v) => v !== 0)) gWinner = 3;
+    else gTurn = 1;
+    gomokuRender();
+  }
+  function gomokuPlace(idx) {
+    if (gWinner !== 0 || gTurn !== 1 || gBoard[idx] !== 0) return;
+    gBoard[idx] = 1;
+    gLast = idx;
+    gMoves++;
+    if (gomokuLineLen(idx, 1) >= 5) { gWinner = 1; gomokuRender(); return; }
+    if (gBoard.every((v) => v !== 0)) { gWinner = 3; gomokuRender(); return; }
+    gTurn = 2;
+    gomokuRender();
+    setTimeout(gomokuAiMove, 250);
+  }
+  function gomokuReset() {
+    gBoard = new Array(GOMOKU_SIZE * GOMOKU_SIZE).fill(0);
+    gTurn = 1; gWinner = 0; gMoves = 0; gLast = -1;
+    gomokuRender();
+  }
+  $("gomokuResetBtn").addEventListener("click", gomokuReset);
+  gomokuRender();
+
+  /* ---------- 45. 迷你钢琴 ---------- */
+  const PIANO_NOTES = [
+    { name: "C4", label: "哆", freq: 261.63, key: "a", black: false },
+    { name: "C#4", label: "C#", freq: 277.18, key: "w", black: true },
+    { name: "D4", label: "来", freq: 293.66, key: "s", black: false },
+    { name: "D#4", label: "D#", freq: 311.13, key: "e", black: true },
+    { name: "E4", label: "咪", freq: 329.63, key: "d", black: false },
+    { name: "F4", label: "发", freq: 349.23, key: "f", black: false },
+    { name: "F#4", label: "F#", freq: 369.99, key: "t", black: true },
+    { name: "G4", label: "索", freq: 392.0, key: "g", black: false },
+    { name: "G#4", label: "G#", freq: 415.3, key: "y", black: true },
+    { name: "A4", label: "拉", freq: 440.0, key: "h", black: false },
+    { name: "A#4", label: "A#", freq: 466.16, key: "u", black: true },
+    { name: "B4", label: "西", freq: 493.88, key: "j", black: false },
+  ];
+  let pianoCtx = null;
+  let pianoLastNote = "";
+  let pianoSongTimers = [];
+  const pianoKeyBtns = {}; // note 名字 -> 琴键按钮（不用 document.querySelector，冒烟桩没有它）
+  function pianoAudio() {
+    if (pianoCtx) return pianoCtx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      pianoCtx = new AC();
+      return pianoCtx;
+    } catch (e) { return null; }
+  }
+  function pianoPlay(noteName) {
+    const note = PIANO_NOTES.find((n) => n.name === noteName);
+    if (!note) return;
+    pianoLastNote = note.name + " " + note.label;
+    $("pianoLast").textContent = "上一个音：" + pianoLastNote + "（键盘 " + note.key.toUpperCase() + "）";
+    Object.values(pianoKeyBtns).forEach((el) => el.classList.remove("active"));
+    const btn = pianoKeyBtns[note.name];
+    if (btn) { btn.classList.add("active"); setTimeout(() => btn.classList.remove("active"), 250); }
+    const ctx = pianoAudio();
+    if (!ctx) return;
+    try {
+      if (ctx.state === "suspended") ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = note.freq;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.2);
+    } catch (e) { /* 忽略音频错误 */ }
+  }
+  (function buildPiano() {
+    const wrap = $("pianoKeys");
+    const whites = PIANO_NOTES.filter((n) => !n.black);
+    whites.forEach((note) => {
+      const b = document.createElement("button");
+      b.className = "piano-white";
+      b.setAttribute("data-note", note.name);
+      b.textContent = note.label + " " + note.key.toUpperCase();
+      b.addEventListener("click", () => pianoPlay(note.name));
+      pianoKeyBtns[note.name] = b;
+      wrap.appendChild(b);
+    });
+    // 黑键按白键之间的位置排：C# 在 C/D 之间，D# 在 D/E 之间，F# 在 F/G 之间，G# 在 G/A 之间，A# 在 A/B 之间
+    const blackPos = { "C#4": 1, "D#4": 2, "F#4": 4, "G#4": 5, "A#4": 6 };
+    PIANO_NOTES.filter((n) => n.black).forEach((note) => {
+      const b = document.createElement("button");
+      b.className = "piano-black";
+      b.setAttribute("data-note", note.name);
+      b.style.left = "calc(" + (blackPos[note.name] / 7 * 100) + "% - 5.5%)";
+      b.textContent = note.key.toUpperCase();
+      b.addEventListener("click", () => pianoPlay(note.name));
+      pianoKeyBtns[note.name] = b;
+      wrap.appendChild(b);
+    });
+  })();
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-piano").classList.contains("hidden")) return;
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+      const note = PIANO_NOTES.find((n) => n.key === e.key.toLowerCase());
+      if (note && !e.repeat) pianoPlay(note.name);
+    });
+  }
+  const PIANO_SONGS = {
+    star: ["C4", "C4", "G4", "G4", "A4", "A4", "G4", "F4", "F4", "E4", "E4", "D4", "D4", "C4"],
+    tiger: ["C4", "D4", "E4", "C4", "C4", "D4", "E4", "C4", "E4", "F4", "G4", "E4", "F4", "G4", "G4", "A4", "G4", "F4", "E4", "C4", "G4", "A4", "G4", "F4", "E4", "C4", "C4", "G4", "C4", "C4", "G4", "C4"],
+  };
+  function pianoStopSong() {
+    pianoSongTimers.forEach((id) => clearTimeout(id));
+    pianoSongTimers = [];
+    $("pianoResult").textContent = "停了。";
+  }
+  function pianoPlaySong(key, title) {
+    pianoStopSong();
+    $("pianoResult").textContent = "♪ 正在弹《" + title + "》……";
+    PIANO_SONGS[key].forEach((note, i) => {
+      pianoSongTimers.push(setTimeout(() => {
+        pianoPlay(note);
+        if (i === PIANO_SONGS[key].length - 1) $("pianoResult").textContent = "♪ 《" + title + "》弹完了。";
+      }, i * 450));
+    });
+  }
+  $("pianoSong1Btn").addEventListener("click", () => pianoPlaySong("star", "小星星"));
+  $("pianoSong2Btn").addEventListener("click", () => pianoPlaySong("tiger", "两只老虎"));
+  $("pianoStopBtn").addEventListener("click", pianoStopSong);
+  toyLeaveCleanup.piano = () => pianoStopSong();
+
+  /* ---------- 46. 抽卡模拟器 ---------- */
+  const GACHA_KEY = "dorm-toybox-gacha-v1";
+  const GACHA_POOL = {
+    SSR: [
+      { name: "传奇学霸", emoji: "🌟" }, { name: "龙系锦鲤", emoji: "🐉" }, { name: "宿舍之王", emoji: "👑" },
+    ],
+    SR: [
+      { name: "乐队主唱", emoji: "🎸" }, { name: "摄影大佬", emoji: "📸" }, { name: "球场 MVP", emoji: "🏀" }, { name: "电竞高手", emoji: "🎮" },
+    ],
+    R: [
+      { name: "泡图书馆的", emoji: "📚" }, { name: "干饭人", emoji: "🍜" }, { name: "睡神", emoji: "😴" },
+      { name: "值日标兵", emoji: "🧹" }, { name: "散步达人", emoji: "🚶" }, { name: "刷手机的", emoji: "📱" },
+    ],
+  };
+  let gachaState = { total: 0, ssr: 0, sr: 0, r: 0, pity: 0, owned: [] };
+  try {
+    const saved = JSON.parse(localStorage.getItem(GACHA_KEY) || "null");
+    if (saved && typeof saved.total === "number") gachaState = saved;
+  } catch (e) { /* 忽略 */ }
+  let gachaLastPull = [];
+  function gachaSave() {
+    try { localStorage.setItem(GACHA_KEY, JSON.stringify(gachaState)); } catch (e) { /* 忽略 */ }
+  }
+  function gachaRollRarity(forceMinSR) {
+    // 90 抽保底 SSR；十连最后一张保底 SR
+    if (gachaState.pity >= 89) return "SSR";
+    const roll = Math.random();
+    if (forceMinSR) return roll < 0.18 ? "SSR" : "SR";
+    if (roll < 0.03) return "SSR";
+    if (roll < 0.18) return "SR";
+    return "R";
+  }
+  function gachaDrawOne(forceMinSR) {
+    const rarity = gachaRollRarity(forceMinSR);
+    const card = pick(GACHA_POOL[rarity]);
+    gachaState.total++;
+    if (rarity === "SSR") { gachaState.ssr++; gachaState.pity = 0; }
+    else if (rarity === "SR") { gachaState.sr++; gachaState.pity++; }
+    else { gachaState.r++; gachaState.pity++; }
+    const id = rarity + ":" + card.name;
+    if (!gachaState.owned.includes(id)) gachaState.owned.push(id);
+    gachaSave();
+    return { rarity, name: card.name, emoji: card.emoji };
+  }
+  function gachaRenderCards() {
+    const wrap = $("gachaCards");
+    wrap.innerHTML = "";
+    gachaLastPull.forEach((c) => {
+      const d = document.createElement("div");
+      d.className = "gacha-card r-" + c.rarity.toLowerCase();
+      const em = document.createElement("span");
+      em.textContent = c.emoji;
+      const nm = document.createElement("span");
+      nm.style.fontSize = "12px";
+      nm.textContent = c.name;
+      const rr = document.createElement("span");
+      rr.className = "gacha-rarity";
+      rr.textContent = c.rarity;
+      d.appendChild(em);
+      d.appendChild(nm);
+      d.appendChild(rr);
+      wrap.appendChild(d);
+    });
+  }
+  function gachaRenderStats() {
+    $("gachaStats").textContent = "已抽 " + gachaState.total + " · SSR " + gachaState.ssr + " · SR " + gachaState.sr + " · R " + gachaState.r
+      + " · 距 SSR 保底 " + (90 - gachaState.pity) + " 抽 · 图鉴 " + gachaState.owned.length + "/13";
+  }
+  function gachaPull(n) {
+    gachaLastPull = [];
+    for (let i = 0; i < n; i++) {
+      // 十连最后一张保底 SR
+      gachaLastPull.push(gachaDrawOne(n === 10 && i === 9));
+    }
+    gachaRenderCards();
+    gachaRenderStats();
+    const ssrCount = gachaLastPull.filter((c) => c.rarity === "SSR").length;
+    const srCount = gachaLastPull.filter((c) => c.rarity === "SR").length;
+    $("gachaResult").textContent = n === 1
+      ? "抽到 " + gachaLastPull[0].emoji + " " + gachaLastPull[0].name + "（" + gachaLastPull[0].rarity + "）！"
+      : "十连结果：SSR " + ssrCount + " 张，SR " + srCount + " 张，R " + (10 - ssrCount - srCount) + " 张"
+        + (ssrCount > 0 ? "，出 SSR 了！🎉" : "，没出 SSR，下次再来。");
+  }
+  $("gachaOneBtn").addEventListener("click", () => gachaPull(1));
+  $("gachaTenBtn").addEventListener("click", () => gachaPull(10));
+  $("gachaResetBtn").addEventListener("click", () => {
+    gachaState = { total: 0, ssr: 0, sr: 0, r: 0, pity: 0, owned: [] };
+    gachaLastPull = [];
+    gachaSave();
+    gachaRenderCards();
+    gachaRenderStats();
+    $("gachaResult").textContent = "记录已清空。";
+  });
+  gachaRenderStats();
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -3235,6 +3643,17 @@
     g2048Set(board) { g2048 = board.slice(); g2048Render(); },
     get mines() { return { cells: mCells, started: mStarted, over: mOver }; },
     get schedule() { return { courses: schCourses.slice() }; },
+    get mole() { return { score: moleScore, timeLeft: moleTimeLeft, running: moleRunning, active: [...moleActive], best: moleBest }; },
+    moleStart() { moleStart(); },
+    moleForce(i) { if (moleRunning && !moleActive.has(i)) { moleActive.add(i); moleHoles[i].classList.add("up"); moleHoles[i].textContent = "🐹"; } },
+    get gomoku() { return { board: gBoard.slice(), turn: gTurn, winner: gWinner, moves: gMoves }; },
+    gomokuSet(board, turn) { gBoard = board.slice(); gTurn = turn || 1; gWinner = 0; gMoves = gBoard.filter((v) => v !== 0).length; gLast = -1; gomokuRender(); },
+    gomokuAiMove() { gomokuAiMove(); },
+    get piano() { return { lastNote: pianoLastNote }; },
+    pianoPlay(name) { pianoPlay(name); },
+    get gacha() { return { total: gachaState.total, ssr: gachaState.ssr, sr: gachaState.sr, r: gachaState.r, pity: gachaState.pity, owned: gachaState.owned.length, lastPull: gachaLastPull.map((c) => c.rarity) }; },
+    gachaSetPity(n) { gachaState.pity = n; gachaSave(); },
+    gachaPull(n) { gachaPull(n); },
   };
 
   renderTimer();

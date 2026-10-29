@@ -575,3 +575,41 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .home-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
 .home-grid .tile { aspect-ratio: auto; min-height: 96px; }
 .nav-top { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* v1.28：UI/布局打磨（纯视觉，不改结构不改逻辑） */
+/* 1. 置顶方块：金色描边 + 淡金底，和「全部游戏」拉开视觉区分 */
+#homePinnedGrid .tile {
+  border-color: rgba(245, 197, 66, .55);
+  background: linear-gradient(180deg, rgba(245, 197, 66, .14), rgba(245, 197, 66, .04));
+  box-shadow: 0 2px 12px rgba(245, 197, 66, .12), inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+#homePinnedGrid .tile:active { border-color: var(--gold); box-shadow: 0 0 16px rgba(245, 197, 66, .4); }
+/* 2. 方块按压/悬停过渡：反馈更顺滑，不生硬 */
+.tile { transition: transform .12s ease, border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+/* 3. 抽屉方块改矮：62 个正方形滚太长，改成和主页一样的矮方块 */
+.drawer-list .tile { aspect-ratio: auto; min-height: 88px; }
+.drawer-list .tile-emoji { font-size: 32px; }
+/* 4. 面板质感：顶部加一层淡淡的高光，更有「卡片感」 */
+.panel { box-shadow: 0 10px 40px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .07); }
+/* 5. 按钮质感：基础按钮加内高光，金色按钮加深投影；顶栏按钮保证 44px 触控高度 */
+.btn { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
+.btn:active { transform: scale(.97); }
+.gold-btn { box-shadow: 0 4px 16px rgba(245, 197, 66, .35), inset 0 1px 0 rgba(255, 255, 255, .4); }
+.gold-btn:active { box-shadow: 0 2px 8px rgba(245, 197, 66, .3), inset 0 1px 0 rgba(255, 255, 255, .4); }
+.nav-top .btn { min-height: 44px; display: inline-flex; align-items: center; }
+.big-btn { transition: transform .1s ease, box-shadow .15s ease; }
+/* 6. 焦点可见：键盘/无障碍操作时能看到金色描边 */
+.btn:focus-visible, .tile:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--gold2); outline-offset: 2px;
+}
+/* 7. 搜索框聚焦：金色描边 + 光晕 */
+#toySearch { transition: border-color .15s ease, box-shadow .15s ease; }
+#toySearch:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(245, 197, 66, .22); }
+/* 8. 主页标题和玩具标题统一：金色小横线；两个分区之间加隐形分隔 */
+.home-panel h2 { position: relative; padding-bottom: 8px; }
+.home-panel h2::after { content: ""; position: absolute; left: 0; bottom: 0; width: 44px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--gold2), transparent); }
+.home-panel .home-grid + h2 { margin-top: 26px; padding-top: 18px; border-top: 1px dashed rgba(245, 197, 66, .2); }
+.home-panel .home-grid + h2::after { bottom: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .tile, .btn, .big-btn, #toySearch { transition: none; }
+}

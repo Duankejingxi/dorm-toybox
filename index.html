@@ -16,6 +16,7 @@
   <h1>宿舍<span class="gold">玩具盒</span></h1>
   <p class="subtitle">六十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
+    <button class="btn ghost-btn small" id="homeBtn">🏠 主页</button>
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
   </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
@@ -33,6 +34,16 @@
 <div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">双击屏幕退出</p></div>
 
 <main class="wrap">
+  <!-- 主页：置顶 8 个 + 全部游戏，点一下就玩 -->
+  <section class="panel home-panel" id="toy-home">
+    <h2>📌 置顶推荐</h2>
+    <p class="hint">最常用的 8 个，点一下就玩。</p>
+    <div class="home-grid" id="homePinnedGrid"></div>
+    <h2>全部游戏</h2>
+    <p class="hint">62 个小玩意都在这儿，点一下就玩。</p>
+    <div class="home-grid" id="homeAllGrid"></div>
+  </section>
+
   <!-- 命运大转盘 -->
   <section class="panel toy" id="toy-wheel">
     <h2>🎡 命运大转盘</h2>
@@ -989,7 +1000,7 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.26 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.27 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

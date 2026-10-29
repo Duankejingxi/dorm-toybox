@@ -41,6 +41,14 @@
   function allTiles() {
     return [...drawerNav.querySelectorAll(".tile")];
   }
+  /* v1.27：主页——置顶 8 个 + 全部游戏，点一下就玩（复用抽屉的方块样式） */
+  const homePinnedGrid = $("homePinnedGrid");
+  const homeAllGrid = $("homeAllGrid");
+  PINNED_IDS.map((id) => TOYS.find((t) => t.id === id)).filter(Boolean).forEach((t) => homePinnedGrid.appendChild(makeTile(t)));
+  TOYS.forEach((t) => homeAllGrid.appendChild(makeTile(t)));
+  function allHomeTiles() {
+    return [...homePinnedGrid.querySelectorAll(".tile"), ...homeAllGrid.querySelectorAll(".tile")];
+  }
   /* 退出玩具时收尾：声音、麦克风、待定超时都要停，回来时显示类计时器再续上 */
   const toyLeaveCleanup = {};
   const toyEnterResume = {};
@@ -54,11 +62,27 @@
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
     if (currentToy && currentToy !== id) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
+    $("toy-home").classList.add("hidden");
     $("toy-" + id).classList.remove("hidden");
     allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
+    allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
     currentToy = id;
     if (toyEnterResume[id]) toyEnterResume[id]();
     if (window.location.hash !== "#" + id) window.location.hash = id;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
+  function showHome() {
+    if (currentToy) leaveToy(currentToy);
+    document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
+    $("toy-home").classList.remove("hidden");
+    allTiles().forEach((b) => b.classList.remove("active"));
+    allHomeTiles().forEach((b) => b.classList.remove("active"));
+    currentToy = null;
+    try {
+      if (window.history && window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
+      else window.location.hash = "";
+    } catch (e) { /* 桩里没有 history，忽略 */ }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function openDrawer() {
@@ -70,14 +94,17 @@
     $("drawerOverlay").classList.add("hidden");
   }
   $("menuBtn").addEventListener("click", openDrawer);
+  $("homeBtn").addEventListener("click", showHome);
   $("drawerCloseBtn").addEventListener("click", closeDrawer);
   $("drawerOverlay").addEventListener("click", closeDrawer);
   window.addEventListener("hashchange", () => {
     const id = window.location.hash.slice(1);
+    if (id === "" || id === "home") { if (currentToy) showHome(); return; }
     if (TOYS.some((t) => t.id === id) && id !== currentToy) showToy(id);
   });
-  // 深链：打开 #guess 就直接进数字炸弹，分享给宿舍不用再教怎么点；没 hash 就进转盘
-  showToy(TOYS.some((t) => t.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "wheel");
+  // 深链：打开 #guess 就直接进数字炸弹，分享给宿舍不用再教怎么点；没 hash 就进主页（置顶 + 全部游戏）
+  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
+  else showHome();
 
   /* ---------- 1. 命运大转盘 ---------- */
   const WHEEL_COLORS = ["#f5c542", "#7b5cff", "#ff9d00", "#3ec6a7", "#ff7a6b", "#7ab8ff", "#e58cff", "#8bc34a"];
@@ -1097,13 +1124,16 @@
   slotsResultEl("b").textContent = "等你拉。";
   renderSlotsStats();
 
-  /* ---------- 玩具搜索：搜名字，抽屉自动打开露出结果 ---------- */
+  /* ---------- 玩具搜索：搜名字，主页方块和抽屉方块一起过滤，露出主页结果 ---------- */
   $("toySearch").addEventListener("input", () => {
     const q = $("toySearch").value.trim();
     allTiles().forEach((b) => {
       b.classList.toggle("hidden", q !== "" && !b.textContent.includes(q));
     });
-    if (q !== "") openDrawer();
+    allHomeTiles().forEach((b) => {
+      b.classList.toggle("hidden", q !== "" && !b.textContent.includes(q));
+    });
+    if (q !== "") { closeDrawer(); showHome(); }
   });
 
   /* ---------- 15. 数独 ---------- */

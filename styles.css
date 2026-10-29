@@ -568,3 +568,10 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .make24-num.sel { outline: 3px solid #7ec8ff; }
 .make24-ops { display: flex; gap: 10px; justify-content: center; margin: 14px auto 0; }
 .make24-op { width: 56px; height: 48px; border-radius: 10px; font-size: 22px; font-weight: 800; }
+
+/* v1.27：主页置顶 + 全部游戏（复用抽屉的 tile 样式，一行两个） */
+.home-panel h2 { margin-top: 18px; }
+.home-panel h2:first-child { margin-top: 0; }
+.home-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+.home-grid .tile { aspect-ratio: auto; min-height: 96px; }
+.nav-top { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -67,6 +67,10 @@ const TOYS = [
   { id: "onestroke", label: "✏️ 一笔画" },
   { id: "marble", label: "🔮 弹珠机" },
   { id: "make24", label: "🧮 24点" },
+  { id: "fruitslice", label: "🍉 切水果" },
+  { id: "maze", label: "🌀 走迷宫" },
+  { id: "match3", label: "🍬 消消乐" },
+  { id: "archery", label: "🏹 射箭" },
 ];
 
 const SLOTS_SYMBOLS = ["🍒", "🍋", "🍇", "⭐", "🔔", "💎"];

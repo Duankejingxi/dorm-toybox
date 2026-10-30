@@ -5094,6 +5094,384 @@
   $("make24ResetBtn").addEventListener("click", () => make24LoadSet((make24SetIdx + 1) % MAKE24_SETS.length));
   make24LoadSet(0);
 
+  /* ---------- 63. 切水果 ---------- */
+  const FRUIT_KEY = "dorm-toybox-fruit-best-v1";
+  const FRUIT_W = 340, FRUIT_H = 300;
+  const FRUIT_EMOJI = ["🍎", "🍊", "🍉", "🍋", "🍇"];
+  let fruitBest = 0;
+  try { fruitBest = parseInt(localStorage.getItem(FRUIT_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let fruitScore = 0, fruitLives = 3, fruitItems = [];
+  let fruitRunning = false, fruitOver = false, fruitStepId = null, fruitSpawnId = null;
+  function fruitDraw() {
+    const cv = $("fruitsliceCanvas");
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, FRUIT_W, FRUIT_H);
+    ctx.font = "28px sans-serif";
+    ctx.textAlign = "center";
+    fruitItems.forEach((f) => {
+      if (f.sliced) {
+        ctx.font = "20px sans-serif";
+        ctx.fillText("💥", f.x, f.y);
+        ctx.font = "28px sans-serif";
+      } else {
+        ctx.fillText(f.emoji, f.x, f.y);
+      }
+    });
+  }
+  function fruitSpawn() {
+    if (!fruitRunning || fruitOver) return;
+    const isBomb = Math.random() < 0.18;
+    fruitItems.push({
+      x: 30 + Math.random() * (FRUIT_W - 60),
+      y: FRUIT_H + 20,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -(7 + Math.random() * 3),
+      emoji: isBomb ? "💣" : FRUIT_EMOJI[Math.floor(Math.random() * FRUIT_EMOJI.length)],
+      bomb: isBomb,
+      sliced: false,
+    });
+  }
+  function fruitStep() {
+    if (!fruitRunning || fruitOver) return;
+    fruitItems.forEach((f) => {
+      f.x += f.vx; f.y += f.vy; f.vy += 0.25; // 重力
+    });
+    fruitItems = fruitItems.filter((f) => f.y < FRUIT_H + 40 && !(f.sliced && f.y > FRUIT_H));
+    fruitRender();
+  }
+  function fruitSliceAt(x, y) {
+    if (!fruitRunning || fruitOver) return;
+    fruitItems.forEach((f) => {
+      if (f.sliced) return;
+      if (Math.hypot(f.x - x, f.y - y) < 26) {
+        f.sliced = true;
+        if (f.bomb) {
+          fruitLives--;
+          $("fruitsliceStatus").textContent = "💥 切到炸弹了！还剩 " + fruitLives + " 条命。";
+          if (fruitLives <= 0) fruitEnd("💔 三条命都炸没了。");
+        } else {
+          fruitScore += 10;
+        }
+      }
+    });
+    fruitRender();
+  }
+  function fruitRender() {
+    $("fruitsliceScore").textContent = fruitOver
+      ? "🏁 得分 " + fruitScore + "，最好 " + fruitBest + "。"
+      : "得分 " + fruitScore + " · 命 " + fruitLives + " · 最好 " + fruitBest;
+    fruitDraw();
+  }
+  function fruitEnd(msg) {
+    fruitOver = true; fruitRunning = false;
+    if (fruitStepId) clearInterval(fruitStepId);
+    if (fruitSpawnId) clearInterval(fruitSpawnId);
+    fruitStepId = fruitSpawnId = null;
+    if (fruitScore > fruitBest) {
+      fruitBest = fruitScore;
+      try { localStorage.setItem(FRUIT_KEY, String(fruitBest)); } catch (e) { /* 忽略 */ }
+    }
+    $("fruitsliceStatus").textContent = msg + "得分 " + fruitScore + "，最好 " + fruitBest + "。";
+    fruitRender();
+  }
+  function fruitStart() {
+    if (fruitRunning) return;
+    if (fruitOver) fruitReset();
+    fruitRunning = true;
+    $("fruitsliceStatus").textContent = "切！别碰炸弹！";
+    if (fruitStepId) clearInterval(fruitStepId);
+    if (fruitSpawnId) clearInterval(fruitSpawnId);
+    fruitStepId = setInterval(fruitStep, 16);
+    fruitSpawnId = setInterval(fruitSpawn, 800);
+  }
+  function fruitReset() {
+    if (fruitStepId) clearInterval(fruitStepId);
+    if (fruitSpawnId) clearInterval(fruitSpawnId);
+    fruitStepId = fruitSpawnId = null;
+    fruitScore = 0; fruitLives = 3; fruitItems = []; fruitRunning = false; fruitOver = false;
+    $("fruitsliceStatus").textContent = "点开始，水果就飞起来了。";
+    fruitRender();
+  }
+  function fruitCanvasPos(e) {
+    const cv = $("fruitsliceCanvas");
+    const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: FRUIT_W, height: FRUIT_H };
+    return {
+      x: (e.clientX - rect.left) * FRUIT_W / (rect.width || FRUIT_W),
+      y: (e.clientY - rect.top) * FRUIT_H / (rect.height || FRUIT_H),
+    };
+  }
+  $("fruitsliceCanvas").addEventListener("pointermove", (e) => {
+    if (!e.buttons) return;
+    const p = fruitCanvasPos(e);
+    fruitSliceAt(p.x, p.y);
+  });
+  $("fruitsliceCanvas").addEventListener("pointerdown", (e) => {
+    const p = fruitCanvasPos(e);
+    fruitSliceAt(p.x, p.y);
+  });
+  $("fruitsliceStartBtn").addEventListener("click", fruitStart);
+  $("fruitsliceResetBtn").addEventListener("click", fruitReset);
+  fruitReset();
+
+  /* ---------- 64. 走迷宫 ---------- */
+  // 3 个迷宫：0=路，1=墙，S=起点，E=终点。都用 BFS 验过可解（最短 12/16/12 步）
+  const MAZE_LEVELS = [
+    [
+      ["S", 0, 1, 0, 0, 0, 0],
+      [1, 0, 1, 0, 1, 1, 0],
+      [0, 0, 0, 0, 0, 1, 0],
+      [0, 1, 1, 1, 0, 1, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [1, 1, 0, 1, 1, 1, 0],
+      [0, 0, 0, 0, 0, 0, "E"],
+    ],
+    [
+      ["S", 0, 0, 1, 0, 0, 0],
+      [1, 1, 0, 1, 0, 1, 0],
+      [0, 0, 0, 0, 0, 1, 0],
+      [0, 1, 1, 1, 1, 1, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 1, 1, 1, 1, 1, 1],
+      [0, 0, 0, 0, 0, 0, "E"],
+    ],
+    [
+      ["S", 1, 0, 0, 0, 1, 0],
+      [0, 1, 0, 1, 0, 1, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [1, 1, 0, 1, 1, 1, 0],
+      [0, 0, 0, 0, 0, 1, 0],
+      [0, 1, 1, 1, 0, 1, 0],
+      [0, 0, 0, 0, 0, 0, "E"],
+    ],
+  ];
+  let mazeLevel = 0, mazePR = 0, mazePC = 0, mazeSteps = 0, mazeDone = false;
+  function mazeFindStart() {
+    const lv = MAZE_LEVELS[mazeLevel];
+    for (let r = 0; r < lv.length; r++) for (let c = 0; c < lv[r].length; c++) {
+      if (lv[r][c] === "S") { mazePR = r; mazePC = c; return; }
+    }
+  }
+  function mazeRender() {
+    const lv = MAZE_LEVELS[mazeLevel];
+    const board = $("mazeBoard");
+    board.innerHTML = "";
+    board.style.gridTemplateColumns = "repeat(" + lv[0].length + ", 1fr)";
+    for (let r = 0; r < lv.length; r++) for (let c = 0; c < lv[r].length; c++) {
+      const cell = document.createElement("div");
+      cell.className = "maze-cell";
+      const v = lv[r][c];
+      if (v === 1) cell.classList.add("wall");
+      if (r === mazePR && c === mazePC) { cell.classList.add("player"); cell.textContent = "🟢"; }
+      else if (v === "E") cell.textContent = "🏁";
+      else if (v === "S") cell.textContent = "·";
+      board.appendChild(cell);
+    }
+    $("mazeStatus").textContent = mazeDone
+      ? "🎉 第 " + (mazeLevel + 1) + " 关走出来了！" + (mazeLevel < 2 ? " 点重走进下一关。" : " 全部通关！")
+      : "第 " + (mazeLevel + 1) + " / 3 关 · 步数 " + mazeSteps;
+  }
+  function mazeMove(dir) {
+    if (mazeDone) return;
+    const lv = MAZE_LEVELS[mazeLevel];
+    const d = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[dir];
+    if (!d) return;
+    const nr = mazePR + d[0], nc = mazePC + d[1];
+    if (nr < 0 || nr >= lv.length || nc < 0 || nc >= lv[0].length) return;
+    if (lv[nr][nc] === 1) return; // 撞墙
+    mazePR = nr; mazePC = nc; mazeSteps++;
+    if (lv[nr][nc] === "E") mazeDone = true;
+    mazeRender();
+  }
+  function mazeReset(level) {
+    if (level !== undefined) mazeLevel = level;
+    mazeSteps = 0; mazeDone = false;
+    mazeFindStart();
+    mazeRender();
+  }
+  $("mazeResetBtn").addEventListener("click", () => {
+    if (mazeDone && mazeLevel < 2) mazeReset(mazeLevel + 1);
+    else mazeReset(mazeLevel);
+  });
+  // 滑动走迷宫（复用 bindSwipe 的思路：tile 上也要 touch-action none，CSS 里已加）
+  (function () {
+    const board = $("mazeBoard");
+    let sx = 0, sy = 0, tracking = false;
+    board.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; tracking = true; });
+    board.addEventListener("pointerup", (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (Math.hypot(dx, dy) < 12) return;
+      mazeMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+    });
+  })();
+  if (document.addEventListener) {
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-maze").classList.contains("hidden")) return;
+      const map = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
+      if (map[e.key]) { mazeMove(map[e.key]); if (e.preventDefault) e.preventDefault(); }
+    });
+  }
+  mazeReset(0);
+
+  /* ---------- 65. 消消乐 ---------- */
+  const MATCH3_KEY = "dorm-toybox-match3-best-v1";
+  const MATCH3_EMOJI = ["🍎", "🍊", "🍋", "🍇", "🫐"];
+  const MATCH3_N = 6;
+  let match3Best = 0;
+  try { match3Best = parseInt(localStorage.getItem(MATCH3_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let match3Board = [], match3Score = 0, match3Moves = 0, match3Sel = null;
+  function match3Random() { return MATCH3_EMOJI[Math.floor(Math.random() * MATCH3_EMOJI.length)]; }
+  function match3NewBoard() {
+    // 生成无初始三连的棋盘
+    do {
+      match3Board = [];
+      for (let r = 0; r < MATCH3_N; r++) {
+        match3Board[r] = [];
+        for (let c = 0; c < MATCH3_N; c++) match3Board[r][c] = match3Random();
+      }
+    } while (match3Find().length > 0);
+  }
+  function match3Find() {
+    // 找出所有三连及以上的格子
+    const hit = new Set();
+    for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
+      const v = match3Board[r][c];
+      if (!v) continue;
+      let n = 1;
+      while (c + n < MATCH3_N && match3Board[r][c + n] === v) n++;
+      if (n >= 3) for (let k = 0; k < n; k++) hit.add(r + "," + (c + k));
+      n = 1;
+      while (r + n < MATCH3_N && match3Board[r + n][c] === v) n++;
+      if (n >= 3) for (let k = 0; k < n; k++) hit.add((r + k) + "," + c);
+    }
+    return [...hit];
+  }
+  function match3Collapse() {
+    // 消掉三连，下落补齐，连锁反应一直消到没有三连
+    let total = 0;
+    for (;;) {
+      const hit = match3Find();
+      if (hit.length === 0) break;
+      total += hit.length;
+      hit.forEach((k) => {
+        const [r, c] = k.split(",").map(Number);
+        match3Board[r][c] = null;
+      });
+      for (let c = 0; c < MATCH3_N; c++) {
+        const col = [];
+        for (let r = MATCH3_N - 1; r >= 0; r--) if (match3Board[r][c]) col.push(match3Board[r][c]);
+        while (col.length < MATCH3_N) col.push(match3Random());
+        for (let r = MATCH3_N - 1, i = 0; r >= 0; r--, i++) match3Board[r][c] = col[i];
+      }
+    }
+    return total;
+  }
+  function match3Render() {
+    const board = $("match3Board");
+    board.innerHTML = "";
+    for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
+      const cell = document.createElement("button");
+      cell.className = "match3-cell" + (match3Sel && match3Sel[0] === r && match3Sel[1] === c ? " sel" : "");
+      cell.textContent = match3Board[r][c];
+      cell.setAttribute("data-r", r); cell.setAttribute("data-c", c);
+      cell.addEventListener("click", () => match3Pick(r, c));
+      board.appendChild(cell);
+    }
+    $("match3Score").textContent = "得分 " + match3Score + " · 步数 " + match3Moves + " · 最好 " + match3Best;
+  }
+  function match3Pick(r, c) {
+    if (!match3Sel) { match3Sel = [r, c]; match3Render(); return; }
+    const [pr, pc] = match3Sel;
+    match3Sel = null;
+    if (pr === r && pc === c) { match3Render(); return; }
+    if (Math.abs(pr - r) + Math.abs(pc - c) !== 1) { match3Render(); return; } // 不相邻
+    // 交换
+    const tmp = match3Board[pr][pc];
+    match3Board[pr][pc] = match3Board[r][c];
+    match3Board[r][c] = tmp;
+    const cleared = match3Collapse();
+    if (cleared === 0) {
+      // 没消掉，换回来
+      match3Board[r][c] = match3Board[pr][pc];
+      match3Board[pr][pc] = tmp;
+    } else {
+      match3Score += cleared * 10;
+      match3Moves++;
+      if (match3Score > match3Best) {
+        match3Best = match3Score;
+        try { localStorage.setItem(MATCH3_KEY, String(match3Best)); } catch (e) { /* 忽略 */ }
+      }
+    }
+    match3Render();
+  }
+  function match3Reset() {
+    match3Score = 0; match3Moves = 0; match3Sel = null;
+    match3NewBoard();
+    match3Render();
+  }
+  $("match3ResetBtn").addEventListener("click", match3Reset);
+  match3Reset();
+
+  /* ---------- 66. 射箭 ---------- */
+  const ARCHERY_KEY = "dorm-toybox-archery-best-v1";
+  const ARCHERY_C = 150; // 靶心
+  let archeryBest = 0;
+  try { archeryBest = parseInt(localStorage.getItem(ARCHERY_KEY) || "0", 10) || 0; } catch (e) { /* 忽略 */ }
+  let archeryScore = 0, archeryLeft = 10, archeryShots = [];
+  function archeryDraw() {
+    const cv = $("archeryCanvas");
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 300, 300);
+    // 靶子：5 环
+    const rings = [
+      [100, "#f5f5f5"], [80, "#222"], [60, "#3ec6a7"], [40, "#f5c542"], [20, "#e5484d"],
+    ];
+    rings.forEach(([r, color]) => {
+      ctx.beginPath(); ctx.arc(ARCHERY_C, ARCHERY_C, r, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    });
+    // 箭痕
+    ctx.font = "16px sans-serif"; ctx.textAlign = "center";
+    archeryShots.forEach((s) => ctx.fillText("✖", s.x, s.y));
+  }
+  function archeryShoot(x, y) {
+    if (archeryLeft <= 0) return;
+    const d = Math.hypot(x - ARCHERY_C, y - ARCHERY_C);
+    const pts = d < 20 ? 100 : d < 40 ? 80 : d < 60 ? 60 : d < 80 ? 40 : d < 100 ? 20 : 0;
+    archeryScore += pts;
+    archeryLeft--;
+    archeryShots.push({ x, y });
+    if (archeryLeft <= 0 && archeryScore > archeryBest) {
+      archeryBest = archeryScore;
+      try { localStorage.setItem(ARCHERY_KEY, String(archeryBest)); } catch (e) { /* 忽略 */ }
+    }
+    archeryRender();
+  }
+  function archeryRender() {
+    $("archeryScore").textContent = archeryLeft <= 0
+      ? "🏁 10 支射完了！得分 " + archeryScore + "，最好 " + archeryBest + "。"
+      : "得分 " + archeryScore + " · 剩 " + archeryLeft + " 支 · 最好 " + archeryBest;
+    archeryDraw();
+  }
+  function archeryReset() {
+    archeryScore = 0; archeryLeft = 10; archeryShots = [];
+    archeryRender();
+  }
+  $("archeryCanvas").addEventListener("pointerdown", (e) => {
+    const cv = $("archeryCanvas");
+    const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 300, height: 300 };
+    const x = (e.clientX - rect.left) * 300 / (rect.width || 300);
+    const y = (e.clientY - rect.top) * 300 / (rect.height || 300);
+    archeryShoot(x, y);
+  });
+  $("archeryResetBtn").addEventListener("click", archeryReset);
+  archeryReset();
+
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   window.__toybox = {
     get tetris() { return { board: tBoard, cur: tCur, next: tNext, score: tScore, lines: tLines, level: tLevel, state: tState }; },
@@ -5173,6 +5551,19 @@
     make24LoadSet(idx) { make24LoadSet(idx); },
     make24PickNum(i) { make24PickNum(i); },
     make24Combine(op) { make24Combine(op); },
+    get fruit() { return { score: fruitScore, lives: fruitLives, items: fruitItems.map((f) => ({ x: f.x, y: f.y, emoji: f.emoji, bomb: f.bomb, sliced: f.sliced })), running: fruitRunning, over: fruitOver, best: fruitBest }; },
+    fruitStart() { fruitStart(); },
+    fruitStep() { fruitStep(); },
+    fruitSliceAt(x, y) { fruitSliceAt(x, y); },
+    fruitSet(items) { fruitItems = items.map((f) => ({ x: f.x, y: f.y, vx: 0, vy: 0, emoji: f.emoji, bomb: !!f.bomb, sliced: false })); fruitRunning = true; fruitOver = false; fruitRender(); },
+    get maze() { return { level: mazeLevel, pr: mazePR, pc: mazePC, steps: mazeSteps, done: mazeDone, grid: MAZE_LEVELS[mazeLevel].map((r) => r.slice()) }; },
+    mazeMove(dir) { mazeMove(dir); },
+    mazeSet(level) { mazeReset(level); },
+    get match3() { return { board: match3Board.map((r) => r.slice()), score: match3Score, moves: match3Moves, best: match3Best }; },
+    matchSet(board) { match3Board = board.map((r) => r.slice()); match3Score = 0; match3Moves = 0; match3Sel = null; match3Render(); },
+    matchPick(r, c) { match3Pick(r, c); },
+    get archery() { return { score: archeryScore, left: archeryLeft, shots: archeryShots.slice(), best: archeryBest }; },
+    archeryShoot(x, y) { archeryShoot(x, y); },
   };
 
   renderTimer();

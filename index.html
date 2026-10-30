@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">六十二个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">六十六个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="homeBtn">🏠 主页</button>
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
@@ -40,7 +40,7 @@
     <p class="hint">最常用的 8 个，点一下就玩。</p>
     <div class="home-grid" id="homePinnedGrid"></div>
     <h2>全部游戏</h2>
-    <p class="hint">62 个小玩意都在这儿，点一下就玩。</p>
+    <p class="hint">66 个小玩意都在这儿，点一下就玩。</p>
     <div class="home-grid" id="homeAllGrid"></div>
   </section>
 
@@ -999,8 +999,54 @@
     </div>
   </section>
 
+  <!-- 切水果 -->
+  <section class="panel toy hidden" id="toy-fruitslice">
+    <h2>🍉 切水果</h2>
+    <p class="hint">手指在屏幕上划，切开飞起来的水果 +10 分。别切到 💣，3 条命。</p>
+    <canvas class="fruitslice-canvas" id="fruitsliceCanvas" width="340" height="300"></canvas>
+    <p class="result-line" id="fruitsliceScore">得分 0 · 命 3 · 最好 0</p>
+    <p class="result-line" id="fruitsliceStatus">点开始，水果就飞起来了。</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="fruitsliceStartBtn">开始 ▶</button>
+      <button class="btn ghost-btn small" id="fruitsliceResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 走迷宫 -->
+  <section class="panel toy hidden" id="toy-maze">
+    <h2>🌀 走迷宫</h2>
+    <p class="hint">把 🟢 送到 🏁。手指滑动或按方向键走，撞墙走不动。3 个迷宫。</p>
+    <div class="maze-board" id="mazeBoard"></div>
+    <p class="result-line" id="mazeStatus">第 1 / 3 关 · 步数 0</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="mazeResetBtn">重走 ↺</button>
+    </div>
+  </section>
+
+  <!-- 消消乐 -->
+  <section class="panel toy hidden" id="toy-match3">
+    <h2>🍬 消消乐</h2>
+    <p class="hint">点两个相邻的格子交换，3 个连成一排就消掉。消 1 个 +10 分，看看能连多少。</p>
+    <div class="match3-board" id="match3Board"></div>
+    <p class="result-line" id="match3Score">得分 0 · 步数 0 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="match3ResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
+  <!-- 射箭 -->
+  <section class="panel toy hidden" id="toy-archery">
+    <h2>🏹 射箭</h2>
+    <p class="hint">手指在靶子上点，箭就射到那儿。越靠近红心分越高，10 支箭。</p>
+    <canvas class="archery-canvas" id="archeryCanvas" width="300" height="300"></canvas>
+    <p class="result-line" id="archeryScore">得分 0 · 剩 10 支 · 最好 0</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="archeryResetBtn">重开 ↺</button>
+    </div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v1.28 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.29 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

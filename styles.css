@@ -624,3 +624,12 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .match3-cell { aspect-ratio: 1; border-radius: 8px; background: rgba(255, 255, 255, .06); border: 1px solid var(--line); font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .match3-cell.sel { outline: 3px solid var(--gold); }
 .archery-canvas { display: block; width: 100%; max-width: 300px; margin: 14px auto 0; border-radius: 12px; background: linear-gradient(180deg, #10101f, #1b1b3a); touch-action: none; }
+
+/* v1.30：最近玩过——紧凑横滑条，不抢置顶 8 个的风头 */
+#recentWrap h2 { margin-bottom: 8px; }
+.recent-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.recent-strip::-webkit-scrollbar { display: none; }
+.recent-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px 8px 10px; border-radius: 999px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(245, 197, 66, .12), rgba(245, 197, 66, .04)); color: var(--ink); cursor: pointer; font-size: 13px; }
+.recent-chip:active { transform: scale(.96); border-color: var(--gold); }
+.recent-emoji { font-size: 20px; line-height: 1; }
+.recent-name { font-weight: 700; white-space: nowrap; }

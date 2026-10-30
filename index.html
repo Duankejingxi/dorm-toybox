@@ -36,6 +36,10 @@
 <main class="wrap">
   <!-- 主页：置顶 8 个 + 全部游戏，点一下就玩 -->
   <section class="panel home-panel" id="toy-home">
+    <div id="recentWrap" class="hidden">
+      <h2>🕘 最近玩过</h2>
+      <div class="recent-strip" id="recentStrip"></div>
+    </div>
     <h2>📌 置顶推荐</h2>
     <p class="hint">最常用的 8 个，点一下就玩。</p>
     <div class="home-grid" id="homePinnedGrid"></div>
@@ -1046,16 +1050,12 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.29 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.30 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 
 <script src="data.js"></script>
-<script src="frog-data.js"></script>
-<script src="frog-data-2.js"></script>
-<script src="frog-data-3.js"></script>
-<script src="frog-data-4.js"></script>
-<script src="frog-data-5.js"></script>
+<!-- v1.30：frog-data*.js（1.7MB 奶蛙图片）改为懒加载，点开奶蛙相关玩具时才动态引入 -->
 <script src="toys.js"></script>
 </body>
 </html>

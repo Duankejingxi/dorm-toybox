@@ -93,6 +93,7 @@
       <button class="btn gold-btn" id="roll2Btn">扔 2 颗</button>
       <button class="btn gold-btn" id="roll3Btn">扔 3 颗</button>
     </div>
+    <div id="diceDuelBox"></div>
     <hr class="divider">
     <div class="coin-stage" id="coinStage">🪙</div>
     <p class="result-line" id="coinResult">还没抛过。</p>
@@ -126,16 +127,49 @@
 
   <!-- 番茄钟 -->
   <section class="panel toy hidden" id="toy-timer">
-    <h2>🍅 番茄钟</h2>
-    <p class="hint">选个时长，只干一件事：写作业、背单词、改 PPT。时间到了就起来活动一下，别硬撑。</p>
-    <div class="timer-durations" id="timerDurations"></div>
-    <div class="timer-stage" id="timerDisplay">25:00</div>
-    <p class="result-line" id="timerStatus">还没开始。先想好这 25 分钟要干什么。</p>
-    <div class="btn-row">
-      <button class="btn gold-btn" id="timerStartBtn">开始专注 ▶</button>
-      <button class="btn ghost-btn" id="timerResetBtn">重置 ↺</button>
+    <h2>⏰ 时间工具箱</h2>
+    <p class="hint">番茄专注、秒表计时、正计时——一个工具箱全搞定。</p>
+    <div class="toolbox-tabs" id="timeTabBar">
+      <button class="toolbox-tab active" data-ttab="pomodoro">🍅 番茄钟</button>
+      <button class="toolbox-tab" data-ttab="sw">⏱ 秒表</button>
+      <button class="toolbox-tab" data-ttab="countup">⏳ 正计时</button>
     </div>
-    <p class="count-line" id="tomatoCount">今天已完成 0 个番茄</p>
+    <!-- 番茄钟 -->
+    <div class="toolbox-panel" id="timeTabPomodoro">
+      <div class="timer-durations" id="timerDurations"></div>
+      <div class="timer-ring-wrap">
+        <canvas id="timerRing" width="220" height="220"></canvas>
+        <div class="timer-stage" id="timerDisplay">25:00</div>
+      </div>
+      <p class="result-line" id="timerStatus">还没开始。先想好这段时间要干什么。</p>
+      <div class="btn-row">
+        <button class="btn gold-btn" id="timerStartBtn">开始专注 ▶</button>
+        <button class="btn ghost-btn" id="timerResetBtn">重置 ↺</button>
+      </div>
+      <p class="count-line" id="tomatoCount">今天已完成 0 个番茄</p>
+    </div>
+    <!-- 秒表 -->
+    <div class="toolbox-panel hidden" id="timeTabSw">
+      <div class="sw-stage" id="swTime">00:00.00</div>
+      <div class="btn-row">
+        <button class="btn gold-btn" id="swStartBtn">开始 ▶</button>
+        <button class="btn ghost-btn" id="swLapBtn">计次 ⏺</button>
+        <button class="btn ghost-btn" id="swResetBtn">清零 ↺</button>
+      </div>
+      <ul class="sw-laps" id="swLaps"></ul>
+    </div>
+    <!-- 正计时 -->
+    <div class="toolbox-panel hidden" id="timeTabCountup">
+      <div class="timer-ring-wrap">
+        <canvas id="cuRing" width="220" height="220"></canvas>
+        <div class="timer-stage" id="cuTime">00:00</div>
+      </div>
+      <p class="result-line" id="cuStatus">点开始，从 0 往上计时。适合开会、考试、做饭计时。</p>
+      <div class="btn-row">
+        <button class="btn gold-btn" id="cuStartBtn">开始 ▶</button>
+        <button class="btn ghost-btn" id="cuResetBtn">清零 ↺</button>
+      </div>
+    </div>
   </section>
 
   <!-- 随机分组 -->
@@ -340,20 +374,42 @@
 
   <!-- 极简记账 -->
   <section class="panel toy hidden" id="toy-ledger">
-    <h2>💰 极简记账</h2>
-    <p class="hint">花了多少、收了多少，随手记一笔。只存在你自己手机里，不上传。</p>
-    <div class="ledger-form">
-      <input id="ledgerAmount" type="number" placeholder="金额（元）" aria-label="金额" min="0" step="0.01">
-      <input id="ledgerNote" type="text" placeholder="备注，比如：奶茶" aria-label="备注" maxlength="20">
+    <h2>💰 宿舍账本</h2>
+    <p class="hint">记账 + AA 分摊，一个工具箱全搞定。</p>
+    <div class="toolbox-tabs" id="ledgerTabBar">
+      <button class="toolbox-tab active" data-ltab="ledger">📝 记账</button>
+      <button class="toolbox-tab" data-ltab="aa">🧾 AA 分摊</button>
     </div>
-    <div class="ledger-type">
-      <button class="btn small ghost-btn" id="ledgerInBtn">收入 ＋</button>
-      <button class="btn small gold-btn" id="ledgerOutBtn">支出 －</button>
-      <button class="btn gold-btn small" id="ledgerAddBtn">记一笔 ✎</button>
+    <!-- 记账 -->
+    <div class="toolbox-panel" id="ledgerTabLedger">
+      <p class="hint">花了多少、收了多少，随手记一笔。只存在你自己手机里，不上传。</p>
+      <div class="ledger-form">
+        <input id="ledgerAmount" type="number" placeholder="金额（元）" aria-label="金额" min="0" step="0.01">
+        <input id="ledgerNote" type="text" placeholder="备注，比如：奶茶" aria-label="备注" maxlength="20">
+      </div>
+      <div class="ledger-type">
+        <button class="btn small ghost-btn" id="ledgerInBtn">收入 ＋</button>
+        <button class="btn small gold-btn" id="ledgerOutBtn">支出 －</button>
+        <button class="btn gold-btn small" id="ledgerAddBtn">记一笔 ✎</button>
+      </div>
+      <p class="result-line" id="ledgerTotals">还没记过账。</p>
+      <div class="ledger-chart-wrap"><canvas id="ledgerChart" width="260" height="140"></canvas></div>
+      <ul class="ledger-list" id="ledgerList"></ul>
+      <button class="btn ghost-btn small" id="ledgerClearBtn">全部清空 🗑</button>
     </div>
-    <p class="result-line" id="ledgerTotals">还没记过账。</p>
-    <ul class="ledger-list" id="ledgerList"></ul>
-    <button class="btn ghost-btn small" id="ledgerClearBtn">全部清空 🗑</button>
+    <!-- AA 分摊 -->
+    <div class="toolbox-panel hidden" id="ledgerTabAa">
+      <p class="hint">一顿饭、一单外卖、一笔宿舍开销，总额一填，人均马上算出来。分到分绝不差一分钱。</p>
+      <p class="count-line">总金额（元）</p>
+      <input id="aaTotal" type="number" inputmode="decimal" min="0" step="0.01" placeholder="比如 88.5">
+      <p class="count-line">参与的人（一行一个）</p>
+      <textarea id="aaNames" rows="3" placeholder="阿伟&#10;小明&#10;阿强"></textarea>
+      <p class="count-line">谁先垫付的（可选）</p>
+      <select id="aaPayer" aria-label="垫付人"><option value="">没人垫付，只算人均</option></select>
+      <button class="btn gold-btn" id="aaCalcBtn">算一下 🧾</button>
+      <div id="aaResult"></div>
+      <button class="btn ghost-btn small hidden" id="aaCopyBtn">复制结算文本 📋</button>
+    </div>
   </section>
 
   <!-- 拼豆图纸生成 -->
@@ -396,14 +452,59 @@
 
   <!-- 亲戚计算器 -->
   <section class="panel toy hidden" id="toy-kin">
-    <h2>👨‍👩‍👧 亲戚计算器</h2>
-    <p class="hint">过年走亲戚再也不怕叫错人。点关系，一层一层加上去，最多算 4 层。</p>
-    <p class="kin-chain" id="kinChain">我</p>
-    <p class="result-line" id="kinResult">点下面的关系，算算他该叫什么。</p>
-    <div class="kin-btns" id="kinButtons"></div>
-    <p class="count-line">快捷示例：</p>
-    <div class="kin-btns" id="kinPresets"></div>
-    <button class="btn ghost-btn small" id="kinClearBtn">清除重来 ↺</button>
+    <h2>🧮 实用计算器</h2>
+    <p class="hint">亲戚称呼、汇率换算、BMI——一个工具箱全搞定。</p>
+    <div class="toolbox-tabs" id="calcTabBar">
+      <button class="toolbox-tab active" data-ctab="kin">👨‍👩‍👧 亲戚</button>
+      <button class="toolbox-tab" data-ctab="fx">💱 汇率</button>
+      <button class="toolbox-tab" data-ctab="bmi">⚖️ BMI</button>
+    </div>
+    <!-- 亲戚计算器 -->
+    <div class="toolbox-panel" id="calcTabKin">
+      <p class="hint">过年走亲戚再也不怕叫错人。点关系，一层一层加上去，最多算 4 层。</p>
+      <p class="kin-chain" id="kinChain">我</p>
+      <p class="result-line" id="kinResult">点下面的关系，算算他该叫什么。</p>
+      <div class="kin-btns" id="kinButtons"></div>
+      <p class="count-line">快捷示例：</p>
+      <div class="kin-btns" id="kinPresets"></div>
+      <button class="btn ghost-btn small" id="kinClearBtn">清除重来 ↺</button>
+    </div>
+    <!-- 汇率 -->
+    <div class="toolbox-panel hidden" id="calcTabFx">
+      <p class="hint">出国玩、海淘算账用。离线备用汇率，标了更新日期。</p>
+      <div class="fx-row">
+        <input id="fxAmount" type="number" placeholder="金额" aria-label="金额" min="0" step="0.01" value="100">
+        <select id="fxFrom" aria-label="从这种货币"></select>
+        <span class="fx-arrow">→</span>
+        <select id="fxTo" aria-label="换成这种货币"></select>
+      </div>
+      <p class="result-line" id="fxResult">先填个金额。</p>
+      <p class="count-line" id="fxMeta"></p>
+      <div class="btn-row">
+        <button class="btn ghost-btn small" id="fxSwapBtn">互换 ⇄</button>
+        <button class="btn ghost-btn small" id="fxRefreshBtn">刷新汇率 ↻</button>
+      </div>
+    </div>
+    <!-- BMI -->
+    <div class="toolbox-panel hidden" id="calcTabBmi">
+      <p class="hint">拖滑杆调身高体重，实时出结果。BMI 只是参考，肌肉多的人别当真。</p>
+      <div class="bmi-slider-row">
+        <label>身高 <b id="bmiHeightVal">170</b> cm</label>
+        <input id="bmiHeightSlider" type="range" min="140" max="210" value="170" aria-label="身高滑杆">
+      </div>
+      <div class="bmi-slider-row">
+        <label>体重 <b id="bmiWeightVal">65</b> kg</label>
+        <input id="bmiWeightSlider" type="range" min="35" max="150" value="65" step="0.5" aria-label="体重滑杆">
+      </div>
+      <div class="bmi-form hidden">
+        <input id="bmiHeight" type="number" placeholder="身高（厘米）" aria-label="身高厘米" min="100" max="250">
+        <input id="bmiWeight" type="number" placeholder="体重（公斤）" aria-label="体重公斤" min="20" max="300" step="0.1">
+      </div>
+      <button class="btn gold-btn" id="bmiCalcBtn">算一下 📏</button>
+      <div class="bmi-gauge-wrap"><canvas id="bmiGauge" width="260" height="140"></canvas></div>
+      <p class="result-line" id="bmiResult">先填身高体重。</p>
+      <p class="count-line" id="bmiAdvice"></p>
+    </div>
   </section>
 
   <!-- 汇率计算器 -->
@@ -424,16 +525,32 @@
 
   <!-- 中英日韩翻译器 -->
   <section class="panel toy hidden" id="toy-trans">
-    <h2>🌐 中英日韩翻译</h2>
-    <p class="hint">中文、英语、日语、韩语互翻。用免费翻译接口，联网才能用，翻译结果仅供参考。</p>
-    <textarea id="transInput" rows="3" placeholder="输入要翻译的内容，比如：你好，今天天气不错" aria-label="要翻译的内容"></textarea>
-    <div class="trans-row">
-      <select id="transFrom" aria-label="源语言"></select>
-      <button class="btn ghost-btn small" id="transSwapBtn">⇄</button>
-      <select id="transTo" aria-label="目标语言"></select>
+    <h2>🗣 宿舍黑话</h2>
+    <p class="hint">50 条宿舍常用语，中英日韩对照。点喇叭听发音，搜一搜更快。</p>
+    <div class="toolbox-tabs" id="transTabBar">
+      <button class="toolbox-tab active" data-ttab="slang">🗣 黑话</button>
+      <button class="toolbox-tab" data-ttab="trans">🌐 翻译</button>
     </div>
-    <button class="btn gold-btn" id="transBtn">翻译 ▶</button>
-    <p class="trans-output" id="transOutput">翻译结果会出现在这里。</p>
+    <!-- 黑话 -->
+    <div class="toolbox-panel" id="transTabSlang">
+      <div class="beads-controls">
+        <input id="slangSearch" type="text" maxlength="20" placeholder="搜黑话，比如：干饭、开黑" aria-label="搜索黑话">
+      </div>
+      <div class="slang-list" id="slangList"></div>
+      <p class="result-line" id="slangResult">点喇叭 🔊 听发音。</p>
+    </div>
+    <!-- 翻译（保留旧 UI，测试依赖） -->
+    <div class="toolbox-panel hidden" id="transTabTrans">
+      <p class="hint">中文、英语、日语、韩语互翻。用免费翻译接口，联网才能用，翻译结果仅供参考。</p>
+      <textarea id="transInput" rows="3" placeholder="输入要翻译的内容，比如：你好，今天天气不错" aria-label="要翻译的内容"></textarea>
+      <div class="trans-row">
+        <select id="transFrom" aria-label="源语言"></select>
+        <button class="btn ghost-btn small" id="transSwapBtn">⇄</button>
+        <select id="transTo" aria-label="目标语言"></select>
+      </div>
+      <button class="btn gold-btn" id="transBtn">翻译 ▶</button>
+      <p class="trans-output" id="transOutput">翻译结果会出现在这里。</p>
+    </div>
   </section>
 
   <!-- 指南针 -->
@@ -517,6 +634,7 @@
   <section class="panel toy hidden" id="toy-duty">
     <h2>🧹 宿舍值日表</h2>
     <p class="hint">写上室友名字，一键排好这周的值日表：每天一个人，轮着来。今天那行会标亮，排完点复制发群里。</p>
+    <div class="duty-today-big hidden" id="dutyTodayBig"></div>
     <p class="count-line">室友名字（一行一个）</p>
     <textarea id="dutyNames" rows="3" placeholder="阿伟&#10;小明&#10;阿强&#10;老陈"></textarea>
     <div class="duty-tasks" id="dutyTasks"></div>
@@ -526,6 +644,7 @@
         <option value="2">排 2 周</option>
         <option value="4">排 4 周</option>
       </select>
+      <input id="dutySkip" type="text" maxlength="20" placeholder="跳过：如 3（周三）" aria-label="跳过日期">
       <button class="btn gold-btn small" id="dutyGenBtn">排值日表 🧹</button>
     </div>
     <p class="result-line" id="dutyStartLabel"></p>
@@ -620,8 +739,9 @@
 
   <!-- 倒计时 -->
   <section class="panel toy hidden" id="toy-countdown">
-    <h2>📅 倒计时</h2>
+    <h2>📅 重要日子</h2>
     <p class="hint">考试、放假、生日、比赛……写个日子，每天打开就知道还有几天。存在本机，关掉页面也不丢。</p>
+    <div class="cd-confetti hidden" id="cdConfetti"></div>
     <p class="count-line">什么事</p>
     <input id="cdName" type="text" maxlength="20" placeholder="比如：期末考试、四级、放假回家">
     <p class="count-line">哪一天</p>
@@ -634,9 +754,15 @@
   <!-- 待办清单 -->
   <section class="panel toy hidden" id="toy-todo">
     <h2>✅ 待办清单</h2>
-    <p class="hint">今天要干的事写下来，做完打个勾。存在本机，关掉页面也不丢。</p>
+    <p class="hint">今天要干的事写下来，做完打个勾。存在本机，关掉页面也不丢。长按拖动可排序。</p>
     <div class="beads-controls">
       <input id="todoInput" type="text" maxlength="40" placeholder="比如：交实验报告、取快递、背 20 个单词">
+      <select id="todoPri" aria-label="优先级">
+        <option value="high">🔴 高优先级</option>
+        <option value="med" selected>🟡 中优先级</option>
+        <option value="low">🟢 低优先级</option>
+      </select>
+      <input id="todoTag" type="text" maxlength="8" placeholder="标签，如：学习" aria-label="分类标签">
       <button class="btn gold-btn small" id="todoAddBtn">加上 ➕</button>
     </div>
     <div id="todoList"></div>
@@ -706,6 +832,7 @@
     <div class="beads-controls">
       <input id="schName" type="text" maxlength="16" placeholder="课程名，比如：高数">
       <input id="schRoom" type="text" maxlength="10" placeholder="教室（可不填）">
+      <input id="schTeacher" type="text" maxlength="10" placeholder="老师（可不填）">
     </div>
     <div class="beads-controls">
       <select id="schDay">
@@ -1050,7 +1177,7 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.30 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.31 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

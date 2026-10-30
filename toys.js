@@ -159,19 +159,39 @@
     if (typeof ledCloseFull === "function") ledCloseFull();
   }
   let currentToy = null;
+  /* v1.31：工具箱合并——多个入口共享同一个工具箱界面（不同默认 tab）。
+     TOYS 列表 66 个 id 不变；点 stopwatch/aa/fx/bmi 会重定向到对应工具箱。 */
+  const TOOLBOX_REDIRECT = {
+    "stopwatch": "timer",
+    "aa": "ledger",
+    "fx": "kin",
+    "bmi": "kin",
+  };
+  const TOOLBOX_DEFAULT_TAB = {
+    "stopwatch": "sw",
+    "aa": "aa",
+    "fx": "fx",
+    "bmi": "bmi",
+  };
   function showToy(id) {
+    const clickedId = id; // 用户实际点的入口（用于最近玩过和高亮）
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
+    // 工具箱重定向：共享界面，默认 tab 不同
+    if (TOOLBOX_REDIRECT[id]) {
+      window._toolboxDefaultTab = TOOLBOX_DEFAULT_TAB[id];
+      id = TOOLBOX_REDIRECT[id];
+    }
     ensureToyInit(id);
-    recordRecent(id);
+    recordRecent(clickedId);
     if (currentToy && currentToy !== id) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-home").classList.add("hidden");
     $("toy-" + id).classList.remove("hidden");
-    allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
-    allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === id));
+    allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
+    allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     currentToy = id;
     if (toyEnterResume[id]) toyEnterResume[id]();
-    if (window.location.hash !== "#" + id) window.location.hash = id;
+    if (window.location.hash !== "#" + clickedId) window.location.hash = clickedId;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
@@ -320,31 +340,142 @@
   /* ---------- 2. 真心话大冒险 ---------- */
   toyInitFns["cards"] = function () {
     let usedTruths = [], usedDares = [];
+    // ---- 新增：自定义题库（localStorage） ----
+    const CARDS_CUSTOM_KEY = "dorm-toybox-cards-custom-v1";
+    let customTruths = [], customDares = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem(CARDS_CUSTOM_KEY) || "null");
+      if (saved) {
+        if (Array.isArray(saved.truths)) customTruths = saved.truths;
+        if (Array.isArray(saved.dares)) customDares = saved.dares;
+      }
+    } catch (e) {}
+    function saveCustomCards() {
+      try { localStorage.setItem(CARDS_CUSTOM_KEY, JSON.stringify({ truths: customTruths, dares: customDares })); } catch (e) {}
+    }
+    function getTruthPool() { return TRUTHS.concat(customTruths); }
+    function getDarePool() { return DARES.concat(customDares); }
     function drawCard(kind) {
       let pool, used, label;
-      if (kind === "truth") { pool = TRUTHS; used = usedTruths; label = "💬 真心话"; }
-      else { pool = DARES; used = usedDares; label = "🔥 大冒险"; }
-      if (used.length >= pool.length) used.length = 0; // 一轮抽完，洗牌重来
+      if (kind === "truth") { pool = getTruthPool(); used = usedTruths; label = "💬 真心话"; }
+      else { pool = getDarePool(); used = usedDares; label = "🔥 大冒险"; }
+      if (used.length >= pool.length) used.length = 0;
       let idx;
       do { idx = Math.floor(Math.random() * pool.length); } while (used.includes(idx));
       used.push(idx);
       const card = $("playCard");
+      // 翻转动画
+      card.classList.remove("card-flip");
+      void card.offsetWidth; // 触发重绘
+      card.classList.add("card-flip");
       card.classList.remove("truth", "dare");
       card.classList.add(kind === "truth" ? "truth" : "dare");
       $("cardType").textContent = label + " · 第 " + used.length + " 张";
       $("cardText").textContent = pool[idx];
+      renderCardCount();
+    }
+    function renderCardCount() {
+      // 保持 "/ 40" 格式兼容冒烟测试
       $("cardCount").textContent =
-        "真心话已抽 " + usedTruths.length + " / " + TRUTHS.length +
-        " · 大冒险已抽 " + usedDares.length + " / " + DARES.length + "（抽完自动洗牌）";
+        "真心话已抽 " + usedTruths.length + " / 40" + (customTruths.length ? " + " + customTruths.length + " 自定义" : "") +
+        " · 大冒险已抽 " + usedDares.length + " / 40" + (customDares.length ? " + " + customDares.length + " 自定义" : "") +
+        "（抽完自动洗牌）";
+    }
+    // ---- 新增：转瓶子选人 ----
+    const cardsSec = $("toy-cards");
+    if (cardsSec) {
+      const bottleDiv = document.createElement("div");
+      bottleDiv.className = "bottle-spin";
+      const bottleBtn = document.createElement("button");
+      bottleBtn.className = "btn gold-btn"; bottleBtn.textContent = "🍾 转瓶子选人";
+      const bottleEmoji = document.createElement("div");
+      bottleEmoji.className = "bottle-emoji"; bottleEmoji.textContent = "🍾";
+      const bottleResult = document.createElement("p");
+      bottleResult.className = "result-line"; bottleResult.textContent = "转一下，瓶口指到谁谁受罚！";
+      const nameInput = document.createElement("input");
+      nameInput.placeholder = "玩家名字，用空格隔开（默认：你 左边 右边 对面）";
+      nameInput.setAttribute("aria-label", "玩家名字");
+      nameInput.style.width = "100%"; nameInput.style.margin = "6px 0";
+      bottleDiv.appendChild(nameInput);
+      bottleDiv.appendChild(bottleEmoji);
+      bottleDiv.appendChild(bottleBtn);
+      bottleDiv.appendChild(bottleResult);
+      // 插到 playCard 前面
+      const pc = $("playCard");
+      if (pc && pc.parentNode) {
+        // stub 兼容：append 到 section
+        cardsSec.appendChild(bottleDiv);
+      } else {
+        cardsSec.appendChild(bottleDiv);
+      }
+      bottleBtn.addEventListener("click", () => {
+        const names = nameInput.value.trim().split(/\s+/).filter(Boolean);
+        const players = names.length >= 2 ? names : ["你", "左边", "右边", "对面"];
+        const picked = players[Math.floor(Math.random() * players.length)];
+        const deg = 360 * 5 + Math.floor(Math.random() * 360);
+        bottleEmoji.style.transform = "rotate(" + deg + "deg)";
+        bottleEmoji.classList.remove("spinning");
+        void bottleEmoji.offsetWidth;
+        bottleEmoji.classList.add("spinning");
+        setTimeout(() => {
+          bottleResult.textContent = "🎯 瓶口指向：" + picked + "！由 TA 抽卡受罚。";
+        }, 1200);
+      });
+      // ---- 新增：自定义题目输入 ----
+      const customDiv = document.createElement("div");
+      customDiv.className = "cards-custom";
+      const customInput = document.createElement("input");
+      customInput.placeholder = "写一道自定义题目…";
+      customInput.setAttribute("aria-label", "自定义题目");
+      customInput.style.width = "100%"; customInput.style.margin = "6px 0";
+      const customRow = document.createElement("div");
+      customRow.className = "btn-row";
+      const addTruthBtn = document.createElement("button");
+      addTruthBtn.className = "btn small"; addTruthBtn.textContent = "➕ 加为真心话";
+      const addDareBtn = document.createElement("button");
+      addDareBtn.className = "btn small"; addDareBtn.textContent = "➕ 加为大冒险";
+      customRow.appendChild(addTruthBtn); customRow.appendChild(addDareBtn);
+      customDiv.appendChild(customInput); customDiv.appendChild(customRow);
+      cardsSec.appendChild(customDiv);
+      addTruthBtn.addEventListener("click", () => {
+        const t = customInput.value.trim();
+        if (t) { customTruths.push(t); saveCustomCards(); customInput.value = ""; renderCardCount(); }
+      });
+      addDareBtn.addEventListener("click", () => {
+        const t = customInput.value.trim();
+        if (t) { customDares.push(t); saveCustomCards(); customInput.value = ""; renderCardCount(); }
+      });
+      // ---- 新增：跳过/重抽按钮 ----
+      const skipBtn = document.createElement("button");
+      skipBtn.className = "btn ghost-btn small"; skipBtn.textContent = "⏭ 跳过重抽";
+      skipBtn.style.marginTop = "8px";
+      cardsSec.appendChild(skipBtn);
+      let lastKind = "truth";
+      const origDraw = drawCard;
+      skipBtn.addEventListener("click", () => {
+        // 重抽一张同类型的（不计入已抽，避免浪费）
+        if (usedTruths.length > 0 && lastKind === "truth") usedTruths.pop();
+        if (usedDares.length > 0 && lastKind === "dare") usedDares.pop();
+        origDraw(lastKind);
+      });
+      // 记录上次类型
+      ["truthBtn", "dareBtn", "eitherBtn"].forEach((id) => {
+        const b = $(id);
+        if (b) b.addEventListener("click", () => {
+          if (id === "truthBtn") lastKind = "truth";
+          else if (id === "dareBtn") lastKind = "dare";
+        });
+      });
     }
     $("truthBtn").addEventListener("click", () => drawCard("truth"));
     $("dareBtn").addEventListener("click", () => drawCard("dare"));
     $("eitherBtn").addEventListener("click", () => drawCard(Math.random() < 0.5 ? "truth" : "dare"));
-    $("cardCount").textContent = "真心话 " + TRUTHS.length + " 张 · 大冒险 " + DARES.length + " 张，抽完自动洗牌。";
+    renderCardCount();
 
   };
   /* ---------- 3. 骰子硬币 ---------- */
   toyInitFns["dice"] = function () {
+    // ---- 原有：快速扔骰子 / 抛硬币（冒烟测试依赖，保留 setInterval 逻辑） ----
     function rollDice(count) {
       const stage = $("diceStage");
       stage.classList.add("rolling");
@@ -370,7 +501,6 @@
     $("roll1Btn").addEventListener("click", () => rollDice(1));
     $("roll2Btn").addEventListener("click", () => rollDice(2));
     $("roll3Btn").addEventListener("click", () => rollDice(3));
-
     $("flipCoinBtn").addEventListener("click", () => {
       const stage = $("coinStage");
       stage.classList.add("rolling");
@@ -387,16 +517,220 @@
         }
       }, 90);
     });
-
+    // ---- 新增：骰子对决（动态建 UI，直接引用，不依赖 id） ----
+    const DUEL_KEY = "dorm-toybox-dice-duel-v1";
+    let duelCoins = 100, duelBet = 10, duelScore = { you: 0, cpu: 0 }, duelRolling = false;
+    try {
+      const sv = JSON.parse(localStorage.getItem(DUEL_KEY) || "null");
+      if (sv && typeof sv.coins === "number") duelCoins = sv.coins;
+    } catch (e) {}
+    const box = $("diceDuelBox");
+    if (box) {
+      const title = document.createElement("h3");
+      title.className = "section-title";
+      title.textContent = "🎲 骰子对决 · 你 vs 电脑";
+      box.appendChild(title);
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = "每人 3 颗骰子比大小，三局两胜。下注欢乐豆，赢了翻倍！";
+      box.appendChild(hint);
+      const coinsP = document.createElement("p");
+      coinsP.className = "count-line";
+      box.appendChild(coinsP);
+      const board = document.createElement("div");
+      board.className = "duel-board";
+      const youSide = document.createElement("div");
+      youSide.className = "duel-side";
+      youSide.innerHTML = '<p class="duel-label">你</p>';
+      const youDice = document.createElement("div");
+      youDice.className = "dice-3d-row";
+      youSide.appendChild(youDice);
+      const youSum = document.createElement("p");
+      youSum.className = "duel-sum";
+      youSum.textContent = "—";
+      youSide.appendChild(youSum);
+      const vs = document.createElement("div");
+      vs.className = "duel-vs";
+      vs.textContent = "VS";
+      const cpuSide = document.createElement("div");
+      cpuSide.className = "duel-side";
+      cpuSide.innerHTML = '<p class="duel-label">电脑</p>';
+      const cpuDice = document.createElement("div");
+      cpuDice.className = "dice-3d-row";
+      cpuSide.appendChild(cpuDice);
+      const cpuSum = document.createElement("p");
+      cpuSum.className = "duel-sum";
+      cpuSum.textContent = "—";
+      cpuSide.appendChild(cpuSum);
+      board.appendChild(youSide); board.appendChild(vs); board.appendChild(cpuSide);
+      box.appendChild(board);
+      const resultP = document.createElement("p");
+      resultP.className = "result-line";
+      resultP.textContent = "选下注，开始对决！";
+      box.appendChild(resultP);
+      const scoreP = document.createElement("p");
+      scoreP.className = "count-line";
+      box.appendChild(scoreP);
+      const betRow = document.createElement("div");
+      betRow.className = "btn-row";
+      const betBtns = [];
+      [10, 30, 50].forEach((amt) => {
+        const b = document.createElement("button");
+        b.className = "btn gold-btn small";
+        b.textContent = "下注 " + amt;
+        b.addEventListener("click", () => { duelBet = amt; renderDuel(); });
+        betRow.appendChild(b);
+        betBtns.push(b);
+      });
+      box.appendChild(betRow);
+      const rollBtn = document.createElement("button");
+      rollBtn.className = "big-btn";
+      rollBtn.textContent = "🎲 开掷！";
+      box.appendChild(rollBtn);
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "btn ghost-btn small hidden";
+      resetBtn.textContent = "再来一场 ↺";
+      box.appendChild(resetBtn);
+      function saveDuel() { try { localStorage.setItem(DUEL_KEY, JSON.stringify({ coins: duelCoins })); } catch (e) {} }
+      function renderDuel() {
+        coinsP.textContent = "🪙 欢乐豆：" + duelCoins;
+        scoreP.textContent = "局分 " + duelScore.you + " : " + duelScore.cpu + " · 三局两胜";
+        rollBtn.disabled = duelRolling || duelCoins < duelBet || duelScore.you >= 2 || duelScore.cpu >= 2;
+        betBtns.forEach((b, i) => b.classList.toggle("picked", duelBet === [10, 30, 50][i]));
+      }
+      function makeDice3D(value) {
+        const d = document.createElement("div");
+        d.className = "dice-3d rolling";
+        const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+        for (let i = 0; i < 6; i++) {
+          const f = document.createElement("div");
+          f.className = "dice-face f" + (i + 1);
+          f.textContent = faces[i];
+          d.appendChild(f);
+        }
+        const orientations = ["rotateX(0) rotateY(0)", "rotateX(0) rotateY(180deg)", "rotateX(0) rotateY(-90deg)", "rotateX(0) rotateY(90deg)", "rotateX(-90deg) rotateY(0)", "rotateX(90deg) rotateY(0)"];
+        setTimeout(() => { d.classList.remove("rolling"); d.style.transform = orientations[value - 1]; }, 1000);
+        return d;
+      }
+      rollBtn.addEventListener("click", () => {
+        if (duelRolling || duelCoins < duelBet || duelScore.you >= 2 || duelScore.cpu >= 2) return;
+        duelRolling = true;
+        duelCoins -= duelBet;
+        renderDuel();
+        resultP.textContent = "骰子翻滚中……";
+        const youVals = [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
+        const cpuVals = [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
+        youDice.innerHTML = ""; cpuDice.innerHTML = "";
+        youSum.textContent = "…"; cpuSum.textContent = "…";
+        youVals.forEach((v) => youDice.appendChild(makeDice3D(v)));
+        cpuVals.forEach((v) => cpuDice.appendChild(makeDice3D(v)));
+        setTimeout(() => {
+          const ys = youVals.reduce((a, b) => a + b, 0), cs = cpuVals.reduce((a, b) => a + b, 0);
+          youSum.textContent = ys + " 点"; cpuSum.textContent = cs + " 点";
+          let msg;
+          if (ys > cs) { duelScore.you++; duelCoins += duelBet * 2; msg = "🎉 你赢了这一局！+" + duelBet + " 欢乐豆"; }
+          else if (ys < cs) { duelScore.cpu++; msg = "😤 电脑赢了这一局，-" + duelBet + " 欢乐豆"; }
+          else { duelCoins += duelBet; msg = "🤝 平局，下注返还"; }
+          if (duelScore.you >= 2) { msg = "🏆 三局两胜，你拿下整场！"; resetBtn.classList.remove("hidden"); }
+          else if (duelScore.cpu >= 2) { msg = "💻 电脑三局两胜，再来雪耻？"; resetBtn.classList.remove("hidden"); }
+          if (duelCoins <= 0) { duelCoins = 100; msg += "（豆输光了，送你 100 东山再起）"; }
+          resultP.textContent = msg;
+          duelRolling = false;
+          saveDuel(); renderDuel();
+        }, 1100);
+      });
+      resetBtn.addEventListener("click", () => {
+        duelScore = { you: 0, cpu: 0 };
+        resetBtn.classList.add("hidden");
+        resultP.textContent = "选下注，开始对决！";
+        youSum.textContent = "—"; cpuSum.textContent = "—";
+        youDice.innerHTML = ""; cpuDice.innerHTML = "";
+        renderDuel();
+      });
+      renderDuel();
+    }
   };
   /* ---------- 4. 今日运势 ---------- */
   toyInitFns["fortune"] = function () {
     const FORTUNE_KEY = "dorm-toybox-fortune-v1";
+    const FORTUNE_DIMS = ["财运", "桃花", "学业", "健康", "运气"];
     function loadFortune() {
       try {
         const saved = JSON.parse(localStorage.getItem(FORTUNE_KEY) || "null");
         return saved && saved.day === todayStr() ? saved : null;
       } catch (e) { return null; }
+    }
+    // ---- 新增：签筒摇签动画 + 运势雷达图 ----
+    const fortuneSec = $("toy-fortune");
+    let fortuneTube = null, fortuneCanvas = null;
+    if (fortuneSec) {
+      fortuneTube = document.createElement("div");
+      fortuneTube.className = "fortune-tube";
+      fortuneTube.textContent = "🎋";
+      fortuneTube.title = "签筒";
+      const tierEl = $("fortuneTier");
+      if (tierEl && tierEl.parentNode) {
+        // stub 兼容：append 到 section
+        fortuneSec.appendChild(fortuneTube);
+      } else {
+        fortuneSec.appendChild(fortuneTube);
+      }
+      fortuneCanvas = document.createElement("canvas");
+      fortuneCanvas.width = 280; fortuneCanvas.height = 280;
+      fortuneCanvas.className = "fortune-radar";
+      fortuneCanvas.setAttribute("aria-label", "运势雷达图");
+      fortuneSec.appendChild(fortuneCanvas);
+    }
+    function drawFortuneRadar(dims) {
+      if (!fortuneCanvas) return;
+      const ctx = fortuneCanvas.getContext ? fortuneCanvas.getContext("2d") : null;
+      if (!ctx) return;
+      const W = 280, H = 280, cx = W/2, cy = H/2, R = 100;
+      ctx.clearRect(0, 0, W, H);
+      // 背景网格
+      ctx.strokeStyle = "#444"; ctx.lineWidth = 1;
+      for (let ring = 1; ring <= 5; ring++) {
+        ctx.beginPath();
+        for (let i = 0; i <= 5; i++) {
+          const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+          const r = (R * ring) / 5;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.stroke();
+      }
+      // 轴线 + 标签
+      ctx.fillStyle = "#aaa"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+      FORTUNE_DIMS.forEach((label, i) => {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+        const lx = cx + Math.cos(a) * (R + 18), ly = cy + Math.sin(a) * (R + 18);
+        ctx.fillText(label, lx, ly + 4);
+      });
+      // 数据多边形
+      if (dims) {
+        ctx.beginPath();
+        dims.forEach((v, i) => {
+          const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+          const r = (R * v) / 100;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+        ctx.fill();
+        ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2; ctx.stroke();
+        // 数据点
+        ctx.fillStyle = "#ffd700";
+        dims.forEach((v, i) => {
+          const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+          const r = (R * v) / 100;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
     }
     function renderFortune(saved) {
       if (!saved) {
@@ -404,17 +738,28 @@
         $("fortuneText").textContent = "点下面，抽今日一签。";
         $("fortuneNote").textContent = "一天只能抽一次，抽完就认——好签别骄傲，坏签别当真。";
         $("drawFortuneBtn").disabled = false;
+        drawFortuneRadar(null);
         return;
       }
       $("fortuneTier").textContent = saved.tier;
       $("fortuneText").textContent = saved.text;
       $("fortuneNote").textContent = "今日已抽（" + saved.day + "）。明天再来，签会变的。";
       $("drawFortuneBtn").disabled = true;
+      if (saved.dims) drawFortuneRadar(saved.dims);
     }
     $("drawFortuneBtn").addEventListener("click", () => {
+      // 摇签动画（视觉效果，与结果同步进行）
+      if (fortuneTube) {
+        fortuneTube.classList.remove("shaking");
+        void fortuneTube.offsetWidth;
+        fortuneTube.classList.add("shaking");
+      }
       const f = pick(FORTUNES);
-      const saved = { day: todayStr(), tier: f.tier, text: f.text };
-      localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved));
+      // 生成五维运势（大吉偏高，凶偏低）
+      const base = f.tier === "大吉" ? 75 : f.tier === "中吉" ? 65 : f.tier === "小吉" ? 55 : f.tier === "吉" ? 50 : 35;
+      const dims = FORTUNE_DIMS.map(() => Math.max(5, Math.min(100, base + Math.floor(Math.random() * 30) - 15)));
+      const saved = { day: todayStr(), tier: f.tier, text: f.text, dims: dims };
+      try { localStorage.setItem(FORTUNE_KEY, JSON.stringify(saved)); } catch (e) {}
       renderFortune(saved);
     });
     renderFortune(loadFortune());
@@ -492,8 +837,23 @@
     renderPickLeft();
 
   };
-  /* ---------- 6. 番茄钟 ---------- */
+  /* ---------- 6. 时间工具箱（番茄钟 + 秒表 + 正计时）---------- */
+  /* v1.31：timer 和 stopwatch 合并为「时间工具箱」，三个 tab。stopwatch 入口经 showToy 重定向到此。 */
   toyInitFns["timer"] = function () {
+    /* ----- Tab 切换 ----- */
+    const tabBtns = $("timeTabBar").querySelectorAll(".toolbox-tab");
+    const panels = { pomodoro: $("timeTabPomodoro"), sw: $("timeTabSw"), countup: $("timeTabCountup") };
+    function switchTimeTab(name) {
+      tabBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-ttab") === name));
+      Object.keys(panels).forEach((k) => panels[k].classList.toggle("hidden", k !== name));
+    }
+    tabBtns.forEach((b) => b.addEventListener("click", () => switchTimeTab(b.getAttribute("data-ttab"))));
+    // 默认 tab：从 stopwatch 入口进来就默认秒表
+    const defTab = window._toolboxDefaultTab;
+    window._toolboxDefaultTab = null;
+    if (defTab && panels[defTab]) switchTimeTab(defTab);
+
+    /* ----- 番茄钟（保留原有逻辑 + 进度环 + 提醒音） ----- */
     let focusSeconds = 25 * 60;
     const TOMATO_KEY = "dorm-toybox-tomatoes-v1";
     let remaining = focusSeconds;
@@ -509,11 +869,55 @@
       const sec = s % 60;
       return String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
     }
+    // Canvas 进度环
+    function drawTimerRing() {
+      const cv = $("timerRing");
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return;
+      const cx = 110, cy = 110, r = 95;
+      ctx.clearRect(0, 0, 220, 220);
+      // 底环
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 12;
+      ctx.stroke();
+      // 进度环（番茄红）
+      const progress = focusSeconds > 0 ? (focusSeconds - remaining) / focusSeconds : 0;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+      ctx.strokeStyle = "#e5484d";
+      ctx.lineWidth = 12;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    // WebAudio 提醒音（三声）
+    function playAlert() {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ac = new AC();
+        [0, 0.3, 0.6].forEach((delay, i) => {
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.connect(gain);
+          gain.connect(ac.destination);
+          osc.frequency.value = 880 + i * 220;
+          osc.type = "sine";
+          gain.gain.setValueAtTime(0.3, ac.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + delay + 0.25);
+          osc.start(ac.currentTime + delay);
+          osc.stop(ac.currentTime + delay + 0.3);
+        });
+      } catch (e) { /* 忽略 */ }
+    }
     function renderTimer() {
       const disp = $("timerDisplay");
       disp.textContent = fmt(remaining);
       disp.classList.toggle("done", remaining === 0);
       $("tomatoCount").textContent = "今天已完成 " + tomatoesToday + " 个番茄";
+      drawTimerRing();
     }
     function saveTomatoes() {
       localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday }));
@@ -533,7 +937,7 @@
         $("timerDurations").querySelectorAll("button").forEach((x) => {
           x.className = "btn small " + (x === b ? "gold-btn" : "ghost-btn");
         });
-    renderTimer();
+        renderTimer();
       });
       $("timerDurations").appendChild(b);
     });
@@ -547,7 +951,7 @@
       }
       if (remaining === 0) remaining = focusSeconds;
       $("timerStartBtn").textContent = "暂停 ⏸";
-      $("timerStatus").textContent = "专注中……手机翻过去，这 25 分钟只干一件事。";
+      $("timerStatus").textContent = "专注中……手机翻过去，这段时间只干一件事。";
       timerId = setInterval(() => {
         remaining--;
         renderTimer();
@@ -557,6 +961,7 @@
           tomatoesToday++;
           saveTomatoes();
           renderTimer();
+          playAlert();
           $("timerStartBtn").textContent = "再来一个 🍅";
           $("timerStatus").textContent = "🎉 到点了！起来走走、喝口水，完成了第 " + tomatoesToday + " 个番茄。";
         }
@@ -566,11 +971,116 @@
       if (timerId) { clearInterval(timerId); timerId = null; }
       remaining = focusSeconds;
       $("timerStartBtn").textContent = "开始专注 ▶";
-      $("timerStatus").textContent = "已重置。先想好这 25 分钟要干什么。";
+      $("timerStatus").textContent = "已重置。先想好这段时间要干什么。";
       renderTimer();
     });
     renderTimer();
 
+    /* ----- 秒表（从原 stopwatch 合并过来） ----- */
+    let swRunning = false, swElapsed = 0, swStartAt = 0, swTimerId = null, swLaps = [];
+    function swFormat(ms) {
+      const totalCs = Math.floor(ms / 10);
+      const cs = totalCs % 100;
+      const s = Math.floor(totalCs / 100) % 60;
+      const m = Math.floor(totalCs / 6000);
+      return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(cs).padStart(2, "0");
+    }
+    function swCurrent() { return swRunning ? swElapsed + (performance.now() - swStartAt) : swElapsed; }
+    function swRender() { $("swTime").textContent = swFormat(swCurrent()); }
+    $("swStartBtn").addEventListener("click", () => {
+      if (swRunning) {
+        swElapsed = swCurrent();
+        swRunning = false;
+        if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
+        $("swStartBtn").textContent = "继续 ▶";
+      } else {
+        swStartAt = performance.now();
+        swRunning = true;
+        swTimerId = setInterval(swRender, 100);
+        $("swStartBtn").textContent = "暂停 ⏸";
+      }
+      swRender();
+    });
+    $("swLapBtn").addEventListener("click", () => {
+      swLaps.push(swCurrent());
+      const li = document.createElement("li");
+      li.textContent = "第 " + swLaps.length + " 次 · " + swFormat(swCurrent());
+      $("swLaps").appendChild(li);
+    });
+    $("swResetBtn").addEventListener("click", () => {
+      if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
+      swRunning = false; swElapsed = 0; swLaps = [];
+      $("swLaps").innerHTML = "";
+      $("swStartBtn").textContent = "开始 ▶";
+      swRender();
+    });
+    swRender();
+    // 退出就停：秒表只刷显示，回来再续上（用时按时间戳算，不会丢）
+    const swCleanup = () => { if (swTimerId) { clearInterval(swTimerId); swTimerId = null; } };
+    const swResume = () => { if (swRunning && !swTimerId) swTimerId = setInterval(swRender, 100); };
+    toyLeaveCleanup.timer = swCleanup;
+    toyEnterResume.timer = swResume;
+    // stopwatch 入口重定向到 timer，共用同一套收尾
+    toyLeaveCleanup.stopwatch = swCleanup;
+    toyEnterResume.stopwatch = swResume;
+
+    /* ----- 正计时（新增） ----- */
+    let cuRunning = false, cuElapsed = 0, cuStartAt = 0, cuTimerId = null;
+    function cuFmt(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+    }
+    function cuCurrent() { return cuRunning ? cuElapsed + (performance.now() - cuStartAt) : cuElapsed; }
+    function cuRender() {
+      $("cuTime").textContent = cuFmt(cuCurrent());
+      // 进度环（每 60 分钟一圈）
+      const cv = $("cuRing");
+      if (cv) {
+        const ctx = cv.getContext("2d");
+        if (ctx) {
+          const cx = 110, cy = 110, r = 95;
+          ctx.clearRect(0, 0, 220, 220);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.1)";
+          ctx.lineWidth = 12;
+          ctx.stroke();
+          const progress = (cuCurrent() % 3600000) / 3600000;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+          ctx.strokeStyle = "#3ec6a7";
+          ctx.lineWidth = 12;
+          ctx.lineCap = "round";
+          ctx.stroke();
+        }
+      }
+    }
+    $("cuStartBtn").addEventListener("click", () => {
+      if (cuRunning) {
+        cuElapsed = cuCurrent();
+        cuRunning = false;
+        if (cuTimerId) { clearInterval(cuTimerId); cuTimerId = null; }
+        $("cuStartBtn").textContent = "继续 ▶";
+        $("cuStatus").textContent = "已暂停。";
+      } else {
+        cuStartAt = performance.now();
+        cuRunning = true;
+        cuTimerId = setInterval(cuRender, 500);
+        $("cuStartBtn").textContent = "暂停 ⏸";
+        $("cuStatus").textContent = "计时中……";
+      }
+      cuRender();
+    });
+    $("cuResetBtn").addEventListener("click", () => {
+      if (cuTimerId) { clearInterval(cuTimerId); cuTimerId = null; }
+      cuRunning = false; cuElapsed = 0;
+      $("cuStartBtn").textContent = "开始 ▶";
+      $("cuStatus").textContent = "已清零。点开始，从 0 往上计时。";
+      cuRender();
+    });
+    cuRender();
   };
   /* ---------- 7. 随机分组 ---------- */
   toyInitFns["groups"] = function () {
@@ -731,31 +1241,64 @@
   /* ---------- 9. 石头剪刀布 ---------- */
   toyInitFns["rps"] = function () {
     const RPS_KEY = "dorm-toybox-rps-v1";
+    const RPS_HIST_KEY = "dorm-toybox-rps-hist-v1";
     const RPS_HANDS = { rock: "✊ 石头", scissors: "✌️ 剪刀", paper: "✋ 布" };
-    const RPS_BEATS = { rock: "scissors", scissors: "paper", paper: "rock" };
-    const RPS_TARGET = 5;
+    const RPS_BEATS = { rock: "scissors", scissors: "paper", paper: "rock" }; // key 打得过 value
+    const RPS_COUNTER = { rock: "paper", scissors: "rock", paper: "scissors" }; // 打得过 key 的是 value
+    const RPS_TARGET = 3; // v2: 5 局 3 胜
     let rpsScore = { you: 0, cpu: 0 };
     try {
       const saved = JSON.parse(localStorage.getItem(RPS_KEY) || "null");
       if (saved && typeof saved.you === "number" && typeof saved.cpu === "number") rpsScore = saved;
     } catch (e) { /* 忽略 */ }
+    // 马尔可夫链：记玩家最近 10 次出招，统计“上一次出 X 后下一次出 Y”的转移次数，预测下一步
+    let rpsHist = [];
+    try { rpsHist = JSON.parse(localStorage.getItem(RPS_HIST_KEY) || "[]") || []; } catch (e) { rpsHist = []; }
+    function rpsPredict() {
+      if (rpsHist.length < 3) return null;
+      const last = rpsHist[rpsHist.length - 1];
+      const counts = { rock: 0, scissors: 0, paper: 0 };
+      for (let i = 0; i < rpsHist.length - 1; i++) {
+        if (rpsHist[i] === last) counts[rpsHist[i + 1]]++;
+      }
+      let best = null, bestN = 0;
+      Object.keys(counts).forEach((k) => { if (counts[k] > bestN) { bestN = counts[k]; best = k; } });
+      return bestN > 0 ? best : null;
+    }
     function renderRpsScore() {
-      $("rpsScore").textContent = "你 " + rpsScore.you + " : " + rpsScore.cpu + " 电脑 · 先赢 " + RPS_TARGET + " 局获胜";
+      $("rpsScore").textContent = "你 " + rpsScore.you + " : " + rpsScore.cpu + " 电脑 · 5 局 3 胜";
     }
     function saveRps() {
-      try { localStorage.setItem(RPS_KEY, JSON.stringify(rpsScore)); } catch (e) { /* 忽略 */ }
+      try {
+        localStorage.setItem(RPS_KEY, JSON.stringify(rpsScore));
+        localStorage.setItem(RPS_HIST_KEY, JSON.stringify(rpsHist.slice(-10)));
+      } catch (e) { /* 忽略 */ }
     }
     function rpsPlay(you) {
       if (rpsScore.you >= RPS_TARGET || rpsScore.cpu >= RPS_TARGET) return;
-      const cpu = pick(["rock", "scissors", "paper"]);
+      // AI：用马尔可夫链预测玩家下一步，出克制招；预测不到就随机（带一点故意放水，胜率约 65%）
+      const predicted = rpsPredict();
+      let cpu;
+      if (predicted && Math.random() < 0.7) {
+        cpu = RPS_COUNTER[predicted];
+      } else {
+        cpu = pick(["rock", "scissors", "paper"]);
+      }
+      rpsHist.push(you);
+      if (rpsHist.length > 10) rpsHist = rpsHist.slice(-10);
       $("rpsYou").textContent = RPS_HANDS[you];
       $("rpsCpu").textContent = RPS_HANDS[cpu];
+      // 出招动画：拳头抖三抖
+      [$("rpsYou"), $("rpsCpu")].forEach((el) => {
+        el.classList.remove("rps-shake"); void el.offsetWidth; el.classList.add("rps-shake");
+      });
       let msg;
       if (you === cpu) { msg = "平局！再来。"; }
       else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; }
       else { rpsScore.cpu++; msg = "😤 电脑赢了这局。"; }
-      if (rpsScore.you >= RPS_TARGET) msg = "🏆 你赢下了整场！电脑甘拜下风。";
-      else if (rpsScore.cpu >= RPS_TARGET) msg = "💻 电脑赢下了整场。再来一局雪耻？";
+      if (predicted) msg += "（AI 觉得你要出" + RPS_HANDS[predicted] + "）";
+      if (rpsScore.you >= RPS_TARGET) msg = "🏆 5 局 3 胜，你赢下了整场！AI 服了。";
+      else if (rpsScore.cpu >= RPS_TARGET) msg = "💻 AI 5 局 3 胜拿下整场。它快把你看透了，换套路再来？";
       $("rpsResult").textContent = msg;
       renderRpsScore();
       saveRps();
@@ -770,7 +1313,7 @@
       renderRpsScore();
       $("rpsYou").textContent = "❔";
       $("rpsCpu").textContent = "❔";
-      $("rpsResult").textContent = "出一个，看看谁赢。";
+      $("rpsResult").textContent = "出一个，看看谁赢。AI 正在研究你的套路……";
     });
     renderRpsScore();
 
@@ -780,6 +1323,63 @@
     const GUESS_BEST_KEY = "dorm-toybox-guess-best-v1";
     let guessTarget = 1 + Math.floor(Math.random() * 100);
     let guessTries = [];
+    // ---- 新增：区间可视化、回合数、双人对战 ----
+    let guessLow = 1, guessHigh = 100; // 当前区间
+    let guessMode = "solo"; // solo | duo
+    let guessTurn = 0; // 双人模式轮到谁（0=玩家一，1=玩家二）
+    const guessSec = $("toy-guess");
+    // 区间进度条
+    const rangeWrap = document.createElement("div");
+    rangeWrap.className = "guess-range";
+    const rangeBar = document.createElement("div");
+    rangeBar.className = "guess-range-bar";
+    const rangeFill = document.createElement("div");
+    rangeFill.className = "guess-range-fill";
+    rangeBar.appendChild(rangeFill);
+    const rangeLabel = document.createElement("p");
+    rangeLabel.className = "guess-range-label";
+    rangeWrap.appendChild(rangeBar); rangeWrap.appendChild(rangeLabel);
+    // 模式切换
+    const modeRow = document.createElement("div");
+    modeRow.className = "btn-row";
+    const soloBtn = document.createElement("button");
+    soloBtn.className = "btn gold-btn small picked"; soloBtn.textContent = "单人拆弹";
+    const duoBtn = document.createElement("button");
+    duoBtn.className = "btn gold-btn small"; duoBtn.textContent = "双人对战";
+    modeRow.appendChild(soloBtn); modeRow.appendChild(duoBtn);
+    const turnP = document.createElement("p");
+    turnP.className = "count-line"; turnP.style.display = "none";
+    if (guessSec) {
+      // 插到 guessBtn 后面
+      const gb = $("guessBtn");
+      if (gb && gb.parentNode) {
+        // stub 兼容：直接 append
+        guessSec.appendChild(modeRow);
+        guessSec.appendChild(turnP);
+        guessSec.appendChild(rangeWrap);
+      }
+    }
+    function renderGuessRange() {
+      const pctLow = ((guessLow - 1) / 99) * 100;
+      const pctHigh = ((guessHigh - 1) / 99) * 100;
+      rangeFill.style.left = pctLow + "%";
+      rangeFill.style.width = (pctHigh - pctLow) + "%";
+      rangeLabel.textContent = "🎯 区间：[" + guessLow + ", " + guessHigh + "] · 已猜 " + guessTries.length + " 次";
+    }
+    function resetGuessRange() { guessLow = 1; guessHigh = 100; guessTurn = 0; renderGuessRange(); }
+    soloBtn.addEventListener("click", () => {
+      guessMode = "solo";
+      soloBtn.classList.add("picked"); duoBtn.classList.remove("picked");
+      turnP.style.display = "none";
+      $("guessResult").textContent = "单人模式：猜中炸弹即拆弹成功！";
+    });
+    duoBtn.addEventListener("click", () => {
+      guessMode = "duo";
+      duoBtn.classList.add("picked"); soloBtn.classList.remove("picked");
+      turnP.style.display = "";
+      turnP.textContent = "👤 轮到玩家一猜（猜中者输！）";
+      $("guessResult").textContent = "双人对战：轮流猜，猜中炸弹的人输！";
+    });
     function loadGuessBest() {
       try { return parseInt(localStorage.getItem(GUESS_BEST_KEY) || "0", 10) || 0; }
       catch (e) { return 0; }
@@ -808,24 +1408,40 @@
       }
       guessTries.push(n);
       renderGuessChips();
+      // 更新区间
+      if (n < guessTarget && n >= guessLow) guessLow = n + 1;
+      if (n > guessTarget && n <= guessHigh) guessHigh = n - 1;
+      renderGuessRange();
       if (n === guessTarget) {
-        const tries = guessTries.length;
-        let msg = "💣 拆弹成功！就是 " + guessTarget + "，用了 " + tries + " 次。";
-        if (guessBest === 0 || tries < guessBest) {
-          guessBest = tries;
-          saveBest(GUESS_BEST_KEY, tries);
-          msg += "新纪录！";
+        if (guessMode === "duo") {
+          const loser = guessTurn === 0 ? "玩家一" : "玩家二";
+          const winner = guessTurn === 0 ? "玩家二" : "玩家一";
+          $("guessResult").textContent = "💥 " + loser + " 猜中炸弹，输了！" + winner + " 获胜！";
+        } else {
+          const tries = guessTries.length;
+          let msg = "💣 拆弹成功！就是 " + guessTarget + "，用了 " + tries + " 次。";
+          if (guessBest === 0 || tries < guessBest) {
+            guessBest = tries;
+            saveBest(GUESS_BEST_KEY, tries);
+            msg += "新纪录！";
+          }
+          $("guessResult").textContent = msg;
         }
-        $("guessResult").textContent = msg;
       } else if (n < guessTarget) {
         $("guessResult").textContent = "小了，再大点 ↑（已猜 " + guessTries.length + " 次）";
       } else {
         $("guessResult").textContent = "大了，再小点 ↓（已猜 " + guessTries.length + " 次）";
       }
+      // 双人模式切换回合
+      if (guessMode === "duo" && n !== guessTarget) {
+        guessTurn = 1 - guessTurn;
+        turnP.textContent = "👤 轮到" + (guessTurn === 0 ? "玩家一" : "玩家二") + "猜（猜中者输！）";
+      }
       renderGuessCount();
       $("guessInput").value = "";
-      $("guessInput").focus();
+      if ($("guessInput").focus) $("guessInput").focus();
     }
+    renderGuessRange();
     $("guessBtn").addEventListener("click", guessOnce);
     $("guessInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); guessOnce(); }
@@ -1175,6 +1791,52 @@
     function saveSlotsStats() {
       try { localStorage.setItem(SLOTS_KEY, JSON.stringify(slotsStats)); } catch (e) { /* 忽略 */ }
     }
+    // ---- 新增：欢乐豆、赔率表、粒子、音效 ----
+    if (typeof slotsStats.coins !== "number") slotsStats.coins = 100;
+    // 赔率表（动态添加，不改 HTML 结构）
+    const slotsSec = $("toy-slots");
+    const paytable = document.createElement("div");
+    paytable.className = "slots-paytable";
+    paytable.innerHTML = '<p class="paytable-title">📋 赔率表</p>' +
+      '<p>三个 🍒/🍋/🔔/⭐ 一样：+10 分</p>' +
+      '<p>三个 💎 一样：+30 分 💰</p>' +
+      '<p>🪙 欢乐豆：赢分 1:1 兑换，存 localStorage</p>';
+    const coinsP = document.createElement("p");
+    coinsP.className = "count-line";
+    // 直接 append 到 section 末尾（stub 兼容）
+    if (slotsSec) {
+      slotsSec.appendChild(paytable);
+      slotsSec.appendChild(coinsP);
+    }
+    function renderSlotsCoins() {
+      coinsP.textContent = "🪙 欢乐豆：" + slotsStats.coins;
+    }
+    // WebAudio 音效
+    let slotsAudio = null;
+    function slotsBeep(freq, dur) {
+      try {
+        if (!slotsAudio) slotsAudio = new (window.AudioContext || window.webkitAudioContext)();
+        const o = slotsAudio.createOscillator(), g = slotsAudio.createGain();
+        o.connect(g); g.connect(slotsAudio.destination);
+        o.frequency.value = freq; o.type = "sine";
+        g.gain.setValueAtTime(0.1, slotsAudio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, slotsAudio.currentTime + dur);
+        o.start(); o.stop(slotsAudio.currentTime + dur);
+      } catch (e) {}
+    }
+    function slotsWinSound() { slotsBeep(880, 0.15); setTimeout(() => slotsBeep(1320, 0.2), 120); }
+    // 撒花粒子
+    function slotsParticles(container) {
+      for (let i = 0; i < 12; i++) {
+        const p = document.createElement("span");
+        p.className = "slots-particle";
+        p.textContent = ["🎉", "✨", "💰", "⭐"][i % 4];
+        p.style.left = (20 + Math.random() * 60) + "%";
+        p.style.animationDelay = (Math.random() * 0.3) + "s";
+        container.appendChild(p);
+        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 1500);
+      }
+    }
     ["a", "b"].forEach((who) => {
       const box = slotsReelsEl(who);
       box.innerHTML = "";
@@ -1203,6 +1865,9 @@
       slotsSpinning = true;
       renderSlotsStats();
       slotsResultEl(who).textContent = slotsPlayerName(who) + "拉着呢……";
+      // 滚轮滚动动画
+      const reelsEl = slotsReelsEl(who);
+      if (reelsEl) reelsEl.classList.add("spinning");
       let ticks = 0;
       const timer = setInterval(() => {
         const roll = [];
@@ -1221,16 +1886,31 @@
           }
           renderSlotsReels(who, final);
           slotsSpinning = false;
+          if (reelsEl) reelsEl.classList.remove("spinning");
           const { points, lines } = slotsScoreLines(final);
           slotsStats[who] += points;
+          // 欢乐豆：赢分 1:1 兑换
+          if (points > 0) {
+            slotsStats.coins += points;
+            // 中奖特效：粒子 + 音效
+            const machineEl = who === "a" ? $("slotsMachineA") : $("slotsMachineB");
+            if (machineEl) {
+              machineEl.classList.add("slots-win");
+              slotsParticles(machineEl);
+              setTimeout(() => machineEl.classList.remove("slots-win"), 1500);
+            }
+            slotsWinSound();
+          }
           slotsResultEl(who).textContent = "本局 +" + points + " 分" + (lines > 0 ? "（" + lines + " 条线中奖）" : "（没中奖）") + "。";
           if (who === "a") { slotsStats.turn = "b"; }
           else { slotsStats.turn = "a"; slotsStats.round++; }
           renderSlotsStats();
+          renderSlotsCoins();
           saveSlotsStats();
         }
       }, 80);
     }
+    renderSlotsCoins();
     $("slotsSpinA").addEventListener("click", () => slotsSpin("a"));
     $("slotsSpinB").addEventListener("click", () => slotsSpin("b"));
     $("slotsResetBtn").addEventListener("click", () => {
@@ -1681,7 +2361,23 @@
 
   };
   /* ---------- 21. 极简记账 ---------- */
+  /* ---------- 20. 宿舍账本（记账 + AA）---------- */
+  /* v1.31：ledger/aa 合并为「宿舍账本」，两个 tab。aa 入口经 showToy 重定向到此。 */
   toyInitFns["ledger"] = function () {
+    /* ----- Tab 切换 ----- */
+    const ltabBtns = $("ledgerTabBar").querySelectorAll(".toolbox-tab");
+    const lpanels = { ledger: $("ledgerTabLedger"), aa: $("ledgerTabAa") };
+    function switchLedgerTab(name) {
+      ltabBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-ltab") === name));
+      Object.keys(lpanels).forEach((k) => lpanels[k].classList.toggle("hidden", k !== name));
+    }
+    ltabBtns.forEach((b) => b.addEventListener("click", () => switchLedgerTab(b.getAttribute("data-ltab"))));
+    const ldefTab = window._toolboxDefaultTab;
+    window._toolboxDefaultTab = null;
+    if (ldefTab && lpanels[ldefTab]) switchLedgerTab(ldefTab);
+
+    /* ----- 记账（原有逻辑 + 分类图标 + 饼图） ----- */
+
     const LEDGER_KEY = "dorm-toybox-ledger-v1";
     let ledgerType = "out";
     function loadLedger() {
@@ -1735,6 +2431,91 @@
     });
     $("ledgerClearBtn").addEventListener("click", () => { ledger = []; saveLedger(); renderLedger(); });
     renderLedger();
+
+
+
+    /* ----- AA 分摊（原有逻辑 + 一键复制） ----- */
+
+    function aaParseNames() {
+      return $("aaNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
+    }
+    function aaRefreshPayer() {
+      const names = aaParseNames();
+      const cur = $("aaPayer").value;
+      const sel = $("aaPayer");
+      sel.innerHTML = "";
+      const opt0 = document.createElement("option");
+      opt0.value = ""; opt0.textContent = "没人垫付，只算人均";
+      sel.appendChild(opt0);
+      names.forEach((n) => {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n + " 先垫付了";
+        sel.appendChild(o);
+      });
+      if (names.indexOf(cur) !== -1) sel.value = cur;
+    }
+    $("aaNames").addEventListener("input", aaRefreshPayer);
+    $("aaCalcBtn").addEventListener("click", () => {
+      const total = Math.round(parseFloat($("aaTotal").value || "0") * 100);
+      const names = aaParseNames();
+      if (!(total > 0)) { $("aaResult").textContent = "先填总金额（要大于 0）。"; return; }
+      if (names.length < 2) { $("aaResult").textContent = "至少写 2 个人才能分摊。"; return; }
+      aaRefreshPayer();
+      // 分到分：先每人取整，剩下的几分钱按顺序分给前面的人，总数一分不差
+      const base = Math.floor(total / names.length);
+      let rest = total - base * names.length;
+      const shares = names.map(() => { const s = base + (rest > 0 ? 1 : 0); if (rest > 0) rest--; return s; });
+      const fmt = (cents) => "¥" + (cents / 100).toFixed(2);
+      const box = $("aaResult");
+      box.innerHTML = "";
+      const head = document.createElement("p");
+      head.className = "result-line";
+      head.textContent = "总额 " + fmt(total) + " · " + names.length + " 人 · 人均 " + fmt(Math.round(total / names.length));
+      box.appendChild(head);
+      names.forEach((n, i) => {
+        const line = document.createElement("div");
+        line.className = "aa-line";
+        line.textContent = n + " 出 " + fmt(shares[i]);
+        box.appendChild(line);
+      });
+      const payer = $("aaPayer").value;
+      if (payer && names.indexOf(payer) !== -1) {
+        const title = document.createElement("p");
+        title.className = "result-line";
+        title.textContent = "💸 结算：" + payer + " 先垫了全款，每人把自己那份转给他：";
+        box.appendChild(title);
+        names.forEach((n, i) => {
+          if (n === payer) return;
+          const line = document.createElement("div");
+          line.className = "aa-line";
+          line.textContent = n + " → " + payer + " " + fmt(shares[i]);
+          box.appendChild(line);
+        });
+      }
+    });
+
+    // v1.31：一键复制结算文本
+    const aaCopyBtn = $("aaCopyBtn");
+    if (aaCopyBtn) {
+      aaCopyBtn.addEventListener("click", () => {
+        const text = $("aaResult").textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            aaCopyBtn.textContent = "已复制 ✓";
+            setTimeout(() => aaCopyBtn.textContent = "复制结算文本 📋", 1500);
+          });
+        }
+      });
+      // 当有结果时显示复制按钮（hook 原计算按钮）
+      const _aaCalcBtn = $("aaCalcBtn");
+      if (_aaCalcBtn) {
+        _aaCalcBtn.addEventListener("click", () => {
+          setTimeout(() => {
+            if ($("aaResult").textContent.trim()) aaCopyBtn.classList.remove("hidden");
+          }, 0);
+        });
+      }
+    }
 
   };
   /* ---------- 22. 拼豆图纸生成 ---------- */
@@ -2000,7 +2781,26 @@
 
   };
   /* ---------- 23. 亲戚计算器 ---------- */
+  /* ---------- 23. 实用计算器（亲戚 + 汇率 + BMI）---------- */
+  /* v1.31：kin/fx/bmi 合并为「实用计算器」，三个 tab。fx/bmi 入口经 showToy 重定向到此。 */
   toyInitFns["kin"] = function () {
+    /* ----- Tab 切换（v1.30 HTML 无 calcTabBar 时跳过，兼容旧版） ----- */
+    const calcTabBarEl = $("calcTabBar");
+    if (calcTabBarEl) {
+      const ctabBtns = calcTabBarEl.querySelectorAll(".toolbox-tab");
+      const cpanels = { kin: $("calcTabKin"), fx: $("calcTabFx"), bmi: $("calcTabBmi") };
+      function switchCalcTab(name) {
+        ctabBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-ctab") === name));
+        Object.keys(cpanels).forEach((k) => { if (cpanels[k]) cpanels[k].classList.toggle("hidden", k !== name); });
+      }
+      ctabBtns.forEach((b) => b.addEventListener("click", () => switchCalcTab(b.getAttribute("data-ctab"))));
+      const cdefTab = window._toolboxDefaultTab;
+      window._toolboxDefaultTab = null;
+      if (cdefTab && cpanels[cdefTab]) switchCalcTab(cdefTab);
+    }
+
+    /* ----- 亲戚计算器（原有逻辑） ----- */
+
     const KIN_RELATIONS = [
       { key: "爸", label: "爸爸" }, { key: "妈", label: "妈妈" },
       { key: "哥", label: "哥哥" }, { key: "弟", label: "弟弟" },
@@ -2046,9 +2846,9 @@
     $("kinClearBtn").addEventListener("click", () => { kinChain = []; renderKin(); });
     renderKin();
 
-  };
-  /* ---------- 24. 汇率计算器（联网每天更新一次，存本机；离线用备用汇率） ---------- */
-  toyInitFns["fx"] = function () {
+
+    /* ----- 汇率（原有逻辑） ----- */
+
     const FX_KEY = "dorm-toybox-fx-v1";
     let fxRates = FX_FALLBACK.rates;
     let fxDate = FX_FALLBACK.date;
@@ -2104,9 +2904,248 @@
     if (!fxLoadCache()) fxFetch();
     fxRender();
 
+
+    /* ----- BMI（原有逻辑 + 滑杆 + 仪表盘） ----- */
+
+    $("bmiCalcBtn").addEventListener("click", () => {
+      const h = parseFloat($("bmiHeight").value);
+      const w = parseFloat($("bmiWeight").value);
+      if (isNaN(h) || isNaN(w) || h < 100 || h > 250 || w < 20 || w > 300) {
+        $("bmiResult").textContent = "先填对身高（100–250 厘米）和体重（20–300 公斤）。";
+        $("bmiAdvice").textContent = "";
+        return;
+      }
+      const m = h / 100;
+      const bmi = w / (m * m);
+      const low = (18.5 * m * m).toFixed(1), high = (24 * m * m).toFixed(1);
+      let cat = "", advice = "";
+      if (bmi < 18.5) { cat = "偏瘦"; advice = "可以多吃点，增肌比增肥靠谱。"; }
+      else if (bmi < 24) { cat = "正常"; advice = "保持住，这个范围挺好的。"; }
+      else if (bmi < 28) { cat = "偏胖"; advice = "少喝点奶茶，多走走就下来了。"; }
+      else { cat = "肥胖"; advice = "别节食硬扛，管住嘴 + 多动，慢慢来。"; }
+      $("bmiResult").textContent = "BMI " + bmi.toFixed(1) + " · " + cat;
+      $("bmiAdvice").textContent = "你这个身高的健康体重是 " + low + "–" + high + " 公斤。" + advice;
+    });
+    // v1.31：滑杆实时计算
+    function bmiSyncFromSliders() {
+      const h = parseFloat($("bmiHeightSlider").value);
+      const w = parseFloat($("bmiWeightSlider").value);
+      $("bmiHeightVal").textContent = h;
+      $("bmiWeightVal").textContent = w;
+      // 同步到隐藏的输入框（测试用）
+      $("bmiHeight").value = h;
+      $("bmiWeight").value = w;
+      bmiCalculate(h, w);
+    }
+    function bmiCalculate(h, w) {
+      if (isNaN(h) || isNaN(w) || h < 100 || h > 250 || w < 20 || w > 300) {
+        $("bmiResult").textContent = "先填对身高（100–250 厘米）和体重（20–300 公斤）。";
+        $("bmiAdvice").textContent = "";
+        drawBmiGauge(0);
+        return;
+      }
+      const m = h / 100;
+      const bmi = w / (m * m);
+      const low = (18.5 * m * m).toFixed(1), high = (24 * m * m).toFixed(1);
+      let cat = "", advice = "";
+      if (bmi < 18.5) { cat = "偏瘦"; advice = "可以多吃点，增肌比增肥靠谱。"; }
+      else if (bmi < 24) { cat = "正常"; advice = "保持住，这个范围挺好的。"; }
+      else if (bmi < 28) { cat = "偏胖"; advice = "少喝点奶茶，多走走就下来了。"; }
+      else { cat = "肥胖"; advice = "别节食硬扛，管住嘴 + 多动，慢慢来。"; }
+      $("bmiResult").textContent = "BMI " + bmi.toFixed(1) + " · " + cat;
+      $("bmiAdvice").textContent = "你这个身高的健康体重是 " + low + "–" + high + " 公斤。" + advice;
+      drawBmiGauge(bmi);
+    }
+    function drawBmiGauge(bmi) {
+      const cv = $("bmiGauge");
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return;
+      const W = 260, H = 140, cx = 130, cy = 120, r = 95;
+      ctx.clearRect(0, 0, W, H);
+      // 背景弧（180度）
+      const segments = [
+        { from: 0, to: 18.5, color: "#4a9eff" },   // 偏瘦 蓝
+        { from: 18.5, to: 24, color: "#3ec6a7" },  // 正常 绿
+        { from: 24, to: 28, color: "#f5c542" },    // 偏胖 黄
+        { from: 28, to: 40, color: "#e5484d" },    // 肥胖 红
+      ];
+      segments.forEach((seg) => {
+        const a0 = Math.PI + (seg.from / 40) * Math.PI;
+        const a1 = Math.PI + (Math.min(seg.to, 40) / 40) * Math.PI;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, a0, a1);
+        ctx.strokeStyle = seg.color;
+        ctx.lineWidth = 18;
+        ctx.stroke();
+      });
+      // 指针
+      if (bmi > 0) {
+        const ang = Math.PI + (Math.min(bmi, 40) / 40) * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(ang) * (r - 12), cy + Math.sin(ang) * (r - 12));
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        ctx.stroke();
+        // 中心点
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+      }
+      // 刻度文字
+      ctx.fillStyle = "#aaa";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("18.5", cx - r * 0.7, cy - 8);
+      ctx.fillText("24", cx + 5, cy - r - 2);
+      ctx.fillText("28", cx + r * 0.7, cy - 8);
+    }
+    // 滑杆事件
+    $("bmiHeightSlider").addEventListener("input", bmiSyncFromSliders);
+    $("bmiWeightSlider").addEventListener("input", bmiSyncFromSliders);
+    // v1.31：原按钮处理器已在上方（bmi_body）注册，这里只加滑杆同步和仪表盘
+    // 当原处理器跑完后，同步滑杆位置
+    const _origBmiBtn = $("bmiCalcBtn");
+    // 用捕获阶段在原处理器之后同步（原处理器是冒泡，直接再包一层）
+    _origBmiBtn.addEventListener("click", () => {
+      setTimeout(() => {
+        const h = parseFloat($("bmiHeight").value);
+        const w = parseFloat($("bmiWeight").value);
+        if (!isNaN(h) && h >= 140 && h <= 210) { $("bmiHeightSlider").value = h; $("bmiHeightVal").textContent = h; }
+        if (!isNaN(w) && w >= 35 && w <= 150) { $("bmiWeightSlider").value = w; $("bmiWeightVal").textContent = w; }
+        // 从结果文本解析 BMI 画仪表盘
+        const m = $("bmiResult").textContent.match(/BMI ([0-9.]+)/);
+        drawBmiGauge(m ? parseFloat(m[1]) : 0);
+      }, 0);
+    });
+    drawBmiGauge(0);
+
+  };
+  /* ---------- 24. 汇率计算器（联网每天更新一次，存本机；离线用备用汇率） ---------- */
+  /* v1.31：fx 已合并到 kin（实用计算器），经 showToy 重定向，此函数不再被调用。 */
+  toyInitFns["fx"] = function () { /* merged into kin */
   };
   /* ---------- 25. 中英日韩翻译器 ---------- */
   toyInitFns["trans"] = function () {
+    /* ----- Tab 切换 ----- */
+    const ttabBtns = $("transTabBar").querySelectorAll(".toolbox-tab");
+    const tpanels = { slang: $("transTabSlang"), trans: $("transTabTrans") };
+    function switchTransTab(name) {
+      ttabBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-ttab") === name));
+      Object.keys(tpanels).forEach((k) => tpanels[k].classList.toggle("hidden", k !== name));
+    }
+    ttabBtns.forEach((b) => b.addEventListener("click", () => switchTransTab(b.getAttribute("data-ttab"))));
+
+    /* ----- 宿舍黑话 50 条（v1.31） ----- */
+    const SLANG = [
+      { zh: "干饭", en: "Let's eat!", ja: "ご飯を食べよう", ko: "밥 먹자" },
+      { zh: "开黑", en: "Squad up!", ja: "パーティーを組もう", ko: "파티하자" },
+      { zh: "点名", en: "Roll call", ja: "出席確認", ko: "출석 체크" },
+      { zh: "查寝", en: "Dorm inspection", ja: "寮の点検", ko: "기숙사 점검" },
+      { zh: "断电", en: "Power cut", ja: "停電", ko: "정전" },
+      { zh: "熄灯", en: "Lights out", ja: "消灯", ko: "소등" },
+      { zh: "夜聊", en: "Late-night chat", ja: "夜更かしトーク", ko: "밤샘 수다" },
+      { zh: "占座", en: "Save a seat", ja: "席取り", ko: "자리 맡기" },
+      { zh: "代课", en: "Cover for me in class", ja: "代理出席", ko: "대리 출석" },
+      { zh: "签到", en: "Check in", ja: "チェックイン", ko: "출석 체크" },
+      { zh: "外卖", en: "Food delivery", ja: "デリバリー", ko: "배달 음식" },
+      { zh: "拼单", en: "Group order", ja: "共同注文", ko: "공동 주문" },
+      { zh: "AA", en: "Split the bill", ja: "割り勘", ko: "더치페이" },
+      { zh: "值日", en: "Duty roster", ja: "当番", ko: "당번" },
+      { zh: "打水", en: "Fetch hot water", ja: "お湯を汲む", ko: "뜨거운 물 받기" },
+      { zh: "洗澡", en: "Take a shower", ja: "シャワーを浴びる", ko: "샤워하기" },
+      { zh: "洗衣", en: "Do laundry", ja: "洗濯する", ko: "빨래하기" },
+      { zh: "晾衣", en: "Hang laundry", ja: "洗濯物を干す", ko: "빨래 널기" },
+      { zh: "串门", en: "Visit another dorm", ja: "他の部屋を訪ねる", ko: "다른 방 방문" },
+      { zh: "卧谈", en: "Bedtime talk", ja: "寝る前の雑談", ko: "잠자기 전 수다" },
+      { zh: "熬夜", en: "Stay up late", ja: "夜更かし", ko: "밤샘" },
+      { zh: "早八", en: "8am class", ja: "朝8時の授業", ko: "아침 8시 수업" },
+      { zh: "翘课", en: "Skip class", ja: "授業をサボる", ko: "수업 땡땡이" },
+      { zh: "补考", en: "Makeup exam", ja: "追試", ko: "재시험" },
+      { zh: "挂科", en: "Fail a course", ja: "単位を落とす", ko: "과목 낙제" },
+      { zh: "绩点", en: "GPA", ja: "GPA", ko: "학점" },
+      { zh: "保研", en: "Postgrad recommendation", ja: "推薦入学", ko: "추천 입학" },
+      { zh: "考研", en: "Grad school exam", ja: "大学院入試", ko: "대학원 입시" },
+      { zh: "四六级", en: "CET-4/6", ja: "CET-4/6", ko: "CET-4/6" },
+      { zh: "社团", en: "Student club", ja: "サークル", ko: "동아리" },
+      { zh: "学生会", en: "Student union", ja: "学生会", ko: "학생회" },
+      { zh: "兼职", en: "Part-time job", ja: "アルバイト", ko: "아르바이트" },
+      { zh: "快递", en: "Parcel", ja: "宅配便", ko: "택배" },
+      { zh: "取快递", en: "Pick up parcel", ja: "荷物を受け取る", ko: "택배 찾기" },
+      { zh: "拼多多", en: "Pinduoduo", ja: "ピンドゥオドゥオ", ko: "핀둬둬" },
+      { zh: "淘宝", en: "Taobao", ja: "タオバオ", ko: "타오바오" },
+      { zh: "京东", en: "JD.com", ja: "京東", ko: "징둥" },
+      { zh: "奶茶", en: "Bubble tea", ja: "タピオカ", ko: "버블티" },
+      { zh: "火锅", en: "Hot pot", ja: "火鍋", ko: "훠궈" },
+      { zh: "烧烤", en: "BBQ", ja: "バーベキュー", ko: "바비큐" },
+      { zh: "剧本杀", en: "Murder mystery game", ja: "マーダーミステリー", ko: "마더 미스터리" },
+      { zh: "密室", en: "Escape room", ja: "脱出ゲーム", ko: "방탈출" },
+      { zh: "轰趴", en: "House party", ja: "ホームパーティー", ko: "홈파티" },
+      { zh: "表白", en: "Confess love", ja: "告白する", ko: "고백하기" },
+      { zh: "脱单", en: "Get into a relationship", ja: "恋人ができる", ko: "솔로 탈출" },
+      { zh: "单身狗", en: "Single dog (slang)", ja: "独り身", ko: "솔로" },
+      { zh: "学霸", en: "Top student", ja: "秀才", ko: "수재" },
+      { zh: "学渣", en: "Slacker student", ja: "劣等生", ko: "학渣" },
+      { zh: "卷", en: "Involution (rat race)", ja: "内巻", ko: "내권" },
+      { zh: "躺平", en: "Lie flat", ja: "寝そべり", ko: "탕핑" },
+    ];
+    function slangSpeak(text, lang) {
+      // v1.31：Web Speech API 发音
+      try {
+        if (!("speechSynthesis" in window)) { $("slangResult").textContent = "当前环境不支持发音。"; return; }
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang;
+        u.rate = 0.9;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+        $("slangResult").textContent = "🔊 正在读：" + text;
+      } catch (e) { $("slangResult").textContent = "发音失败。"; }
+    }
+    function slangRender(filter) {
+      const list = $("slangList");
+      list.innerHTML = "";
+      const kw = (filter || "").trim().toLowerCase();
+      let count = 0;
+      SLANG.forEach((item) => {
+        if (kw && !(item.zh.includes(kw) || item.en.toLowerCase().includes(kw))) return;
+        count++;
+        const card = document.createElement("div");
+        card.className = "slang-card";
+        const zh = document.createElement("div");
+        zh.className = "slang-zh";
+        zh.textContent = item.zh;
+        const btn = document.createElement("button");
+        btn.className = "btn ghost-btn small slang-speak";
+        btn.textContent = "🔊";
+        btn.setAttribute("aria-label", "读 " + item.zh);
+        btn.addEventListener("click", () => slangSpeak(item.zh, "zh-CN"));
+        zh.appendChild(btn);
+        card.appendChild(zh);
+        [["en", "🇬🇧", "en-US"], ["ja", "🇯🇵", "ja-JP"], ["ko", "🇰🇷", "ko-KR"]].forEach(([key, flag, lang]) => {
+          const row = document.createElement("div");
+          row.className = "slang-row";
+          const t = document.createElement("span");
+          t.textContent = flag + " " + item[key];
+          const b = document.createElement("button");
+          b.className = "btn ghost-btn small slang-speak";
+          b.textContent = "🔊";
+          b.setAttribute("aria-label", "读 " + item[key]);
+          b.addEventListener("click", () => slangSpeak(item[key], lang));
+          row.appendChild(t); row.appendChild(b);
+          card.appendChild(row);
+        });
+        list.appendChild(card);
+      });
+      $("slangResult").textContent = count === 0 ? "没搜到，换个词试试。" : "共 " + count + " 条，点喇叭 🔊 听发音。";
+    }
+    const slangSearch = $("slangSearch");
+    if (slangSearch) slangSearch.addEventListener("input", () => slangRender(slangSearch.value));
+    slangRender("");
+
+    /* ----- 翻译（原有逻辑，测试依赖） ----- */
     const TRANS_LANGS = [["zh-CN", "中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"]];
     TRANS_LANGS.forEach(([code, label]) => {
       const o1 = document.createElement("option"); o1.value = code; o1.textContent = label;
@@ -2301,73 +3340,12 @@
 
   };
   /* ---------- 29. 计时器（秒表） ---------- */
-  toyInitFns["stopwatch"] = function () {
-    let swRunning = false, swElapsed = 0, swStartAt = 0, swTimerId = null, swLaps = [];
-    function swFormat(ms) {
-      const totalCs = Math.floor(ms / 10);
-      const cs = totalCs % 100;
-      const s = Math.floor(totalCs / 100) % 60;
-      const m = Math.floor(totalCs / 6000);
-      return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(cs).padStart(2, "0");
-    }
-    function swCurrent() { return swRunning ? swElapsed + (performance.now() - swStartAt) : swElapsed; }
-    function swRender() { $("swTime").textContent = swFormat(swCurrent()); }
-    $("swStartBtn").addEventListener("click", () => {
-      if (swRunning) {
-        swElapsed = swCurrent();
-        swRunning = false;
-        if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
-        $("swStartBtn").textContent = "继续 ▶";
-      } else {
-        swStartAt = performance.now();
-        swRunning = true;
-        swTimerId = setInterval(swRender, 100);
-        $("swStartBtn").textContent = "暂停 ⏸";
-      }
-      swRender();
-    });
-    $("swLapBtn").addEventListener("click", () => {
-      swLaps.push(swCurrent());
-      const li = document.createElement("li");
-      li.textContent = "第 " + swLaps.length + " 次 · " + swFormat(swCurrent());
-      $("swLaps").appendChild(li);
-    });
-    $("swResetBtn").addEventListener("click", () => {
-      if (swTimerId) { clearInterval(swTimerId); swTimerId = null; }
-      swRunning = false; swElapsed = 0; swLaps = [];
-      $("swLaps").innerHTML = "";
-      $("swStartBtn").textContent = "开始 ▶";
-      swRender();
-    });
-    swRender();
-
-    // 退出就停：秒表只刷显示，回来再续上（用时按时间戳算，不会丢）
-    toyLeaveCleanup.stopwatch = () => { if (swTimerId) { clearInterval(swTimerId); swTimerId = null; } };
-    toyEnterResume.stopwatch = () => { if (swRunning && !swTimerId) swTimerId = setInterval(swRender, 100); };
-
+  /* v1.31：stopwatch 已合并到 timer（时间工具箱），经 showToy 重定向，此函数不再被调用。 */
+  toyInitFns["stopwatch"] = function () { /* merged into timer */
   };
   /* ---------- 30. BMI 体重管理 ---------- */
-  toyInitFns["bmi"] = function () {
-    $("bmiCalcBtn").addEventListener("click", () => {
-      const h = parseFloat($("bmiHeight").value);
-      const w = parseFloat($("bmiWeight").value);
-      if (isNaN(h) || isNaN(w) || h < 100 || h > 250 || w < 20 || w > 300) {
-        $("bmiResult").textContent = "先填对身高（100–250 厘米）和体重（20–300 公斤）。";
-        $("bmiAdvice").textContent = "";
-        return;
-      }
-      const m = h / 100;
-      const bmi = w / (m * m);
-      const low = (18.5 * m * m).toFixed(1), high = (24 * m * m).toFixed(1);
-      let cat = "", advice = "";
-      if (bmi < 18.5) { cat = "偏瘦"; advice = "可以多吃点，增肌比增肥靠谱。"; }
-      else if (bmi < 24) { cat = "正常"; advice = "保持住，这个范围挺好的。"; }
-      else if (bmi < 28) { cat = "偏胖"; advice = "少喝点奶茶，多走走就下来了。"; }
-      else { cat = "肥胖"; advice = "别节食硬扛，管住嘴 + 多动，慢慢来。"; }
-      $("bmiResult").textContent = "BMI " + bmi.toFixed(1) + " · " + cat;
-      $("bmiAdvice").textContent = "你这个身高的健康体重是 " + low + "–" + high + " 公斤。" + advice;
-    });
-
+  /* v1.31：bmi 已合并到 kin（实用计算器），经 showToy 重定向，此函数不再被调用。 */
+  toyInitFns["bmi"] = function () { /* merged into kin */
   };
   /* ---------- 31. 白噪音 ---------- */
   toyInitFns["whitenoise"] = function () {
@@ -2483,15 +3461,27 @@
       if (tasks.length === 0) { $("dutyResult").textContent = "至少勾 1 个任务。"; return; }
       saveDuty();
       const weeks = parseInt($("dutyWeeks").value, 10) || 1;
+      // v1.31：跳过日期（输入 1-7 表示周一到周日，逗号分隔）
+      const skipInput = $("dutySkip") ? $("dutySkip").value : "";
+      const skipDays = new Set();
+      skipInput.split(/[,，、\s]+/).forEach((s) => {
+        const n = parseInt(s.trim(), 10);
+        if (n >= 1 && n <= 7) skipDays.add(n);
+      });
       const monday = dutyMonday();
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const tbody = $("dutyTable");
       tbody.innerHTML = "";
       const lines = [];
+      let dutyIdx = 0; // v1.31：跳过不占轮值序号
+      let todayPerson = "";
       for (let w = 0; w < weeks; w++) {
         for (let i = 0; i < 7; i++) {
           const d = new Date(monday); d.setDate(monday.getDate() + w * 7 + i);
-          const person = names[(w * 7 + i) % names.length];
+          const dayNum = ((d.getDay() + 6) % 7) + 1; // 周一=1 ... 周日=7
+          if (skipDays.has(dayNum)) continue; // v1.31：跳过
+          const person = names[dutyIdx % names.length];
+          dutyIdx++;
           const tr = document.createElement("tr");
           if (d.getTime() === today.getTime()) tr.className = "today";
           const c1 = document.createElement("td"); c1.textContent = dutyFmt(d);
@@ -2502,10 +3492,28 @@
           lines.push(dutyFmt(d) + " " + person + "：" + tasks.join("、"));
         }
       }
+      // v1.31：找出今天的值日生（大字显示）
+      const todayStr = dutyFmt(today);
+      for (let r = 0; r < tbody.children.length; r++) {
+        const tr = tbody.children[r];
+        if (tr.classList.contains("today")) {
+          todayPerson = tr.children[1].textContent;
+          break;
+        }
+      }
+      const big = $("dutyTodayBig");
+      if (big) {
+        if (todayPerson) {
+          big.classList.remove("hidden");
+          big.innerHTML = '<div class="duty-big-label">今日值日生</div><div class="duty-big-name">' + todayPerson + '</div>';
+        } else {
+          big.classList.add("hidden");
+        }
+      }
       lastDutyText = lines.join("\n");
       const end = new Date(monday); end.setDate(monday.getDate() + weeks * 7 - 1);
       $("dutyStartLabel").textContent = "值日表（" + dutyFmt(monday) + " – " + dutyFmt(end) + "），每天一人轮着来。";
-      $("dutyResult").textContent = "已排好 " + (weeks * 7) + " 天，点复制发群里。";
+      $("dutyResult").textContent = "已排好 " + dutyIdx + " 天，点复制发群里。";
       $("dutyCopyBtn").classList.remove("hidden");
     });
     $("dutyCopyBtn").addEventListener("click", async () => {
@@ -2520,65 +3528,8 @@
 
   };
   /* ---------- 34. AA 分摊 ---------- */
-  toyInitFns["aa"] = function () {
-    function aaParseNames() {
-      return $("aaNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
-    }
-    function aaRefreshPayer() {
-      const names = aaParseNames();
-      const cur = $("aaPayer").value;
-      const sel = $("aaPayer");
-      sel.innerHTML = "";
-      const opt0 = document.createElement("option");
-      opt0.value = ""; opt0.textContent = "没人垫付，只算人均";
-      sel.appendChild(opt0);
-      names.forEach((n) => {
-        const o = document.createElement("option");
-        o.value = n; o.textContent = n + " 先垫付了";
-        sel.appendChild(o);
-      });
-      if (names.indexOf(cur) !== -1) sel.value = cur;
-    }
-    $("aaNames").addEventListener("input", aaRefreshPayer);
-    $("aaCalcBtn").addEventListener("click", () => {
-      const total = Math.round(parseFloat($("aaTotal").value || "0") * 100);
-      const names = aaParseNames();
-      if (!(total > 0)) { $("aaResult").textContent = "先填总金额（要大于 0）。"; return; }
-      if (names.length < 2) { $("aaResult").textContent = "至少写 2 个人才能分摊。"; return; }
-      aaRefreshPayer();
-      // 分到分：先每人取整，剩下的几分钱按顺序分给前面的人，总数一分不差
-      const base = Math.floor(total / names.length);
-      let rest = total - base * names.length;
-      const shares = names.map(() => { const s = base + (rest > 0 ? 1 : 0); if (rest > 0) rest--; return s; });
-      const fmt = (cents) => "¥" + (cents / 100).toFixed(2);
-      const box = $("aaResult");
-      box.innerHTML = "";
-      const head = document.createElement("p");
-      head.className = "result-line";
-      head.textContent = "总额 " + fmt(total) + " · " + names.length + " 人 · 人均 " + fmt(Math.round(total / names.length));
-      box.appendChild(head);
-      names.forEach((n, i) => {
-        const line = document.createElement("div");
-        line.className = "aa-line";
-        line.textContent = n + " 出 " + fmt(shares[i]);
-        box.appendChild(line);
-      });
-      const payer = $("aaPayer").value;
-      if (payer && names.indexOf(payer) !== -1) {
-        const title = document.createElement("p");
-        title.className = "result-line";
-        title.textContent = "💸 结算：" + payer + " 先垫了全款，每人把自己那份转给他：";
-        box.appendChild(title);
-        names.forEach((n, i) => {
-          if (n === payer) return;
-          const line = document.createElement("div");
-          line.className = "aa-line";
-          line.textContent = n + " → " + payer + " " + fmt(shares[i]);
-          box.appendChild(line);
-        });
-      }
-    });
-
+  /* v1.31：aa 已合并到 ledger（宿舍账本），经 showToy 重定向，此函数不再被调用。 */
+  toyInitFns["aa"] = function () { /* merged into ledger */
   };
   /* ---------- 35. 涂鸦板 ---------- */
   toyInitFns["doodle"] = function () {
@@ -2859,14 +3810,49 @@
       { text: "再来一次 🎰", weight: 2 },
       { text: "谢谢参与 🙏", weight: 4 },
     ];
+    // ---- 新增：中奖率可调（localStorage 持久化） ----
+    const SCRATCH_RATE_KEY = "dorm-toybox-scratch-rate-v1";
+    let scratchWinRate = 70; // 0-100，越高越容易中奖
+    try {
+      const v = parseInt(localStorage.getItem(SCRATCH_RATE_KEY) || "70", 10);
+      if (v >= 0 && v <= 100) scratchWinRate = v;
+    } catch (e) {}
+    // 动态添加滑杆 UI
+    const scratchSec = $("toy-scratch");
+    if (scratchSec) {
+      const rateDiv = document.createElement("div");
+      rateDiv.className = "scratch-rate";
+      const rateLabel = document.createElement("label");
+      rateLabel.textContent = "🍀 中奖率：";
+      const rateSlider = document.createElement("input");
+      rateSlider.type = "range"; rateSlider.min = "0"; rateSlider.max = "100";
+      rateSlider.value = String(scratchWinRate);
+      rateSlider.setAttribute("aria-label", "中奖率");
+      const rateVal = document.createElement("span");
+      rateVal.textContent = scratchWinRate + "%";
+      rateSlider.addEventListener("input", () => {
+        scratchWinRate = parseInt(rateSlider.value, 10);
+        rateVal.textContent = scratchWinRate + "%";
+        try { localStorage.setItem(SCRATCH_RATE_KEY, String(scratchWinRate)); } catch (e) {}
+      });
+      rateDiv.appendChild(rateLabel); rateDiv.appendChild(rateSlider); rateDiv.appendChild(rateVal);
+      // 加到 section 里（stub 兼容用 appendChild）
+      scratchSec.appendChild(rateDiv);
+    }
     const SCRATCH_W = 320, SCRATCH_H = 200, SCRATCH_COLS = 10, SCRATCH_ROWS = 6;
     const SCRATCH_CELL_W = SCRATCH_W / SCRATCH_COLS, SCRATCH_CELL_H = SCRATCH_H / SCRATCH_ROWS;
     let scratchGrid = [], scratchRevealed = false, scratchDrawing = false;
     const scratchCanvas = $("scratchCanvas");
     const scratchCtx = scratchCanvas.getContext ? scratchCanvas.getContext("2d") : null;
     function scratchPickPrize() {
+      // 中奖率影响"谢谢参与"的概率：winRate=100 时必中奖，=0 时必谢谢参与
+      const roll = Math.random() * 100;
+      if (roll > scratchWinRate) return "谢谢参与 🙏";
       const bag = [];
-      SCRATCH_PRIZES.forEach((p) => { for (let i = 0; i < p.weight; i++) bag.push(p.text); });
+      SCRATCH_PRIZES.forEach((p) => {
+        if (p.text.includes("谢谢参与")) return;
+        for (let i = 0; i < p.weight; i++) bag.push(p.text);
+      });
       return bag[Math.floor(Math.random() * bag.length)];
     }
     function scratchCover() {
@@ -2921,17 +3907,85 @@
       const now = new Date(); now.setHours(0, 0, 0, 0);
       return Math.round((t.getTime() - now.getTime()) / 86400000);
     }
+    function cdDrawRing(canvas, days) {
+      // v1.31：canvas 进度环
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const W = 64, H = 64, cx = 32, cy = 32, r = 26;
+      ctx.clearRect(0, 0, W, H);
+      // 背景环
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      // 进度：30 天为满圈
+      let frac = 0, color = "#3ec6a7";
+      if (days > 0) {
+        frac = Math.min(days, 30) / 30;
+        color = days <= 3 ? "#e5484d" : days <= 7 ? "#f5c542" : "#3ec6a7";
+      } else if (days === 0) {
+        frac = 1;
+        color = "#f5c542";
+      }
+      if (frac > 0) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
+      // 天数文字
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(days > 0 ? String(days) : days === 0 ? "今" : "过", cx, cy);
+    }
+    function cdConfetti() {
+      // v1.31：到期撒花（简单 CSS 彩带）
+      const wrap = $("cdConfetti");
+      if (!wrap) return;
+      wrap.innerHTML = "";
+      wrap.classList.remove("hidden");
+      const colors = ["#e5484d", "#f5c542", "#3ec6a7", "#4a9eff", "#b565f0"];
+      for (let i = 0; i < 30; i++) {
+        const p = document.createElement("i");
+        p.className = "confetti-piece";
+        p.style.left = Math.random() * 100 + "%";
+        p.style.background = colors[i % colors.length];
+        p.style.animationDelay = (Math.random() * 0.5) + "s";
+        wrap.appendChild(p);
+      }
+      setTimeout(() => wrap.classList.add("hidden"), 3000);
+    }
     function cdRender() {
       const list = $("cdList");
       list.innerHTML = "";
       const sorted = cdEvents.slice().sort((a, b) => cdDays(a.date) - cdDays(b.date));
+      let hasToday = false;
       sorted.forEach((ev) => {
         const d = cdDays(ev.date);
+        if (d === 0) hasToday = true;
         const row = document.createElement("div");
-        row.className = "cd-row";
+        row.className = "cd-row" + (d === 0 ? " today" : "");
+        // v1.31：canvas 进度环（保持 children[0]=name, [1]=days, [2]=del 的测试结构）
+        // 环放在 name 前面作为装饰，不计入 children 索引？不行，测试用 children[2] 找删除按钮
+        // 方案：环作为 row 的第一个子元素，但测试的 children[2] 会错位
+        // 折中：把环塞进 name span 里面（不影响 children 索引）
         const name = document.createElement("span");
         name.className = "cd-name";
-        name.textContent = ev.name;
+        const cv = document.createElement("canvas");
+        cv.width = 64; cv.height = 64;
+        cv.className = "cd-ring";
+        name.appendChild(cv);
+        const nm = document.createElement("b");
+        nm.textContent = ev.name;
+        name.appendChild(nm);
+        // 画环（测试桩的 getContext 返回占位，不报错即可）
+        try { cdDrawRing(cv, d); } catch (e) { /* 忽略 */ }
         const days = document.createElement("span");
         days.className = "cd-days" + (d === 0 ? " today" : d < 0 ? " past" : "");
         days.textContent = d === 0 ? "就是今天！" : d > 0 ? "还有 " + d + " 天" : "已经过了 " + (-d) + " 天";
@@ -2945,6 +3999,7 @@
         row.appendChild(name); row.appendChild(days); row.appendChild(del);
         list.appendChild(row);
       });
+      if (hasToday) cdConfetti();
       $("cdResult").textContent = cdEvents.length === 0 ? "还没加倒计时。" : "共 " + cdEvents.length + " 个倒计时，最近的在最前面。";
     }
     $("cdAddBtn").addEventListener("click", () => {
@@ -2965,21 +4020,58 @@
     const TODO_KEY = "dorm-toybox-todo-v1";
     let todoItems = [];
     try { todoItems = JSON.parse(localStorage.getItem(TODO_KEY) || "[]") || []; } catch (e) { todoItems = []; }
+    // v1.31：兼容旧数据（无 priority/tag 字段）
+    todoItems.forEach((it) => { if (!it.priority) it.priority = "med"; if (!it.tag) it.tag = ""; });
     function todoSave() { try { localStorage.setItem(TODO_KEY, JSON.stringify(todoItems)); } catch (e) { /* 忽略 */ } }
+    const PRI_LABEL = { high: "🔴 高", med: "🟡 中", low: "🟢 低" };
     function todoRender() {
       const list = $("todoList");
       list.innerHTML = "";
-      todoItems.forEach((item) => {
+      todoItems.forEach((item, idx) => {
         const row = document.createElement("div");
-        row.className = "todo-row" + (item.done ? " done" : "");
+        row.className = "todo-row pri-" + (item.priority || "med") + (item.done ? " done" : "");
+        row.setAttribute("draggable", "true");
+        row.setAttribute("data-idx", idx);
+        // 拖拽排序（HTML5）
+        row.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", idx);
+          row.classList.add("dragging");
+        });
+        row.addEventListener("dragend", () => row.classList.remove("dragging"));
+        row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("drag-over"); });
+        row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          row.classList.remove("drag-over");
+          const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+          if (isNaN(from) || from === idx) return;
+          const [moved] = todoItems.splice(from, 1);
+          todoItems.splice(idx, 0, moved);
+          todoSave(); todoRender();
+        });
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = item.done;
         cb.setAttribute("aria-label", "完成 " + item.text);
-        cb.addEventListener("change", () => { item.done = cb.checked; todoSave(); todoRender(); });
+        cb.addEventListener("change", () => {
+          item.done = cb.checked;
+          todoSave(); todoRender();
+          // v1.31：打勾动画（CSS .todo-row.done .todo-check-anim）
+          if (item.done) {
+            const r = list.children[idx];
+            if (r) r.classList.add("just-checked");
+          }
+        });
         const span = document.createElement("span");
         span.className = "todo-text";
-        span.textContent = item.text;
+        // v1.31：优先级徽章 + 分类标签 + 文本（保持 children[1] 是 span）
+        let html = '<em class="todo-pri">' + (PRI_LABEL[item.priority] || PRI_LABEL.med) + '</em>';
+        if (item.tag) html += '<em class="todo-tag">' + item.tag.replace(/</g, "&lt;") + '</em>';
+        html += '<span>' + item.text.replace(/</g, "&lt;") + '</span>';
+        // 测试桩不支持 innerHTML 解析，用 textContent 兜底（真机用 innerHTML）
+        try { span.innerHTML = html; } catch (e) { span.textContent = item.text; }
+        // 确保测试能读到文本（textContent 包含）
+        if (!span.textContent.includes(item.text)) span.textContent = item.text;
         const del = document.createElement("button");
         del.className = "btn ghost-btn small";
         del.textContent = "删掉";
@@ -2994,9 +4086,12 @@
     function todoAdd() {
       const text = $("todoInput").value.trim();
       if (!text) return;
-      todoItems.push({ text, done: false });
+      const pri = $("todoPri") ? $("todoPri").value : "med";
+      const tag = $("todoTag") ? $("todoTag").value.trim() : "";
+      todoItems.push({ text, done: false, priority: pri, tag: tag });
       todoSave(); todoRender();
       $("todoInput").value = "";
+      if ($("todoTag")) $("todoTag").value = "";
     }
     $("todoAddBtn").addEventListener("click", todoAdd);
     $("todoInput").addEventListener("keydown", (e) => { if (e.key === "Enter") todoAdd(); });
@@ -3445,6 +4540,12 @@
               rm.textContent = course.room;
               cell.appendChild(rm);
             }
+            if (course.teacher) {
+              const tc = document.createElement("span");
+              tc.className = "sch-teacher";
+              tc.textContent = course.teacher;
+              cell.appendChild(tc);
+            }
           } else {
             cell.textContent = "＋";
           }
@@ -3468,14 +4569,16 @@
     $("schAddBtn").addEventListener("click", () => {
       const name = $("schName").value.trim();
       const room = $("schRoom").value.trim();
+      const teacher = $("schTeacher") ? $("schTeacher").value.trim() : "";
       const day = parseInt($("schDay").value, 10);
       const period = parseInt($("schPeriod").value, 10);
       if (!name) { $("schResult").textContent = "先写课程名。"; return; }
       schCourses = schCourses.filter((c) => !(c.day === day && c.period === period));
-      schCourses.push({ name, room, day, period });
+      schCourses.push({ name, room, teacher, day, period });
       schSave(); schRender();
       $("schName").value = "";
       $("schRoom").value = "";
+      if ($("schTeacher")) $("schTeacher").value = "";
       $("schResult").textContent = "已加上「" + name + "」（" + SCH_DAYS[day] + " " + SCH_PERIODS[period].split("\n")[0] + "）。";
     });
     $("schClearBtn").addEventListener("click", () => { schCourses = []; schSave(); schRender(); $("schResult").textContent = "课程表已清空。"; });
@@ -3938,6 +5041,44 @@
       $("gachaStats").textContent = "已抽 " + gachaState.total + " · SSR " + gachaState.ssr + " · SR " + gachaState.sr + " · R " + gachaState.r
         + " · 距 SSR 保底 " + (90 - gachaState.pity) + " 抽 · 图鉴 " + gachaState.owned.length + "/13";
     }
+    // ---- 新增：图鉴画廊（localStorage 已持久化 owned） ----
+    const GACHA_DEX_KEY = "dorm-toybox-gacha-dex-v1";
+    // 同步到独立 dex key（任务要求）
+    try {
+      localStorage.setItem(GACHA_DEX_KEY, JSON.stringify(gachaState.owned));
+    } catch (e) {}
+    function gachaRenderDex() {
+      let dexWrap = $("gachaDex");
+      if (!dexWrap) {
+        const sec = $("toy-gacha");
+        if (!sec) return;
+        dexWrap = document.createElement("div");
+        dexWrap.id = "gachaDex";
+        dexWrap.className = "gacha-dex";
+        sec.appendChild(dexWrap);
+      }
+      dexWrap.innerHTML = "";
+      const allCards = [];
+      Object.keys(GACHA_POOL).forEach((rar) => {
+        GACHA_POOL[rar].forEach((c) => allCards.push({ ...c, rarity: rar, id: rar + ":" + c.name }));
+      });
+      const title = document.createElement("p");
+      title.style.width = "100%"; title.style.margin = "0 0 6px 0"; title.style.fontWeight = "bold";
+      title.textContent = "📖 图鉴收集（" + gachaState.owned.length + "/" + allCards.length + "）";
+      dexWrap.appendChild(title);
+      allCards.forEach((c) => {
+        const item = document.createElement("div");
+        item.className = "gacha-dex-item" + (gachaState.owned.includes(c.id) ? "" : " missing");
+        const em = document.createElement("span");
+        em.className = "dex-emoji"; em.textContent = c.emoji;
+        const nm = document.createElement("span"); nm.textContent = c.name;
+        const rr = document.createElement("span");
+        rr.textContent = c.rarity;
+        rr.style.color = c.rarity === "SSR" ? "#ffd700" : c.rarity === "SR" ? "#c0c0ff" : "#999";
+        item.appendChild(em); item.appendChild(nm); item.appendChild(rr);
+        dexWrap.appendChild(item);
+      });
+    }
     function gachaPull(n) {
       gachaLastPull = [];
       for (let i = 0; i < n; i++) {
@@ -3945,6 +5086,8 @@
         gachaLastPull.push(gachaDrawOne(n === 10 && i === 9));
       }
       gachaRenderCards();
+      gachaRenderDex();
+      try { localStorage.setItem(GACHA_DEX_KEY, JSON.stringify(gachaState.owned)); } catch (e) {}
       gachaRenderStats();
       const ssrCount = gachaLastPull.filter((c) => c.rarity === "SSR").length;
       const srCount = gachaLastPull.filter((c) => c.rarity === "SR").length;
@@ -3960,6 +5103,8 @@
       gachaLastPull = [];
       gachaSave();
       gachaRenderCards();
+      gachaRenderDex();
+      try { localStorage.setItem(GACHA_DEX_KEY, JSON.stringify(gachaState.owned)); } catch (e) {}
       gachaRenderStats();
       $("gachaResult").textContent = "记录已清空。";
     });

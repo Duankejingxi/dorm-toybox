@@ -1280,3 +1280,57 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
   margin: 12px auto;
   max-width: 100%;
 }
+
+/* ============ v1.32：音效 + 手感打磨 ============ */
+
+/* --- 记忆翻牌 3D 翻转 --- */
+#memoryGrid { perspective: 600px; }
+.memory-card { transform-style: preserve-3d; }
+.memory-card.flipping { animation: mem-flip-out .14s ease-in forwards; }
+.memory-card.flipped { animation: mem-flip-in .2s ease-out; }
+.memory-card.unflipping { animation: mem-flip-out .14s ease-in forwards; }
+@keyframes mem-flip-out { from { transform: rotateY(0deg); } to { transform: rotateY(90deg); } }
+@keyframes mem-flip-in { from { transform: rotateY(90deg); } to { transform: rotateY(0deg); } }
+
+/* --- 打地鼠：敲击反馈 --- */
+.mole-hole { position: relative; overflow: visible; }
+.mole-hole.whacked { animation: mole-whack .22s ease-out; }
+@keyframes mole-whack { 0% { transform: scale(1); } 40% { transform: scale(.82) rotate(-7deg); } 100% { transform: scale(1); } }
+.mole-particle { position: absolute; left: 50%; top: 30%; font-size: 18px; pointer-events: none; animation: mole-burst .55s ease-out forwards; z-index: 3; }
+@keyframes mole-burst {
+  0% { transform: translate(-50%, -50%) scale(.5); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, -40px))) scale(1.2); opacity: 0; }
+}
+.mole-float { position: absolute; left: 50%; top: 8%; transform: translateX(-50%); color: var(--gold); font-weight: 800; font-size: 18px; pointer-events: none; animation: mole-float .8s ease-out forwards; z-index: 3; white-space: nowrap; }
+@keyframes mole-float { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.8); } 25% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(1); } }
+
+/* --- 跳一跳：蓄力压缩 + Perfect 飘字 --- */
+.jump-char { transition: left .3s ease-out, bottom .3s ease-out, transform .12s ease-out; }
+.jump-char.charging { transform: scaleY(.68) scaleX(1.18); }
+.jump-perfect { position: absolute; bottom: 130px; transform: translateX(-50%); color: #ffd700; font-weight: 900; font-size: 22px; text-shadow: 0 0 12px rgba(255, 215, 0, .8); pointer-events: none; animation: jump-perfect .9s ease-out forwards; white-space: nowrap; z-index: 5; }
+@keyframes jump-perfect { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 30% { opacity: 1; transform: translateX(-50%) scale(1.25); } 100% { opacity: 0; transform: translateX(-50%) translateY(-34px) scale(1); } }
+
+/* --- 接金币：飘字 + 计分牌弹跳 --- */
+#toy-catch { position: relative; }
+.catch-fly { position: absolute; transform: translate(-50%, -50%); color: var(--gold); font-weight: 800; font-size: 18px; pointer-events: none; animation: catch-fly .8s ease-out forwards; z-index: 5; white-space: nowrap; }
+@keyframes catch-fly { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+#catchScore.score-pop { animation: score-pop .3s ease-out; display: inline-block; }
+@keyframes score-pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); color: var(--gold); } 100% { transform: scale(1); } }
+
+/* --- 找不同：圆圈标记 + 放大镜 --- */
+.spotdiff-cell.found { animation: spotdiff-found .45s ease-out; border-color: var(--gold); }
+@keyframes spotdiff-found {
+  0% { box-shadow: 0 0 0 0 rgba(245, 197, 66, .7); transform: scale(1); }
+  50% { box-shadow: 0 0 0 10px rgba(245, 197, 66, 0); transform: scale(1.12); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 197, 66, 0); transform: scale(1); }
+}
+.spotdiff-grid.zoomed { transform: scale(1.8); transform-origin: center top; margin-bottom: 120px; }
+.spotdiff-grid { transition: transform .25s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-card.flipping, .memory-card.flipped, .memory-card.unflipping,
+  .mole-hole.whacked, .mole-particle, .mole-float,
+  .jump-char.charging, .jump-perfect,
+  .catch-fly, #catchScore.score-pop,
+  .spotdiff-cell.found { animation-duration: .01ms !important; }
+}

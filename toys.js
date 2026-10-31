@@ -78,6 +78,92 @@
   }
   function loadBest(key) { return parseInt(lsGet(key, "0"), 10) || 0; }
   function saveBest(key, value) { lsSet(key, String(value)); }
+  /* ---------- v1.32：统一音效系统（WebAudio 合成，零外部文件） ---------- */
+  const SFX_KEY = "dorm-toybox-sfx-v1";
+  const SFX = {
+    enabled: lsGet(SFX_KEY, "1") === "1",
+    _ctx: null,
+    _ctxTried: false,
+    ctx() {
+      if (this._ctx) return this._ctx;
+      if (this._ctxTried) return null;
+      this._ctxTried = true;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        this._ctx = new AC();
+        return this._ctx;
+      } catch (e) { return null; }
+    },
+    // 解锁：首次用户手势时 resume（移动端自动播放策略）
+    unlock() {
+      const c = this.ctx();
+      if (c && c.state === "suspended") { c.resume().catch(() => {}); }
+    },
+    toggle() {
+      this.enabled = !this.enabled;
+      lsSet(SFX_KEY, this.enabled ? "1" : "0");
+      return this.enabled;
+    },
+    // 基础：单音
+    _tone(freq, dur, type, vol, when, slideTo) {
+      if (!this.enabled) return;
+      const c = this.ctx();
+      if (!c) return;
+      try {
+        const t0 = c.currentTime + (when || 0);
+        const o = c.createOscillator();
+        const g = c.createGain();
+        o.type = type || "sine";
+        o.frequency.setValueAtTime(freq, t0);
+        if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol || 0.15, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g); g.connect(c.destination);
+        o.start(t0); o.stop(t0 + dur + 0.05);
+      } catch (e) { /* 忽略 */ }
+    },
+    // 噪声（打击/爆炸）
+    _noise(dur, vol, when, lowpass) {
+      if (!this.enabled) return;
+      const c = this.ctx();
+      if (!c) return;
+      try {
+        const t0 = c.currentTime + (when || 0);
+        const len = Math.floor(c.sampleRate * dur);
+        const buf = c.createBuffer(1, len, c.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+        const src = c.createBufferSource();
+        src.buffer = buf;
+        const g = c.createGain();
+        g.gain.setValueAtTime(vol || 0.2, t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        let node = src;
+        if (lowpass) { const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lowpass; src.connect(f); node = f; }
+        node.connect(g); g.connect(c.destination);
+        src.start(t0);
+      } catch (e) { /* 忽略 */ }
+    },
+    click() { this._tone(600, 0.07, "square", 0.08); },
+    pop(pitch) { // pitch: 0~1，越高音越高（2048/连击用）
+      const f = 400 + (pitch || 0) * 600;
+      this._tone(f, 0.12, "sine", 0.16, 0, f * 1.5);
+    },
+    coin() { this._tone(880, 0.08, "square", 0.1); this._tone(1320, 0.18, "square", 0.1, 0.08); },
+    win() { [523, 659, 784].forEach((f, i) => this._tone(f, 0.16, "triangle", 0.16, i * 0.1)); },
+    lose() { [400, 300, 200].forEach((f, i) => this._tone(f, 0.2, "sawtooth", 0.1, i * 0.12)); },
+    hit() { this._noise(0.15, 0.25, 0, 1200); },
+    jump() { this._tone(300, 0.18, "sine", 0.14, 0, 700); },
+    shoot() { this._tone(1200, 0.12, "sawtooth", 0.08, 0, 300); },
+  };
+  // 全局首次交互解锁音频
+  if (typeof document !== "undefined" && document.addEventListener) {
+    const unlockOnce = () => { SFX.unlock(); };
+    document.addEventListener("pointerdown", unlockOnce, { once: true });
+    document.addEventListener("touchstart", unlockOnce, { once: true });
+  }
   /* ---------- v1.30：奶蛙图片数据懒加载（frog-data*.js 共 1.7MB，点开奶蛙相关玩具时才加载） ---------- */
   const FROG_DATA_FILES = ["frog-data.js", "frog-data-2.js", "frog-data-3.js", "frog-data-4.js", "frog-data-5.js"];
   let frogDataPromise = null;
@@ -221,6 +307,17 @@
   $("homeBtn").addEventListener("click", showHome);
   $("drawerCloseBtn").addEventListener("click", closeDrawer);
   $("drawerOverlay").addEventListener("click", closeDrawer);
+  // v1.32：音效开关
+  const sfxBtn = $("sfxBtn");
+  if (sfxBtn) {
+    sfxBtn.textContent = SFX.enabled ? "🔊" : "🔇";
+    sfxBtn.addEventListener("click", () => {
+      SFX.unlock();
+      const on = SFX.toggle();
+      sfxBtn.textContent = on ? "🔊" : "🔇";
+      if (on) SFX.click();
+    });
+  }
   window.addEventListener("hashchange", () => {
     const id = window.location.hash.slice(1);
     if (id === "" || id === "home") { if (currentToy) showHome(); return; }
@@ -1416,9 +1513,11 @@
         if (guessMode === "duo") {
           const loser = guessTurn === 0 ? "玩家一" : "玩家二";
           const winner = guessTurn === 0 ? "玩家二" : "玩家一";
+          SFX.win();
           $("guessResult").textContent = "💥 " + loser + " 猜中炸弹，输了！" + winner + " 获胜！";
         } else {
           const tries = guessTries.length;
+          SFX.win();
           let msg = "💣 拆弹成功！就是 " + guessTarget + "，用了 " + tries + " 次。";
           if (guessBest === 0 || tries < guessBest) {
             guessBest = tries;
@@ -1508,13 +1607,19 @@
       renderMemoryBest();
     }
     function memoryFlip(card) {
-      if (memoryLock || card.classList.contains("flipped") || card.classList.contains("matched")) return;
+      if (memoryLock || card.classList.contains("flipped") || card.classList.contains("matched") || card.classList.contains("flipping") || card.classList.contains("unflipping")) return;
       if (!memoryStartAt) {
         memoryStartAt = performance.now();
         memoryTimerId = setInterval(renderMemoryStats, 500);
       }
-      card.classList.add("flipped");
-      card.textContent = card.getAttribute("data-emoji");
+      // v1.32：3D 翻转两段式——先转到 90°（边缘，看不见），换面，再转回来，避免镜像
+      card.classList.add("flipping");
+      setTimeout(() => {
+        card.textContent = card.getAttribute("data-emoji");
+        card.classList.remove("flipping");
+        card.classList.add("flipped");
+        SFX.click();
+      }, 140);
       memoryFlipped.push(card);
       if (memoryFlipped.length === 2) {
         memoryLock = true;
@@ -1527,6 +1632,7 @@
             a.classList.add("matched");
             b.classList.add("matched");
             memoryMatched++;
+            SFX.pop(0.25 + (memoryMatched / MEMORY_EMOJIS.length) * 0.65);
             if (memoryMatched === MEMORY_EMOJIS.length) {
               if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; }
               const seconds = memoryElapsed();
@@ -1537,17 +1643,26 @@
                 try { localStorage.setItem(MEMORY_BEST_KEY, JSON.stringify(memoryBest)); } catch (e) { /* 忽略 */ }
                 msg += "新纪录！";
               }
+              SFX.win();
               $("memoryResult").textContent = msg;
               renderMemoryBest();
             } else {
               $("memoryResult").textContent = "配对成功！还剩 " + (MEMORY_EMOJIS.length - memoryMatched) + " 对。";
             }
           } else {
-            a.classList.remove("flipped");
-            b.classList.remove("flipped");
-            a.textContent = "❓";
-            b.textContent = "❓";
+            // v1.32：没配上——两段式翻回去
+            a.classList.add("unflipping");
+            b.classList.add("unflipping");
+            setTimeout(() => {
+              a.classList.remove("flipped", "unflipping");
+              b.classList.remove("flipped", "unflipping");
+              a.textContent = "❓";
+              b.textContent = "❓";
+              memoryFlipped = [];
+              memoryLock = false;
+            }, 140);
             $("memoryResult").textContent = "没配上，再试一次。";
+            return;
           }
           memoryFlipped = [];
           memoryLock = false;
@@ -3738,6 +3853,7 @@
       snakeBody.unshift(head);
       if (snakeFood && head.x === snakeFood.x && head.y === snakeFood.y) {
         snakeScore++;
+        SFX.pop(Math.min(1, snakeScore / 30));
         snakeUpdateScore();
         snakePlaceFood();
         // 吃得越多越快，最快 80ms 一步
@@ -3752,6 +3868,7 @@
       snakeState = "over";
       snakeSaveBest();
       snakeUpdateScore();
+      SFX.lose();
       $("snakeStatus").textContent = "💥 游戏结束！得分 " + snakeScore + "，最高 " + Math.max(snakeBest(), snakeScore) + "。点重新开始再来一局。";
       $("snakeStartBtn").textContent = "开始 ▶";
     }
@@ -4175,8 +4292,9 @@
         tLines += cleared;
         tScore += (T_POINTS[cleared] || 100) * tLevel;
         tLevel = Math.floor(tLines / 10) + 1;
+        SFX.win();
         if (tTimer) { clearInterval(tTimer); tTimer = setInterval(tTick, Math.max(100, 800 - (tLevel - 1) * 70)); }
-      }
+      } else { SFX.click(); }
       tCur = tNext; tNext = tNewPiece();
       if (tCollide(tCur.m, tCur.x, tCur.y)) { tGameOver(); return; }
       tUpdateHud(); tDraw();
@@ -4191,6 +4309,7 @@
       if (tTimer) { clearInterval(tTimer); tTimer = null; }
       tState = "over";
       tSaveBest(); tUpdateHud();
+      SFX.lose();
       $("tetrisStatus").textContent = "💥 堆到顶了！得分 " + tScore + "，最高 " + Math.max(tBest(), tScore) + "。点开始再来一局。";
       $("tetrisStartBtn").textContent = "开始 ▶";
     }
@@ -4321,12 +4440,13 @@
       }
       if (g2048.join(",") === before) return; // 没动，不生成新块
       gScore += gained;
+      if (gained > 0) { const mx = Math.max.apply(null, g2048); SFX.pop(Math.min(1, Math.log2(mx) / 11)); }
       g2048Spawn();
       g2048SaveBest();
       g2048Render();
-      if (!gWon && g2048.some((v) => v >= 2048)) { gWon = true; $("g2048Status").textContent = "🎉 拼出 2048 了！太强了，还能继续往上拼。"; }
+      if (!gWon && g2048.some((v) => v >= 2048)) { gWon = true; SFX.win(); $("g2048Status").textContent = "🎉 拼出 2048 了！太强了，还能继续往上拼。"; }
       else if (g2048CanMove()) { if (!gWon) $("g2048Status").textContent = "继续，拼出更大的数。"; }
-      else { gOver = true; $("g2048Status").textContent = "💥 拼不动了！得分 " + gScore + "，最高 " + Math.max(g2048Best(), gScore) + "。点新一局再来。"; }
+      else { gOver = true; SFX.lose(); $("g2048Status").textContent = "💥 拼不动了！得分 " + gScore + "，最高 " + Math.max(g2048Best(), gScore) + "。点新一局再来。"; }
     }
     function g2048CanMove() {
       if (g2048.some((v) => !v)) return true;
@@ -4461,15 +4581,18 @@
         mOver = true; mStopTimer();
         mCells.forEach((c) => { if (c.mine) c.revealed = true; });
         $("minesFaceBtn").textContent = "😵";
+        SFX.lose();
         $("minesStatus").textContent = "💥 踩到雷了！用时 " + mSeconds + " 秒。点新一局再来。";
         mRender();
         return;
       }
       mFlood(i);
+      SFX.click();
       mRender();
       if (mCells.every((c) => c.mine || c.revealed)) {
         mOver = true; mStopTimer();
         $("minesFaceBtn").textContent = "😎";
+        SFX.win();
         $("minesStatus").textContent = "🎉 赢了！用时 " + mSeconds + " 秒，全挖开了，太强了。";
       }
     }
@@ -4626,6 +4749,30 @@
       moleHideIds.push(hideId);
       molePopId = setTimeout(molePop, 350 + Math.random() * 450);
     }
+    // v1.32：敲中粒子爆发 + 飘字
+    function moleBurst(hole) {
+      hole.classList.add("whacked");
+      setTimeout(() => hole.classList.remove("whacked"), 220);
+      const bits = ["💥", "✨", "⭐", "💫"];
+      for (let k = 0; k < 6; k++) {
+        const p = document.createElement("span");
+        p.className = "mole-particle";
+        p.textContent = bits[k % bits.length];
+        if (p.style.setProperty) { // 测试桩的 style 是普通对象，跳过
+          p.style.setProperty("--dx", (Math.random() * 90 - 45).toFixed(0) + "px");
+          p.style.setProperty("--dy", (-Math.random() * 70 - 15).toFixed(0) + "px");
+        }
+        hole.appendChild(p);
+        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 600);
+      }
+    }
+    function moleFloat(hole, text) {
+      const f = document.createElement("span");
+      f.className = "mole-float";
+      f.textContent = text;
+      hole.appendChild(f);
+      setTimeout(() => { if (f.parentNode) f.parentNode.removeChild(f); }, 800);
+    }
     function moleWhack(i) {
       if (!moleRunning) return;
       if (moleActive.has(i)) {
@@ -4633,6 +4780,9 @@
         moleHoles[i].classList.remove("up");
         moleHoles[i].textContent = "🕳️";
         moleScore++;
+        SFX.hit();
+        moleBurst(moleHoles[i]);
+        moleFloat(moleHoles[i], "+1");
         $("moleResult").textContent = "🔨 敲中！得分 " + moleScore + "。";
         moleRender();
       }
@@ -4783,7 +4933,8 @@
       gBoard[bestIdx] = 2;
       gLast = bestIdx;
       gMoves++;
-      if (gomokuLineLen(bestIdx, 2) >= 5) gWinner = 2;
+      SFX.click();
+      if (gomokuLineLen(bestIdx, 2) >= 5) { gWinner = 2; SFX.win(); }
       else if (gBoard.every((v) => v !== 0)) gWinner = 3;
       else gTurn = 1;
       gomokuRender();
@@ -4795,7 +4946,8 @@
       gBoard[idx] = gTurn;
       gLast = idx;
       gMoves++;
-      if (gomokuLineLen(idx, gTurn) >= 5) { gWinner = gTurn; gomokuRender(); return; }
+      SFX.click();
+      if (gomokuLineLen(idx, gTurn) >= 5) { gWinner = gTurn; SFX.win(); gomokuRender(); return; }
       if (gBoard.every((v) => v !== 0)) { gWinner = 3; gomokuRender(); return; }
       gTurn = gTurn === 1 ? 2 : 1;
       gomokuRender();
@@ -5203,11 +5355,13 @@
         if (sokobanWalls.has(bx + "," + by)) return;
         if (sokobanBoxes.some((b) => b.x === bx && b.y === by)) return;
         sokobanBoxes[bi] = { x: bx, y: by };
+        SFX.click();
       }
       sokobanPlayer = { x: nx, y: ny };
       sokobanMoves++;
       if (sokobanBoxes.every((b) => sokobanTargets.has(b.x + "," + b.y))) {
         sokobanWon = true;
+        SFX.win();
         $("sokobanStatus").textContent = "🎉 第 " + (sokobanLevel + 1) + " 关通过！用了 " + sokobanMoves + " 步。"
           + (sokobanLevel < 2 ? " 点第 " + (sokobanLevel + 2) + " 关继续。" : " 三关全通，你是推箱子大师！");
       }
@@ -5288,6 +5442,7 @@
         if (b.x + b.r > br.x && b.x - b.r < br.x + br.w && b.y + b.r > br.y && b.y - b.r < br.y + br.h) {
           br.alive = false;
           breakoutScore += 10;
+          SFX.pop(0.5);
           b.dy = -b.dy;
           break;
         }
@@ -5297,6 +5452,7 @@
       if (left === 0) {
         breakoutRunning = false;
         if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
+        SFX.win();
         $("breakoutStatus").textContent = "🎉 通关！得分 " + breakoutScore + "，砖块全碎了。";
         breakoutRender();
         return;
@@ -5306,6 +5462,7 @@
         if (breakoutLives <= 0) {
           breakoutRunning = false;
           if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
+          SFX.lose();
           $("breakoutStatus").textContent = "💔 没命了。得分 " + breakoutScore + "，点重开再来。";
         } else {
           breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 };
@@ -5653,6 +5810,7 @@
       if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
       jumpScore = 0; jumpPower = 0; jumpOver = false; jumpCharging = false;
       jumpPlatA = { x: 20, w: 60 }; jumpPlatB = jumpNewPlatB(); jumpCharX = 34;
+      $("jumpChar").classList.remove("charging");
       $("jumpStatus").textContent = "按住蓄力，松手起跳。";
       jumpRender();
     }
@@ -5665,8 +5823,10 @@
       const center = newX + 16;
       jumpCharX = newX;
       const ch = $("jumpChar");
+      ch.classList.remove("charging"); // v1.32：松手回弹
       ch.style.left = newX + "px";
       ch.style.bottom = "120px";
+      SFX.jump();
       setTimeout(() => { ch.style.bottom = "56px"; }, 160);
       jumpPower = 0;
       if (center >= jumpPlatB.x && center <= jumpPlatB.x + jumpPlatB.w) {
@@ -5676,6 +5836,10 @@
           jumpBest = jumpScore;
           saveBest(JUMP_KEY, jumpBest);
         }
+        if (isCenter) {
+          SFX.win();
+          jumpPerfect(ch); // v1.32：Perfect! 飘字
+        } else { SFX.pop(0.4); }
         $("jumpStatus").textContent = isCenter ? "🎯 正中心！+2 分！" : "稳稳落下，+1 分。";
         // 场景左移：落脚的台子变成起点，再生成下一个
         setTimeout(() => {
@@ -5688,15 +5852,27 @@
       } else {
         jumpOver = true;
         ch.style.bottom = "-40px";
+        SFX.lose();
         $("jumpStatus").textContent = "💔 掉下去了！得分 " + jumpScore + "，点再来一局。";
       }
       jumpRender();
+    }
+    // v1.32：Perfect! 飘字
+    function jumpPerfect(ch) {
+      const stage = $("jumpStage");
+      const el = document.createElement("span");
+      el.className = "jump-perfect";
+      el.textContent = "Perfect!";
+      el.style.left = ch.style.left;
+      stage.appendChild(el);
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 900);
     }
     const jumpStageEl = $("jumpStage");
     jumpStageEl.addEventListener("pointerdown", (e) => {
       if (jumpOver) return;
       if (e.preventDefault) e.preventDefault();
       jumpCharging = true; jumpPower = 0;
+      $("jumpChar").classList.add("charging"); // v1.32：蓄力压缩
       if (jumpChargeId) clearInterval(jumpChargeId);
       jumpChargeId = setInterval(() => {
         jumpPower = Math.min(100, jumpPower + 1.4);
@@ -5746,12 +5922,18 @@
       }
       $("spotdiffStatus").textContent = "第 " + spotdiffLevel + " 关 · 得分 " + spotdiffScore + " · 剩 " + spotdiffTime + " 秒";
     }
+    let spotdiffLock = false; // v1.32：标记动画期间锁住，防止连点
     function spotdiffPick(i) {
-      if (!spotdiffRunning) return;
+      if (!spotdiffRunning || spotdiffLock) return;
       if (i === spotdiffOdd) {
         spotdiffScore += 10;
         spotdiffLevel++;
-        spotdiffNewRound();
+        SFX.win();
+        // v1.32：圆圈标记动画，看清后再进下一关
+        const cells = $("spotdiffGrid").children;
+        if (cells[i] && cells[i].classList) cells[i].classList.add("found");
+        spotdiffLock = true;
+        setTimeout(() => { spotdiffLock = false; spotdiffNewRound(); }, 450);
       } else {
         spotdiffScore = Math.max(0, spotdiffScore - 5);
         const cells = $("spotdiffGrid").children;
@@ -5781,16 +5963,25 @@
     }
     function spotdiffReset() {
       if (spotdiffTimerId) { clearInterval(spotdiffTimerId); spotdiffTimerId = null; }
+      spotdiffLock = false; // v1.32：重开解锁
       spotdiffLevel = 1; spotdiffScore = 0; spotdiffTime = 60; spotdiffRunning = false;
       spotdiffNewRound();
       $("spotdiffStatus").textContent = "第 1 关 · 得分 0 · 剩 60 秒 · 最好 " + spotdiffBest;
     }
     $("spotdiffStartBtn").addEventListener("click", spotdiffStart);
     $("spotdiffResetBtn").addEventListener("click", spotdiffReset);
+    // v1.32：放大镜模式（2x，点按钮开关）
+    let spotdiffZoom = false;
+    $("spotdiffZoomBtn").addEventListener("click", () => {
+      spotdiffZoom = !spotdiffZoom;
+      $("spotdiffGrid").classList.toggle("zoomed", spotdiffZoom);
+      $("spotdiffZoomBtn").textContent = spotdiffZoom ? "🔍 关放大镜" : "🔍 放大镜";
+      SFX.click();
+    });
     spotdiffReset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get spotdiff() { return { level: spotdiffLevel, score: spotdiffScore, time: spotdiffTime, gridSize: spotdiffGridSize, odd: spotdiffOdd, base: spotdiffBase, oddEmoji: spotdiffOddEmoji, running: spotdiffRunning, best: spotdiffBest }; },
-        spotdiffSet(base, oddEmoji, odd, gridSize) { spotdiffBase = base; spotdiffOddEmoji = oddEmoji; spotdiffOdd = odd; spotdiffGridSize = gridSize; spotdiffRunning = true; spotdiffRender(); },
+        spotdiffSet(base, oddEmoji, odd, gridSize) { spotdiffBase = base; spotdiffOddEmoji = oddEmoji; spotdiffOdd = odd; spotdiffGridSize = gridSize; spotdiffRunning = true; spotdiffLock = false; spotdiffRender(); },
         spotdiffPick(i) { spotdiffPick(i); },
     }));
 
@@ -5814,6 +6005,8 @@
         d.textContent = it.kind === "bomb" ? "💣" : "🪙";
         d.style.left = it.x + "px";
         d.style.top = it.y + "px";
+        it.rot = ((it.rot || 0) + 9) % 360; // v1.32：旋转下落
+        d.style.transform = "rotate(" + it.rot + "deg)";
         stage.appendChild(d);
       });
       basket.style.left = catchBasketX + "px";
@@ -5833,9 +6026,14 @@
         if (it.y >= CATCH_H - 50 && it.y <= CATCH_H - 10) {
           const cx = it.x + 13;
           if (cx >= basketL - 6 && cx <= basketR + 6) {
-            if (it.kind === "coin") catchScore += 10;
-            else {
+            if (it.kind === "coin") {
+              catchScore += 10;
+              SFX.coin();
+              catchFloatCoin(it.x, it.y); // v1.32：金币飘字
+              catchScorePop();
+            } else {
               catchLives--;
+              SFX.lose();
               $("catchStatus").textContent = "💥 接到炸弹了！还剩 " + catchLives + " 条命。";
               if (catchLives <= 0) catchEnd("💔 没命了。");
             }
@@ -5845,6 +6043,26 @@
         return it.y <= CATCH_H;
       });
       catchRender();
+    }
+    // v1.32：接到金币的飘字（挂 section 上，不被 stage 重建清掉）
+    function catchFloatCoin(x, y) {
+      const sec = $("toy-catch");
+      const stage = $("catchStage");
+      if (!sec || !stage) return;
+      const c = document.createElement("div");
+      c.className = "catch-fly";
+      c.textContent = "+10 🪙";
+      c.style.left = ((stage.offsetLeft || 0) + x) + "px";
+      c.style.top = ((stage.offsetTop || 0) + y) + "px";
+      sec.appendChild(c);
+      setTimeout(() => { if (c.parentNode) c.parentNode.removeChild(c); }, 800);
+    }
+    function catchScorePop() {
+      const el = $("catchScore");
+      if (!el || !el.classList) return;
+      el.classList.remove("score-pop");
+      void el.offsetWidth;
+      el.classList.add("score-pop");
     }
     function catchEnd(msg) {
       catchRunning = false;
@@ -6252,6 +6470,7 @@
         if (hit !== -1) {
           shooterEnemies.splice(hit, 1);
           shooterScore += 10;
+          SFX.hit();
           return false;
         }
         return true;
@@ -6260,6 +6479,7 @@
       shooterEnemies = shooterEnemies.filter((e) => {
         if (Math.abs(e.x - shooterShipX) < 24 && Math.abs(e.y - 270) < 24) {
           shooterLives--;
+          SFX.lose();
           $("shooterStatus").textContent = "💥 被撞了！还剩 " + shooterLives + " 条命。";
           if (shooterLives <= 0) shooterEnd("💔 飞船被撞毁了。");
           return false;
@@ -6271,6 +6491,7 @@
     function shooterFire() {
       if (!shooterRunning || shooterOver) return;
       shooterBullets.push({ x: shooterShipX, y: 260 });
+      SFX.shoot();
     }
     function shooterSpawn() {
       if (!shooterRunning || shooterOver) return;
@@ -6649,10 +6870,12 @@
           f.sliced = true;
           if (f.bomb) {
             fruitLives--;
+            SFX.lose();
             $("fruitsliceStatus").textContent = "💥 切到炸弹了！还剩 " + fruitLives + " 条命。";
             if (fruitLives <= 0) fruitEnd("💔 三条命都炸没了。");
           } else {
             fruitScore += 10;
+            SFX.pop(Math.min(1, fruitScore / 500));
           }
         }
       });
@@ -6915,6 +7138,7 @@
       } else {
         match3Score += cleared * 10;
         match3Moves++;
+        SFX.pop(Math.min(1, cleared / 12));
         if (match3Score > match3Best) {
           match3Best = match3Score;
           saveBest(MATCH3_KEY, match3Best);

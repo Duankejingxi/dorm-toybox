@@ -1334,3 +1334,58 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
   .catch-fly, #catchScore.score-pop,
   .spotdiff-cell.found { animation-duration: .01ms !important; }
 }
+
+/* v1.33：怎么玩新手提示条 */
+.howto-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(212, 169, 78, 0.12);
+  border: 1px solid rgba(212, 169, 78, 0.4);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 8px 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #f5e6c8;
+  animation: howtoIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes howtoIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.howto-bar span { flex: 1; }
+.howto-close {
+  flex: none;
+  width: 28px; height: 28px;
+  min-height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(212, 169, 78, 0.2);
+  color: #d4a94e;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.howto-close:active { transform: scale(0.9); background: rgba(212, 169, 78, 0.35); }
+.howto-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  min-height: 24px;
+  margin-left: 8px;
+  border: 1px solid rgba(212, 169, 78, 0.5);
+  border-radius: 50%;
+  background: transparent;
+  color: #d4a94e;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.howto-help:active { transform: scale(0.9); background: rgba(212, 169, 78, 0.2); }
+@media (prefers-reduced-motion: reduce) {
+  .howto-bar { animation: none; }
+}

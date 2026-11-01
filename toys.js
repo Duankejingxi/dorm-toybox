@@ -277,8 +277,81 @@
     allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     currentToy = id;
     if (toyEnterResume[id]) toyEnterResume[id]();
+    showHowtoBar(clickedId); // v1.33：新手引导（首次打开显示怎么玩）
     if (window.location.hash !== "#" + clickedId) window.location.hash = clickedId;
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  /* v1.33：怎么玩提示条——首次打开某玩具时显示，可关闭；"？"按钮可重新显示 */
+  var HOWTO_SEEN_KEY = "dorm-toybox-howto-seen-v1";
+  function getHowtoSeen() {
+    try {
+      var v = JSON.parse(localStorage.getItem(HOWTO_SEEN_KEY) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+  }
+  function markHowtoSeen(tid) {
+    try {
+      var seen = getHowtoSeen();
+      if (seen.indexOf(tid) === -1) { seen.push(tid); localStorage.setItem(HOWTO_SEEN_KEY, JSON.stringify(seen)); }
+    } catch (e) { /* 忽略 */ }
+  }
+  function showHowtoBar(tid, force) {
+    var toy = TOYS.find(function (t) { return t.id === tid; });
+    if (!toy || !toy.howto) return;
+    var panel = $("toy-" + tid);
+    // 工具箱重定向的入口（stopwatch/aa/fx/bmi）没有独立 panel，跳过
+    if (!panel) return;
+    var old = panel.querySelector(".howto-bar");
+    if (old) {
+      try {
+        if (typeof old.remove === "function") old.remove();
+        else if (old.parentNode && typeof old.parentNode.removeChild === "function") old.parentNode.removeChild(old);
+      } catch (e) { /* 桩环境忽略 */ }
+    }
+    if (!force && getHowtoSeen().indexOf(tid) !== -1) return;
+    var bar = document.createElement("div");
+    bar.className = "howto-bar";
+    var txt = document.createElement("span");
+    txt.textContent = "💡 " + toy.howto;
+    var x = document.createElement("button");
+    x.className = "howto-close";
+    x.setAttribute("aria-label", "关闭提示");
+    x.textContent = "✕";
+    x.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      bar.remove();
+      markHowtoSeen(tid);
+    });
+    bar.appendChild(txt);
+    bar.appendChild(x);
+    // 插到标题 h2 之后（v1.33：桩里可能没有 insertBefore，做兼容）
+    var h2 = panel.querySelector("h2");
+    try {
+      if (h2 && h2.nextSibling && typeof h2.parentNode.insertBefore === "function") {
+        h2.parentNode.insertBefore(bar, h2.nextSibling);
+      } else if (h2 && typeof h2.parentNode.appendChild === "function") {
+        h2.parentNode.appendChild(bar);
+      } else if (typeof panel.insertBefore === "function") {
+        panel.insertBefore(bar, panel.firstChild);
+      } else if (typeof panel.appendChild === "function") {
+        panel.appendChild(bar);
+      }
+    } catch (e) { /* 桩环境忽略 */ }
+    ensureHowtoHelpBtn(panel, tid);
+  }
+  function ensureHowtoHelpBtn(panel, tid) {
+    // 每个玩具标题旁加"？"按钮（只加一次）
+    var h2 = panel.querySelector("h2");
+    if (!h2 || h2.querySelector(".howto-help")) return;
+    var b = document.createElement("button");
+    b.className = "howto-help";
+    b.setAttribute("aria-label", "怎么玩");
+    b.textContent = "？";
+    b.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      showHowtoBar(tid, true);
+    });
+    h2.appendChild(b);
   }
   /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
   function showHome() {

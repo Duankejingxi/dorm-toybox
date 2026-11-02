@@ -20,14 +20,25 @@
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
     <button class="btn ghost-btn small" id="sfxBtn" aria-label="音效开关">🔊</button>
   </div>
-  <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分…" aria-label="搜索玩具">
+  <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分、wzxq…" aria-label="搜索玩具">
+    <div class="cat-tabs" id="catTabs" role="tablist" aria-label="玩具分类">
+      <button class="cat-tab active" data-cat="all" role="tab" aria-selected="true">全部</button>
+      <button class="cat-tab" data-cat="game" role="tab" aria-selected="false">🎮 游戏</button>
+      <button class="cat-tab" data-cat="puzzle" role="tab" aria-selected="false">🧠 益智</button>
+      <button class="cat-tab" data-cat="tool" role="tab" aria-selected="false">🛠 工具</button>
+      <button class="cat-tab" data-cat="party" role="tab" aria-selected="false">🎉 派对</button>
+    </div>
+    <div id="searchEmpty" class="search-empty hidden">
+      <p>🔍 没找到，换个关键词试试</p>
+      <button class="btn" id="surpriseBtn" aria-label="随机打开一个玩具">🎲 随便玩玩</button>
+    </div>
 </header>
 
 <div class="drawer-overlay hidden" id="drawerOverlay"></div>
 <aside class="drawer" id="sideDrawer" aria-label="全部玩具">
   <div class="drawer-head">
     <span>全部玩具</span>
-    <button class="btn ghost-btn small" id="drawerCloseBtn">✕</button>
+    <button class="btn ghost-btn small" id="drawerCloseBtn" aria-label="关闭菜单">✕</button>
   </div>
   <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
 </aside>
@@ -1270,7 +1281,7 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.34 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v2.0 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

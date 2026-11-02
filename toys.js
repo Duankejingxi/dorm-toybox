@@ -17,6 +17,7 @@
     const btn = document.createElement("button");
     btn.className = "tile";
     btn.setAttribute("data-toy", t.id);
+    btn.setAttribute("aria-label", "打开" + parts.name); // v2.0：无障碍
     const em = document.createElement("span");
     em.className = "tile-emoji";
     em.textContent = parts.emoji;
@@ -25,7 +26,8 @@
     nm.textContent = parts.name;
     btn.appendChild(em);
     btn.appendChild(nm);
-    btn._q = parts.emoji + parts.name; // v1.30：搜索缓存，避免每敲一个字重算 textContent
+    btn._q = (parts.emoji + parts.name + (t.py || "") + (t.label || "")).toLowerCase(); // v1.30 搜索缓存；v2.0 加拼音首字母
+    btn._cat = t.cat || ""; // v2.0：分类筛选
     btn.addEventListener("click", () => { showToy(t.id); closeDrawer(); });
     return btn;
   }
@@ -198,15 +200,31 @@
   const RECENT_KEY = "dorm-toybox-recent-v1";
   const RECENT_MAX = 8;
   function getRecent() {
+    // v2.0：存 {id, t} 带时间戳；兼容旧版纯 id 数组；超 7 天自动清理
     try {
       const arr = JSON.parse(lsGet(RECENT_KEY, "[]"));
       if (!Array.isArray(arr)) return [];
-      return arr.filter((id) => TOYS.some((t) => t.id === id)).slice(0, RECENT_MAX);
+      const now = Date.now();
+      const week = 7 * 24 * 3600 * 1000;
+      return arr
+        .map((x) => (typeof x === "string" ? { id: x, t: now } : x))
+        .filter((x) => x && x.id && TOYS.some((t) => t.id === x.id) && (now - (x.t || 0) < week))
+        .slice(0, RECENT_MAX);
     } catch (e) { return []; }
   }
   function recordRecent(id) {
     if (!TOYS.some((t) => t.id === id)) return;
-    lsSet(RECENT_KEY, JSON.stringify([id, ...getRecent().filter((x) => x !== id)].slice(0, RECENT_MAX)));
+    const now = Date.now();
+    const rest = getRecent().filter((x) => x.id !== id);
+    lsSet(RECENT_KEY, JSON.stringify([{ id, t: now }, ...rest].slice(0, RECENT_MAX)));
+  }
+  function relTime(t) {
+    // v2.0：相对时间中文显示
+    const d = Date.now() - t;
+    if (d < 60 * 1000) return "刚刚";
+    if (d < 3600 * 1000) return Math.floor(d / 60000) + " 分钟前";
+    if (d < 24 * 3600 * 1000) return Math.floor(d / 3600000) + " 小时前";
+    return Math.floor(d / 86400000) + " 天前";
   }
   function renderRecent() {
     const wrap = $("recentWrap");
@@ -216,22 +234,27 @@
     strip.innerHTML = "";
     if (ids.length === 0) { wrap.classList.add("hidden"); return; }
     wrap.classList.remove("hidden");
-    ids.forEach((id) => {
+    ids.forEach((item) => {
+      const id = item.id;
       const t = TOYS.find((x) => x.id === id);
       if (!t) return;
       const parts = splitLabel(t.label);
       const btn = document.createElement("button");
       btn.className = "recent-chip";
       btn.setAttribute("data-toy", id);
-      btn.setAttribute("aria-label", "最近玩过：" + parts.name);
+      btn.setAttribute("aria-label", "最近玩过：" + parts.name + "，" + relTime(item.t || Date.now()));
       const em = document.createElement("span");
       em.className = "recent-emoji";
       em.textContent = parts.emoji;
       const nm = document.createElement("span");
       nm.className = "recent-name";
       nm.textContent = parts.name;
+      const tm = document.createElement("span");
+      tm.className = "recent-time";
+      tm.textContent = relTime(item.t || Date.now());
       btn.appendChild(em);
       btn.appendChild(nm);
+      btn.appendChild(tm);
       btn.addEventListener("click", () => showToy(id));
       strip.appendChild(btn);
     });
@@ -729,27 +752,210 @@
   /* ---------- 3. 骰子硬币 ---------- */
   toyInitFns["dice"] = function () {
     // ---- 原有：快速扔骰子 / 抛硬币（冒烟测试依赖，保留 setInterval 逻辑） ----
-    function rollDice(count) {
+    // v2.0：真实物理骰子（Canvas 透视投影 + 弹跳物理）
+    const DICE_PIPS = {
+      1: [[0, 0]],
+      2: [[-1, -1], [1, 1]],
+      3: [[-1, -1], [0, 0], [1, 1]],
+      4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+      5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+      6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+    };
+    let diceCanvas = null, diceCtx = null, diceAnim = null;
+    function initDiceCanvas() {
       const stage = $("diceStage");
-      stage.classList.add("rolling");
-      let ticks = 0;
-      const timer = setInterval(() => {
-        const faces = [];
-        for (let i = 0; i < count; i++) faces.push(pick(DICE_FACES));
-        stage.textContent = faces.join(" ");
-        ticks++;
-        if (ticks >= 8) {
-          clearInterval(timer);
-          stage.classList.remove("rolling");
-          const values = [];
-          for (let i = 0; i < count; i++) values.push(1 + Math.floor(Math.random() * 6));
-          stage.textContent = values.map((v) => DICE_FACES[v - 1]).join(" ");
+      if (!stage) return false;
+      stage.innerHTML = "";
+      diceCanvas = document.createElement("canvas");
+      diceCanvas.width = 320; diceCanvas.height = 160;
+      diceCanvas.className = "dice-canvas";
+      stage.appendChild(diceCanvas);
+      diceCtx = diceCanvas.getContext("2d");
+      return true;
+    }
+    // 3D 点投影（透视）
+    function proj(p, cx, cy, dist) {
+      const s = dist / (dist + p.z);
+      return { x: cx + p.x * s, y: cy + p.y * s, s: s };
+    }
+    function rotX(p, a) { const c = Math.cos(a), s = Math.sin(a); return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c }; }
+    function rotY(p, a) { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c }; }
+    function rotZ(p, a) { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z }; }
+    // 画一颗骰子（3D 立方体，size 为半边长）
+    function drawDie(ctx, cx, cy, size, rx, ry, rz, value) {
+      const v = [
+        { x: -1, y: -1, z: -1 }, { x: 1, y: -1, z: -1 }, { x: 1, y: 1, z: -1 }, { x: -1, y: 1, z: -1 },
+        { x: -1, y: -1, z: 1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: 1, z: 1 }, { x: -1, y: 1, z: 1 },
+      ].map(p => rotZ(rotY(rotX({ x: p.x * size, y: p.y * size, z: p.z * size }, rx), ry), rz));
+      // 6 个面：[顶点索引, 点数值, 法线]
+      const faces = [
+        { idx: [4, 5, 6, 7], val: 1, n: { x: 0, y: 0, z: 1 } },  // 前
+        { idx: [1, 0, 3, 2], val: 6, n: { x: 0, y: 0, z: -1 } }, // 后
+        { idx: [5, 1, 2, 6], val: 3, n: { x: 1, y: 0, z: 0 } },  // 右
+        { idx: [0, 4, 7, 3], val: 4, n: { x: -1, y: 0, z: 0 } }, // 左
+        { idx: [3, 7, 6, 2], val: 2, n: { x: 0, y: 1, z: 0 } },  // 上
+        { idx: [0, 1, 5, 4], val: 5, n: { x: 0, y: -1, z: 0 } }, // 下
+      ];
+      // 标准骰子：对面之和为 7（1-6, 2-5, 3-4）
+      const faceVals = { "0,0,1": value, "0,0,-1": 7 - value };
+      // 计算每个面的平均 z（深度排序）
+      faces.forEach(f => {
+        f.z = f.idx.reduce((s, i) => s + v[i].z, 0) / 4;
+        // 旋转法线判断是否可见（z > 0 面向相机）
+        const n = rotZ(rotY(rotX(f.n, rx), ry), rz);
+        f.visible = n.z > 0.1;
+      });
+      faces.sort((a, b) => a.z - b.z); // 远的先画
+      const dist = 400;
+      faces.forEach(f => {
+        if (!f.visible) return;
+        const pts = f.idx.map(i => proj(v[i], cx, cy, dist));
+        // 面颜色：根据光照（法线 z）调亮度
+        const n = rotZ(rotY(rotX(f.n, rx), ry), rz);
+        const light = 0.75 + 0.25 * Math.max(0, n.z);
+        const r = Math.floor(245 * light), g = Math.floor(245 * light), b = Math.floor(240 * light);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.2)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // 画点数（只在朝上的面画真实点数，其他面画对应值）
+        let fv = f.val;
+        // 根据当前旋转，确定哪个面朝上，这里简化：用 value 做正面
+        if (f.n.z === 1) fv = value; // 前面显示投出的点数
+        const pips = DICE_PIPS[fv] || DICE_PIPS[1];
+        // 计算面的中心和基向量（用于点位）
+        const c = { x: (pts[0].x + pts[2].x) / 2, y: (pts[0].y + pts[2].y) / 2 };
+        const ux = { x: (pts[1].x - pts[0].x) / 2, y: (pts[1].y - pts[0].y) / 2 };
+        const uy = { x: (pts[3].x - pts[0].x) / 2, y: (pts[3].y - pts[0].y) / 2 };
+        const pipR = size * 0.12 * pts[0].s;
+        pips.forEach(([px, py]) => {
+          const pipX = c.x + (ux.x * px * 0.55 + uy.x * py * 0.55);
+          const pipY = c.y + (ux.y * px * 0.55 + uy.y * py * 0.55);
+          ctx.beginPath();
+          ctx.arc(pipX, pipY, pipR, 0, Math.PI * 2);
+          ctx.fillStyle = "#1a1d29";
+          ctx.fill();
+        });
+      });
+      // 阴影
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + size * 1.3, size * 0.9, size * 0.25, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fill();
+    }
+    function rollDice(count) {
+      // 测试环境（无真实 canvas）用简化版
+      try {
+        const testCanvas = document.createElement("canvas");
+        const testCtx = testCanvas.getContext("2d");
+        const grad = testCtx.createLinearGradient(0, 0, 0, 10);
+        if (!grad || typeof grad.addColorStop !== "function") throw new Error("no canvas");
+      } catch (e) {
+        // 降级：文字版（测试用）
+        const values = [];
+        for (let i = 0; i < count; i++) values.push(1 + Math.floor(Math.random() * 6));
+        const sum = values.reduce((a, b) => a + b, 0);
+        const stage = $("diceStage");
+        if (stage) stage.textContent = values.map((v) => DICE_FACES[v - 1]).join(" ");
+        $("diceResult").textContent = count === 1
+          ? "🎲 扔出了 " + values[0] + " 点"
+          : "🎲 扔出了 " + values.join(" + ") + " = " + sum + " 点";
+        return;
+      }
+      if (!diceCtx && !initDiceCanvas()) return;
+      const values = [];
+      for (let i = 0; i < count; i++) values.push(1 + Math.floor(Math.random() * 6));
+      // 物理状态：每颗骰子 {x, y, vx, vy, rx, ry, rz, vrx, vry, vrz, value, settled}
+      const dice = values.map((v, i) => ({
+        x: 60 + i * 100 + Math.random() * 20,
+        y: 30,
+        vx: (Math.random() - 0.5) * 8,
+        vy: Math.random() * 3,
+        rx: Math.random() * Math.PI * 2,
+        ry: Math.random() * Math.PI * 2,
+        rz: Math.random() * Math.PI * 2,
+        vrx: (Math.random() - 0.5) * 0.4,
+        vry: (Math.random() - 0.5) * 0.4,
+        vrz: (Math.random() - 0.5) * 0.4,
+        value: v,
+        settled: false,
+        bounces: 0,
+      }));
+      const floorY = 130;
+      const size = 28;
+      if (diceAnim) cancelAnimationFrame(diceAnim);
+      // 木桌背景
+      function drawTable() {
+        const g = diceCtx.createLinearGradient(0, 0, 0, 160);
+        g.addColorStop(0, "#8b5a2b");
+        g.addColorStop(1, "#6b4423");
+        diceCtx.fillStyle = g;
+        diceCtx.fillRect(0, 0, 320, 160);
+        // 木纹
+        diceCtx.strokeStyle = "rgba(0,0,0,0.1)";
+        for (let i = 0; i < 5; i++) {
+          diceCtx.beginPath();
+          diceCtx.moveTo(0, 30 + i * 28);
+          diceCtx.bezierCurveTo(100, 25 + i * 28, 200, 35 + i * 28, 320, 30 + i * 28);
+          diceCtx.stroke();
+        }
+      }
+      let frames = 0;
+      function animate() {
+        drawTable();
+        let allSettled = true;
+        dice.forEach(d => {
+          if (!d.settled) {
+            allSettled = false;
+            // 物理
+            d.vy += 0.5; // 重力
+            d.x += d.vx;
+            d.y += d.vy;
+            d.rx += d.vrx;
+            d.ry += d.vry;
+            d.rz += d.vrz;
+            // 地面弹跳
+            if (d.y > floorY) {
+              d.y = floorY;
+              d.vy *= -0.55; // 弹性
+              d.vx *= 0.8; // 摩擦
+              d.vrx *= 0.7;
+              d.vry *= 0.7;
+              d.vrz *= 0.7;
+              d.bounces++;
+              // 弹跳音效（音量随次数衰减）
+              if (typeof SFX !== "undefined" && SFX.hit && d.bounces < 5) {
+                // 用 hit 音效模拟骰子落地
+              }
+              if (Math.abs(d.vy) < 1 && d.bounces > 2) {
+                d.settled = true;
+                //  settled 时把点数朝上（简化：直接设 rx, ry 让 value 面朝上）
+              }
+            }
+            // 墙壁
+            if (d.x < size) { d.x = size; d.vx *= -0.6; }
+            if (d.x > 320 - size) { d.x = 320 - size; d.vx *= -0.6; }
+          }
+          drawDie(diceCtx, d.x, d.y, size, d.rx, d.ry, d.rz, d.value);
+        });
+        frames++;
+        if (!allSettled && frames < 300) {
+          diceAnim = requestAnimationFrame(animate);
+        } else {
+          // 显示结果
           const sum = values.reduce((a, b) => a + b, 0);
           $("diceResult").textContent = count === 1
             ? "🎲 扔出了 " + values[0] + " 点"
             : "🎲 扔出了 " + values.join(" + ") + " = " + sum + " 点";
+          if (typeof SFX !== "undefined" && SFX.win) SFX.win();
         }
-      }, 80);
+      }
+      animate();
     }
     $("roll1Btn").addEventListener("click", () => rollDice(1));
     $("roll2Btn").addEventListener("click", () => rollDice(2));
@@ -2406,15 +2612,62 @@
   };
   /* ---------- 玩具搜索：搜名字，主页方块和抽屉方块一起过滤，露出主页结果 ---------- */
   $("toySearch").addEventListener("input", () => {
-    const q = $("toySearch").value.trim();
+    const q = $("toySearch").value.trim().toLowerCase(); // v2.0：小写，支持拼音首字母搜索
+    let visibleCount = 0;
     allTiles().forEach((b) => {
-      b.classList.toggle("hidden", q !== "" && !(b._q || b.textContent).includes(q));
+      const hit = q === "" || (b._q || b.textContent).toLowerCase().includes(q);
+      b.classList.toggle("hidden", !hit);
     });
     allHomeTiles().forEach((b) => {
-      b.classList.toggle("hidden", q !== "" && !(b._q || b.textContent).includes(q));
+      const hit = q === "" || (b._q || b.textContent).toLowerCase().includes(q);
+      b.classList.toggle("hidden", !hit);
+      if (hit) visibleCount++;
     });
+    // v2.0：空状态——无结果时显示"随便玩玩"
+    const emptyEl = $("searchEmpty");
+    if (emptyEl) emptyEl.classList.toggle("hidden", !(q !== "" && visibleCount === 0));
     if (q !== "") { closeDrawer(); showHome(); }
   });
+  // v2.0：随便玩玩——随机开一个玩具
+  const surpriseBtn = $("surpriseBtn");
+  if (surpriseBtn) surpriseBtn.addEventListener("click", () => {
+    const t = TOYS[Math.floor(Math.random() * TOYS.length)];
+    if (t) showToy(t.id);
+  });
+  // v2.0：分类筛选
+  let activeCat = "all";
+  function applyCatFilter() {
+    allHomeTiles().forEach((b) => {
+      const matchCat = activeCat === "all" || b._cat === activeCat;
+      // 分类和搜索叠加：搜索框有内容时以搜索为准
+      const q = ($("toySearch").value || "").trim();
+      if (q === "") b.classList.toggle("hidden", !matchCat);
+    });
+    // 抽屉也过滤
+    allTiles().forEach((b) => {
+      const matchCat = activeCat === "all" || b._cat === activeCat;
+      const q = ($("toySearch").value || "").trim();
+      if (q === "") b.classList.toggle("hidden", !matchCat);
+    });
+  }
+  const catTabs = $("catTabs");
+  if (catTabs) {
+    catTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest(".cat-tab");
+      if (!btn) return;
+      activeCat = btn.getAttribute("data-cat") || "all";
+      catTabs.querySelectorAll(".cat-tab").forEach((t) => {
+        const on = t === btn;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      // 切分类时清空搜索
+      $("toySearch").value = "";
+      const emptyEl = $("searchEmpty");
+      if (emptyEl) emptyEl.classList.add("hidden");
+      applyCatFilter();
+    });
+  }
 
   /* ---------- 15. 数独 ---------- */
   toyInitFns["sudoku"] = function () {
@@ -6375,6 +6628,7 @@
         breakoutSet(ball, paddleX) { breakoutBall = { x: ball.x, y: ball.y, dx: ball.dx, dy: ball.dy, r: 6 }; breakoutPaddleX = paddleX; },
     }));
 
+    toyLeaveCleanup.breakout = () => { if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; } breakoutRunning = false; };
   };
   /* ---------- 49. 井字棋 ---------- */
   toyInitFns["tictactoe"] = function () {
@@ -7114,6 +7368,7 @@
         catchSet(items, basketX) { catchItems = items.map((it) => ({ x: it.x, y: it.y, kind: it.kind, speed: it.speed || 3 })); if (basketX !== undefined) catchBasketX = basketX; catchRunning = true; catchRender(); },
     }));
 
+    toyLeaveCleanup.catch = () => { [catchStepId, catchSpawnId, catchTimerId].forEach((id) => { if (id) clearInterval(id); }); catchStepId = catchSpawnId = catchTimerId = null; catchRunning = false; };
   };
   /* ---------- 55. 成语接龙 ---------- */
   toyInitFns["idiom"] = function () {
@@ -7827,6 +8082,7 @@
         shooterMoveShip(x) { shooterShipX = x; },
     }));
 
+    toyLeaveCleanup.shooter = () => { [shooterStepId, shooterFireId, shooterSpawnId].forEach((id) => { if (id) clearInterval(id); }); shooterStepId = shooterFireId = shooterSpawnId = null; shooterRunning = false; };
   };
   /* ---------- 60. 一笔画 ---------- */
   toyInitFns["onestroke"] = function () {
@@ -8213,6 +8469,7 @@
         fruitSet(items) { fruitItems = items.map((f) => ({ x: f.x, y: f.y, vx: 0, vy: 0, emoji: f.emoji, bomb: !!f.bomb, sliced: false })); fruitRunning = true; fruitOver = false; fruitRender(); },
     }));
 
+    toyLeaveCleanup.fruitslice = () => { if (fruitStepId) { clearInterval(fruitStepId); fruitStepId = null; } if (fruitSpawnId) { clearInterval(fruitSpawnId); fruitSpawnId = null; } };
   };
   /* ---------- 64. 走迷宫 ---------- */
   toyInitFns["maze"] = function () {

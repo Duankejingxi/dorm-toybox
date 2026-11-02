@@ -1389,3 +1389,285 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) {
   .howto-bar { animation: none; }
 }
+
+/* 打字闯关：关卡按钮 + 错误抖动 */
+.typing-levels { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.typing-levels .btn.active { border-color: #d4a94e; color: #f5d67b; }
+.typing-char.shake { animation: typeShake 0.3s ease; }
+@keyframes typeShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-char.shake { animation: none; }
+}
+
+/* ============================================================
+ * v1.34：商业级 UI 重构（替代 v1.31 flashy 金粉风）
+ * 设计系统：深空灰 + 单一蓝色强调色，克制、系统化
+ * 只覆盖 UI 框架层，游戏内容样式不动
+ * ============================================================ */
+
+/* ---- 1. 设计 token ---- */
+:root {
+  --c-bg: #12141c;
+  --c-card: #1e2230;
+  --c-card2: #252b3f;
+  --c-accent: #4f7cff;
+  --c-accent-soft: rgba(79, 124, 255, .14);
+  --c-accent-border: rgba(79, 124, 255, .45);
+  --c-text: #f2f4fa;
+  --c-text2: #9aa1b8;
+  --c-border: rgba(255, 255, 255, .08);
+  --c-tag-gold: #f5c542;
+  --r-card: 16px;
+  --r-btn: 12px;
+  --sh-card: 0 2px 12px rgba(0, 0, 0, .28);
+  --font-sys: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* ---- 2. 删掉花哨效果 ---- */
+.glitter { display: none !important; }
+body { animation: none !important; }
+.hero h1 { animation: none !important; text-shadow: none !important; }
+.panel::before { display: none !important; }
+.btn::after, .tile::after, .recent-chip::after { display: none !important; }
+.memory-card.matched::after, .guess-chip.hit::after,
+.tictactoe-cell.win::after, .schulte-cell.done::after { display: none !important; }
+
+/* ---- 3. 基础：字体 + 背景 ---- */
+body {
+  font-family: var(--font-sys);
+  background: var(--c-bg) !important;
+  color: var(--c-text);
+}
+/* 字号系统：标题 20 / 正文 15 / 辅助 12 */
+.panel h2, .home-panel h2 { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+.hint, .toy .hint { font-size: 12px; color: var(--c-text2); line-height: 1.6; }
+.toy p, .panel p { font-size: 15px; }
+
+/* ---- 4. 顶栏：简洁 ---- */
+.hero { padding: 28px 16px 4px; text-align: left; max-width: 680px; margin: 0 auto; }
+.hero .eyebrow { display: none; } /* 去掉营销感标语 */
+.hero h1 { font-size: 28px; font-weight: 800; letter-spacing: 0; }
+.hero h1 .gold {
+  background: none !important; color: var(--c-text) !important;
+  -webkit-background-clip: unset; background-clip: unset;
+}
+.hero .subtitle { display: none; } /* 简洁：标题即全部 */
+.nav-top { display: flex; gap: 8px; margin: 12px 0; }
+/* 搜索框：置顶圆角灰底 */
+#toySearch {
+  width: 100%; height: 44px; border-radius: 22px; border: none;
+  background: var(--c-card); color: var(--c-text);
+  padding: 0 20px; font-size: 15px; font-family: var(--font-sys);
+  box-shadow: var(--sh-card); margin: 4px 0 8px;
+}
+#toySearch::placeholder { color: var(--c-text2); }
+#toySearch:focus { outline: 2px solid var(--c-accent-border); }
+
+/* ---- 5. 卡片：白底感深色卡片，轻阴影 ---- */
+.panel {
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r-card) !important;
+  box-shadow: var(--sh-card) !important;
+  padding: 20px;
+  overflow: visible; /* 允许推荐标签溢出 */
+}
+.wrap { max-width: 680px; }
+
+/* ---- 6. 按钮系统：主蓝 / 次描边，44px 高 ---- */
+.btn {
+  min-height: 44px; border-radius: var(--r-btn);
+  font-size: 15px; font-weight: 600; font-family: var(--font-sys);
+  border: 1px solid transparent; cursor: pointer;
+  transition: transform .12s ease, background .12s ease, opacity .12s ease;
+}
+.btn:active { transform: scale(.98); }
+/* 主按钮：蓝色实心（原 gold-btn 全部转为蓝色主按钮） */
+.gold-btn, .big-btn {
+  background: var(--c-accent) !important; color: #fff !important;
+  border: none !important; box-shadow: none !important;
+  text-shadow: none !important;
+}
+.gold-btn:active, .big-btn:active { opacity: .85; transform: scale(.98); }
+.big-btn {
+  display: block; width: 100%; min-height: 48px;
+  border-radius: var(--r-btn); font-size: 16px; font-weight: 700;
+  margin: 16px 0;
+}
+/* 次按钮：灰色描边 */
+.ghost-btn {
+  background: transparent !important; color: var(--c-text) !important;
+  border: 1px solid var(--c-border) !important; box-shadow: none !important;
+}
+.ghost-btn.small, .btn.small { min-height: 36px; font-size: 13px; padding: 0 14px; }
+.btn:disabled { opacity: .45; }
+
+/* ---- 7. 玩具方块：系统卡片 ---- */
+.tile {
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r-card) !important;
+  box-shadow: var(--sh-card);
+  transition: transform .12s ease, border-color .12s ease;
+}
+.tile:hover { border-color: var(--c-accent-border); transform: translateY(-2px); }
+.tile:active { transform: scale(.98); border-color: var(--c-accent); }
+.tile.active { border-color: var(--c-accent); box-shadow: 0 0 0 2px var(--c-accent-soft); }
+.tile-emoji { font-size: 36px; }
+.tile-name { font-size: 13px; font-weight: 600; color: var(--c-text); }
+/* 置顶 8 个：去掉金色大边框，改用"推荐"小蓝标 */
+#homePinnedGrid .tile {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-card) !important;
+  box-shadow: var(--sh-card) !important;
+  position: relative;
+}
+#homePinnedGrid .tile::before {
+  content: "推荐"; position: absolute; top: 8px; right: 8px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  background: var(--c-accent); border-radius: 6px; padding: 2px 6px;
+  z-index: 2;
+}
+
+/* ---- 8. 最近玩过：简洁横滑 ---- */
+.recent-chip {
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: 12px !important;
+  color: var(--c-text); box-shadow: var(--sh-card);
+}
+.recent-chip:active { transform: scale(.96); border-color: var(--c-accent); }
+#recentWrap h2, .home-panel h2 { display: flex; align-items: center; gap: 8px; }
+
+/* ---- 9. 搜索空状态（纯 CSS :has） ---- */
+.home-grid:not(:has(.tile:not(.hidden)))::after {
+  content: "🔍 没找到，换个关键词试试";
+  display: block; grid-column: 1 / -1; text-align: center;
+  color: var(--c-text2); font-size: 14px; padding: 32px 0;
+}
+
+/* ---- 10. 玩具页三段式：标题 / 内容 / 操作 ---- */
+.toy h2 { display: flex; align-items: center; gap: 8px; }
+.toy h2 .howto-help { margin-left: auto; } /* "?" 靠右 */
+.result-line {
+  font-size: 14px; color: var(--c-text2);
+  background: var(--c-card2); border-radius: 12px; padding: 12px 16px;
+}
+
+/* ---- 11. 保留的克制动画 ---- */
+/* 页面淡入（去掉位移，只留淡入，更稳） */
+.toy:not(.hidden), #toy-home:not(.hidden) { animation: cm-fade .22s ease-out; }
+@keyframes cm-fade { from { opacity: 0; } to { opacity: 1; } }
+/* staggered 入场：保留但更克制 */
+.toy:not(.hidden) > *, #toy-home:not(.hidden) > * { animation: cm-up .3s ease-out both; }
+.toy:not(.hidden) > *:nth-child(2), #toy-home:not(.hidden) > *:nth-child(2) { animation-delay: .04s; }
+.toy:not(.hidden) > *:nth-child(3), #toy-home:not(.hidden) > *:nth-child(3) { animation-delay: .08s; }
+.toy:not(.hidden) > *:nth-child(n+4), #toy-home:not(.hidden) > *:nth-child(n+4) { animation-delay: .12s; }
+@keyframes cm-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* 骨架屏：中性灰（替代金色扫光） */
+.toy:not(.hidden)::after {
+  background: linear-gradient(100deg, transparent 25%, rgba(255,255,255,.06) 50%, transparent 75%) !important;
+}
+/* 抽屉 / 弹窗：保留 */
+.drawer-overlay:not(.hidden) { animation: fade-in .2s ease-out; }
+.led-overlay:not(.hidden) { animation: modal-in .22s ease-out; }
+/* 成功态：用缩放替代彩色粒子 */
+.memory-card.matched, .tictactoe-cell.win, .schulte-cell.done { animation: cm-pop .3s ease-out; }
+@keyframes cm-pop { 0% { transform: scale(1); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+/* ---- 12. 新手引导条：中性化 ---- */
+.howto-bar {
+  background: var(--c-accent-soft) !important;
+  border: 1px solid var(--c-accent-border) !important;
+  color: var(--c-text); border-radius: 12px;
+}
+.howto-help {
+  border-color: var(--c-accent-border) !important; color: var(--c-accent) !important;
+  background: var(--c-accent-soft) !important;
+}
+
+/* ---- 13. 输入框 / 选择器统一 ---- */
+input[type="text"], input[type="number"], textarea, select {
+  background: var(--c-card2); border: 1px solid var(--c-border);
+  border-radius: 12px; color: var(--c-text);
+  font-size: 15px; font-family: var(--font-sys); padding: 12px 14px;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-soft);
+}
+
+/* ---- 14. reduced-motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .toy:not(.hidden), #toy-home:not(.hidden),
+  .toy:not(.hidden) > *, #toy-home:not(.hidden) > *,
+  .memory-card.matched, .tictactoe-cell.win, .schulte-cell.done { animation: none !important; }
+  .tile:hover { transform: none; }
+  .btn:active, .tile:active { transform: none; }
+}
+
+/* v1.35 第三批重做：新控件样式 */
+#noiseGauge, #noiseHist { display: block; margin: 10px auto; max-width: 100%; }
+.noise-db.over { color: #e5484d; animation: dbBlink 0.6s ease infinite; }
+@keyframes dbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+#compassDialCanvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.level-bubble { position: absolute; right: 10px; top: 10px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(212,169,78,.5); background: rgba(0,0,0,.25); }
+.level-dot { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; border-radius: 50%; background: #d4a94e; transform: translate(-50%, -50%); transition: transform .12s linear; }
+.schulte-cell.shake { animation: shk .3s ease; }
+@keyframes shk { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+.schulte-cell.spawn { animation: cellIn .25s ease backwards; }
+@keyframes cellIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+.slide15-cell.spawn { animation: cellIn .2s ease backwards; }
+.slide15-cell.win { animation: winGlow .8s ease infinite; }
+@keyframes winGlow { 0%,100% { box-shadow: 0 0 0 rgba(212,169,78,0); } 50% { box-shadow: 0 0 14px rgba(212,169,78,.9); } }
+.linkup-wrap { position: relative; display: inline-block; }
+#linkupPath { position: absolute; left: 0; top: 0; pointer-events: none; }
+.life-cell { transition: background-color .3s ease, transform .2s ease; cursor: pointer; }
+.life-cell.lived { transition-delay: 0s; }
+.life-cell.peek { outline: 2px solid #d4a94e; transform: scale(1.35); z-index: 2; position: relative; }
+.tictactoe-cell.drop { animation: cellIn .18s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .noise-db.over, .schulte-cell.shake, .schulte-cell.spawn, .slide15-cell.spawn, .slide15-cell.win, .tictactoe-cell.drop { animation: none !important; }
+}
+
+/* v1.35 第四批：点名/分组/记分牌/弹幕/转盘/反应 */
+/* 点名：减速 + 揭晓弹跳 */
+#pickResult.slowing { animation: pickSlow 0.35s ease infinite; }
+@keyframes pickSlow { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+#pickResult.pop { animation: pickPop 0.45s cubic-bezier(.2,1.6,.4,1); }
+@keyframes pickPop { 0% { transform: scale(0.6); } 100% { transform: scale(1); } }
+/* 分组：发牌式入场 + 拖拽 */
+.group-card.deal { animation: dealIn 0.4s cubic-bezier(.2,1.2,.4,1) backwards; }
+@keyframes dealIn { from { opacity: 0; transform: translateY(18px) rotate(1.5deg); } to { opacity: 1; transform: none; } }
+.group-card li[draggable="true"] { cursor: grab; }
+.group-card li[draggable="true"]:active { cursor: grabbing; }
+/* 记分牌：多队伍 + 计时器 */
+.score-more { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+.hint-inline { font-size: 12px; color: #888; }
+#scoreExtraTeams { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.team-card { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border-radius: 12px; padding: 8px 10px; }
+.team-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.team-card input { width: 70px; }
+.score-num.small { font-size: 26px; min-width: 52px; text-align: center; }
+.score-timer { display: flex; align-items: center; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.score-timer-display { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#scoreTimerMin { width: 56px; }
+/* 弹幕：字号/底色行 */
+.led-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.led-label { font-size: 13px; color: #aaa; flex: none; }
+.led-sizes, .led-bgcolors { display: flex; gap: 6px; flex-wrap: wrap; }
+#ledText2, #ledFullText2 { display: block; }
+#ledText2.scrolling, #ledFullText2.scrolling { animation: led-scroll 7s linear infinite; }
+/* 转盘撒花 */
+.wheel-stage { position: relative; }
+.confetti-bit { position: absolute; top: -10px; font-size: 22px; animation: confettiFall 1.5s ease-in forwards; pointer-events: none; }
+@keyframes confettiFall { to { transform: translateY(340px) rotate(320deg); opacity: 0; } }
+/* 反应：小标题 */
+.mini-title { font-size: 14px; margin: 14px 0 6px; color: #ffd97a; }
+@media (prefers-reduced-motion: reduce) {
+  #pickResult.slowing, #pickResult.pop, .group-card.deal, .confetti-bit { animation: none !important; }
+}

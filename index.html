@@ -32,7 +32,7 @@
   <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
 </aside>
 
-<div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><p class="led-overlay-hint">双击屏幕退出</p></div>
+<div class="led-overlay hidden" id="ledOverlay"><span id="ledFullText">我在这里！</span><span id="ledFullText2" class="hidden"></span><p class="led-overlay-hint">双击屏幕退出</p></div>
 
 <main class="wrap">
   <!-- 主页：置顶 8 个 + 全部游戏，点一下就玩 -->
@@ -59,9 +59,11 @@
     <div class="wheel-stage">
       <canvas id="wheelCanvas" width="320" height="320" role="img" aria-label="命运大转盘"></canvas>
       <div class="wheel-pointer" aria-hidden="true">▼</div>
+      <div id="wheelConfettiBox"></div>
     </div>
     <button class="big-btn" id="spinWheelBtn">转起来！</button>
     <p class="result-line" id="wheelResult">转盘还没转过。</p>
+    <ul class="history" id="wheelHistory"></ul>
     <button class="btn ghost-btn small" id="resetWheelBtn">恢复默认选项</button>
   </section>
 
@@ -198,9 +200,12 @@
     <h2>⚡ 反应速度测试</h2>
     <p class="hint">点开始，等方块变绿就立刻点它。提前点了算犯规。宿舍比一比，谁的手速最快。</p>
     <div class="reaction-stage" id="reactionStage" role="button" tabindex="0">点我开始<span class="sub">变绿就点，别抢跑</span></div>
+    <button class="btn ghost-btn small" id="reactionRoundsBtn">🏁 5轮挑战（取平均）</button>
     <p class="result-line" id="reactionResult">还没测过。</p>
     <p class="count-line" id="reactionBest"></p>
     <ul class="history" id="reactionHistory"></ul>
+    <h3 class="mini-title">🏅 5轮挑战排行榜</h3>
+    <ul class="history" id="reactionBoard"></ul>
   </section>
 
   <!-- 石头剪刀布 -->
@@ -249,8 +254,9 @@
 
   <!-- 打字测试 -->
   <section class="panel toy hidden" id="toy-typing">
-    <h2>⌨️ 打字测试</h2>
-    <p class="hint">照着上面那句打，绿了就是打对了，红了就是打错了。打完出速度和正确率，跟宿舍比一比。</p>
+    <h2>⌨️ 打字闯关</h2>
+    <p class="hint">照着上面打，绿了就是对，红了就是错。打完一关（正确率≥80%）解锁下一关，从短句打到段落。</p>
+    <div class="typing-levels" id="typingLevels"></div>
     <div class="typing-target" id="typingTarget"></div>
     <input id="typingInput" type="text" placeholder="点这里开始打字" aria-label="打字输入" autocomplete="off">
     <p class="result-line" id="typingResult">还没开始打。</p>
@@ -309,7 +315,12 @@
   <!-- 舒尔特方格 -->
   <section class="panel toy hidden" id="toy-schulte">
     <h2>👀 舒尔特方格</h2>
-    <p class="hint">25 个数字打乱了，按 1 到 25 的顺序点完。点错不算数，看看你多快——练专注力的。</p>
+    <p class="hint">数字打乱了，按从小到大的顺序点完。点错不算数，看看你多快——练专注力的。</p>
+    <div class="btn-row" id="schulteDiffRow">
+      <button class="btn small ghost-btn" id="schulte3Btn">3×3 入门</button>
+      <button class="btn small gold-btn" id="schulte5Btn">5×5 标准</button>
+      <button class="btn small ghost-btn" id="schulte7Btn">7×7 地狱</button>
+    </div>
     <p class="count-line" id="schulteTarget">下一个点：1</p>
     <div class="schulte-grid" id="schulteGrid"></div>
     <p class="result-line" id="schulteResult">点 1 开始计时。</p>
@@ -344,17 +355,45 @@
       </div>
     </div>
     <p class="result-line" id="scoreResult">没有上限，最高 999 分。</p>
-    <button class="btn ghost-btn small" id="scoreResetBtn">清零重开 ↺</button>
+    <div class="score-more">
+      <label for="scoreTeamCount">队伍数</label>
+      <select id="scoreTeamCount">
+        <option value="2">2 队</option>
+        <option value="3">3 队</option>
+        <option value="4">4 队</option>
+        <option value="5">5 队</option>
+        <option value="6">6 队</option>
+        <option value="7">7 队</option>
+        <option value="8">8 队</option>
+      </select>
+      <span class="hint-inline">2–8 队，多队混战</span>
+    </div>
+    <div id="scoreExtraTeams"></div>
+    <div class="score-timer">
+      <span class="score-timer-display" id="scoreTimerDisplay">05:00</span>
+      <input id="scoreTimerMin" type="number" min="1" max="99" value="5" aria-label="计时分钟数">
+      <span class="hint-inline">分钟</span>
+      <button class="btn small gold-btn" id="scoreTimerStartBtn">计时开始 ▶</button>
+      <button class="btn small ghost-btn" id="scoreTimerPauseBtn">暂停 ⏸</button>
+      <button class="btn small ghost-btn" id="scoreTimerResetBtn">重置 ↺</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn gold-btn" id="scoreFinishBtn">🏆 结算胜负</button>
+      <button class="btn ghost-btn small" id="scoreResetBtn">清零重开 ↺</button>
+    </div>
   </section>
 
   <!-- 手持弹幕 -->
   <section class="panel toy hidden" id="toy-led">
     <h2>💡 手持弹幕</h2>
     <p class="hint">接机、演唱会、表白、接人——字打上去，举起手机，全场都看得见。颜色和速度都能调。点「全屏展示」后是横屏全黑背景，双击屏幕退出（手机会自动转横屏，不支持的请手动横过来）。</p>
-    <input id="ledInput" type="text" value="我在这里！" placeholder="输入要滚动的字" aria-label="弹幕文字" maxlength="20">
+    <input id="ledInput" type="text" value="我在这里！" placeholder="输入要滚动的字（第一行）" aria-label="弹幕文字第一行" maxlength="20">
+    <input id="ledInput2" type="text" value="" placeholder="第二行（可选，留空则单行）" aria-label="弹幕文字第二行" maxlength="20">
     <div class="led-colors" id="ledColors"></div>
+    <div class="led-row"><span class="led-label">字号</span><div class="led-sizes" id="ledSizes"></div></div>
+    <div class="led-row"><span class="led-label">底色</span><div class="led-bgcolors" id="ledBgColors"></div></div>
     <div class="led-speeds" id="ledSpeeds"></div>
-    <div class="led-display" id="ledDisplay"><span id="ledText">我在这里！</span></div>
+    <div class="led-display" id="ledDisplay"><span id="ledText">我在这里！</span><span id="ledText2" class="hidden"></span></div>
     <p class="result-line" id="ledResult">点开始，字就滚起来了。</p>
     <button class="btn gold-btn" id="ledStartBtn">开始滚动 ▶</button>
     <button class="btn ghost-btn" id="ledFullBtn">全屏展示 ⛶</button>
@@ -448,6 +487,7 @@
     <button class="btn ghost-btn small hidden" id="beadsShowAllBtn">显示全部颜色</button>
     <div class="beads-legend" id="beadsLegend"></div>
     <p class="result-line" id="beadsResult">主体清晰、背景干净的图效果最好，人物建议裁成脸部特写。</p>
+    <label style="font-size:13px;margin-right:8px"><input type="checkbox" id="beadsHdExport" style="vertical-align:middle"> 高清导出（2x，打印用）</label>
     <button class="btn gold-btn" id="beadsExportBtn">导出图纸图片 ⬇</button>
   </section>
 
@@ -559,6 +599,8 @@
     <h2>🧭 指南针</h2>
     <p class="hint">手机自带方向传感器才能用，电脑上没有。红色指针永远指北不动，表盘跟着你转。打开后把手机平放，慢慢转一圈校准。</p>
     <div class="compass-dial" id="compassDial">
+      <canvas id="compassDialCanvas" width="260" height="260" aria-label="方位刻度"></canvas>
+      <div class="level-bubble" id="levelBubble" title="水平仪"><div class="level-dot" id="levelDot"></div></div>
       <div class="compass-card" id="compassCard">
         <span class="compass-label north" id="compassN">北</span>
         <span class="compass-label east" id="compassE">东</span>
@@ -579,6 +621,8 @@
     <p class="hint">测测宿舍现在多少分贝。声音只在你手机里算，不上传。数值是估算，仅供参考。</p>
     <p class="noise-db" id="noiseDb">0 dB</p>
     <div class="noise-meter-wrap"><div class="noise-meter" id="noiseMeter"></div></div>
+    <canvas id="noiseGauge" width="260" height="150" aria-label="分贝表盘"></canvas>
+    <canvas id="noiseHist" width="300" height="70" aria-label="最近60秒曲线"></canvas>
     <p class="result-line" id="noiseLevel">还没开始。</p>
     <p class="result-line" id="noiseResult">点开始，允许麦克风权限就能测。</p>
     <button class="btn gold-btn" id="noiseBtn">开始检测 🎙</button>
@@ -627,7 +671,17 @@
       <input id="wnVolume" type="range" min="0" max="100" value="60" aria-label="音量">
     </label>
     <p class="result-line" id="wnResult">点一个声音开始播放。</p>
-    <button class="btn ghost-btn" id="wnStopBtn">停止 ⏹</button>
+    <div class="btn-row">
+      <label class="light-slider-label">定时关闭
+        <select id="wnSleep" aria-label="定时关闭">
+          <option value="0" selected>不定时</option>
+          <option value="15">15 分钟</option>
+          <option value="30">30 分钟</option>
+          <option value="60">60 分钟</option>
+        </select>
+      </label>
+      <button class="btn ghost-btn" id="wnStopBtn">停止 ⏹</button>
+    </div>
   </section>
 </main>
 
@@ -684,6 +738,7 @@
         <option value="14">粗笔</option>
       </select>
       <button class="btn ghost-btn small" id="doodleEraserBtn">橡皮擦</button>
+      <button class="btn ghost-btn small" id="doodleUndoBtn">↩ 撤销</button>
       <button class="btn ghost-btn small" id="doodleClearBtn">清空</button>
     </div>
     <p class="result-line" id="doodleResult">还没画。选个颜色，直接上手画。</p>
@@ -894,6 +949,16 @@
       <button class="btn gold-btn small" id="pianoSong2Btn">🐯 两只老虎</button>
       <button class="btn ghost-btn small" id="pianoStopBtn">停 ⏹</button>
     </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn ghost-btn small" id="pianoChordC">C 和弦</button>
+      <button class="btn ghost-btn small" id="pianoChordG">G 和弦</button>
+      <button class="btn ghost-btn small" id="pianoChordAm">Am 和弦</button>
+      <button class="btn ghost-btn small" id="pianoChordF">F 和弦</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn ghost-btn small" id="pianoRecBtn">⏺ 录音</button>
+      <button class="btn ghost-btn small" id="pianoPlayRecBtn">▶ 回放</button>
+    </div>
   </section>
 
   <!-- 抽卡模拟器 -->
@@ -959,6 +1024,15 @@
     <div class="tictactoe-grid" id="tictactoeGrid"></div>
     <p class="result-line" id="tictactoeStatus">轮到你（❌）落子。</p>
     <p class="count-line" id="tictactoeStats">胜 0 · 平 0 · 负 0</p>
+    <div class="btn-row" id="tictactoeDiffRow">
+      <button class="btn small ghost-btn" id="tttEasyBtn">简单</button>
+      <button class="btn small ghost-btn" id="tttMedBtn">中等</button>
+      <button class="btn small gold-btn" id="tttHardBtn">困难</button>
+    </div>
+    <div class="btn-row" id="tictactoeFirstRow">
+      <button class="btn small gold-btn" id="tttFirstBtn">我先手</button>
+      <button class="btn small ghost-btn" id="tttSecondBtn">电脑先手</button>
+    </div>
     <button class="btn gold-btn small" id="tictactoeResetBtn">再来一局 ↺</button>
   </section>
 
@@ -966,7 +1040,10 @@
   <section class="panel toy hidden" id="toy-linkup">
     <h2>🔗 连连看</h2>
     <p class="hint">点两个相同的图案，中间的路最多拐 2 个弯就能消掉。全部消完就赢，卡住了可以洗牌或看提示。</p>
-    <div class="linkup-grid" id="linkupGrid"></div>
+    <div class="linkup-wrap" id="linkupWrap">
+      <div class="linkup-grid" id="linkupGrid"></div>
+      <canvas id="linkupPath" width="360" height="260" aria-label="连线路径"></canvas>
+    </div>
     <p class="result-line" id="linkupStatus">剩 12 对 · 用时 0 秒</p>
     <div class="btn-row">
       <button class="btn gold-btn small" id="linkupHintBtn">提示 💡</button>
@@ -978,7 +1055,12 @@
   <!-- 数字华容道 -->
   <section class="panel toy hidden" id="toy-slide15">
     <h2>🔢 数字华容道</h2>
-    <p class="hint">点空格旁边的数字滑过去，把 1–15 按顺序排好。步数越少越厉害，最好成绩存本机。</p>
+    <p class="hint">点空格旁边的数字滑过去，把数字按顺序排好。步数越少越厉害，最好成绩存本机。</p>
+    <div class="btn-row" id="slide15SizeRow">
+      <button class="btn small ghost-btn" id="slide15_3Btn">3×3</button>
+      <button class="btn small gold-btn" id="slide15_4Btn">4×4</button>
+      <button class="btn small ghost-btn" id="slide15_5Btn">5×5</button>
+    </div>
     <div class="slide15-grid" id="slide15Grid"></div>
     <p class="result-line" id="slide15Status">已走 0 步 · 最好 — 步</p>
     <div class="btn-row">
@@ -1033,7 +1115,12 @@
   <!-- 成语接龙 -->
   <section class="panel toy hidden" id="toy-idiom">
     <h2>📖 成语接龙</h2>
-    <p class="hint">上一个成语的最后一个字，就是下一个成语的第一个字。10 轮，看你能接对几个。</p>
+    <p class="hint">上一个成语的最后一个字，就是下一个成语的第一个字。10 轮，看你能接对几个。还能和 AI 对战！</p>
+    <div class="btn-row" style="margin-bottom:8px">
+      <button class="btn ghost-btn small active" id="idiomModeSolo">单人</button>
+      <button class="btn ghost-btn small" id="idiomModeVs">🆚 AI 对战</button>
+      <button class="btn ghost-btn small hidden" id="idiomHintBtn">💡 求助</button>
+    </div>
     <p class="idiom-current" id="idiomCurrent">一马当先</p>
     <div class="idiom-options" id="idiomOptions"></div>
     <p class="result-line" id="idiomStatus">第 1 / 10 轮 · 得分 0 · 最好 0</p>
@@ -1050,6 +1137,7 @@
     <div class="drums-grid" id="drumsGrid"></div>
     <p class="result-line" id="drumsStatus">已停 · 第 — 拍</p>
     <div class="btn-row">
+      <label style="font-size:13px">速度 <input type="range" id="drumsBpm" min="60" max="180" value="120" style="width:110px;vertical-align:middle"> <span id="drumsBpmVal">120 BPM</span></label>
       <button class="btn gold-btn small" id="drumsPlayBtn">播放 ▶</button>
       <button class="btn ghost-btn small" id="drumsClearBtn">清空 🧹</button>
       <button class="btn ghost-btn small" id="drumsDemoBtn">来段示范 🎵</button>
@@ -1072,9 +1160,12 @@
   <!-- 脑筋急转弯 -->
   <section class="panel toy hidden" id="toy-riddle">
     <h2>🧩 脑筋急转弯</h2>
-    <p class="hint">12 道题，每题 3 个选项，答对 +10 分。别较真，答案都很皮。</p>
+    <p class="hint">12 道题，每题 3 个选项，答对 +10 分，每题限时 20 秒。卡住了可以看提示（-3 分）。</p>
+    <div class="riddle-cats" id="riddleCats"></div>
     <p class="riddle-q" id="riddleQ">点开始，出题。</p>
+    <p class="count-line" id="riddleTimer"></p>
     <div class="riddle-options" id="riddleOptions"></div>
+    <button class="btn ghost-btn small hidden" id="riddleHint">💡 提示（-3 分）</button>
     <p class="result-line" id="riddleStatus">第 0 / 12 题 · 得分 0 · 最好 0</p>
     <div class="btn-row">
       <button class="btn gold-btn small" id="riddleStartBtn">开始 ▶</button>
@@ -1179,7 +1270,7 @@
   </section>
 
 <footer>
-  <p>宿舍玩具盒 v1.33 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v1.34 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

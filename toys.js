@@ -421,12 +421,33 @@
       for (let i = 0; i < n; i++) {
         const a0 = (i / n) * Math.PI * 2;
         const a1 = ((i + 1) / n) * Math.PI * 2;
+        const base = WHEEL_COLORS[i % WHEEL_COLORS.length];
+        // 径向渐变：中心亮、边缘深，更有质感（不支持的环境回退纯色）
+        let fill = base;
+        try {
+          if (ctx.createRadialGradient) {
+            const grad = ctx.createRadialGradient(0, 0, 20, 0, 0, r);
+            if (grad && grad.addColorStop) {
+              grad.addColorStop(0, "#ffffff");
+              grad.addColorStop(0.25, base);
+              grad.addColorStop(1, base);
+              fill = grad;
+            }
+          }
+        } catch (e) { /* 回退纯色 */ }
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.arc(0, 0, r, a0, a1);
         ctx.closePath();
-        ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+        ctx.fillStyle = fill;
         ctx.fill();
+        // 扇区分隔线
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a0) * r, Math.sin(a0) * r);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(255,255,255,0.75)";
+        ctx.stroke();
         // 文字
         ctx.save();
         ctx.rotate((a0 + a1) / 2);
@@ -436,6 +457,16 @@
         ctx.fillText(wheelOptions[i], r - 14, 6);
         ctx.restore();
       }
+      ctx.restore();
+      // 外圈光晕
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#f5c542";
+      ctx.shadowColor = "rgba(245,197,66,0.8)";
+      ctx.shadowBlur = 14;
+      ctx.stroke();
       ctx.restore();
       // 中心圆
       ctx.beginPath();
@@ -471,7 +502,56 @@
       drawWheel(wheelAngle);
       $("wheelResult").textContent = "已恢复默认选项。";
     });
+    const WHEEL_HIST_KEY = "dorm-toybox-wheel-history-v1";
+    function loadWheelHist() {
+      try {
+        const a = JSON.parse(lsGet(WHEEL_HIST_KEY, "[]"));
+        return Array.isArray(a) ? a : [];
+      } catch (e) { return []; }
+    }
+    function renderWheelHist() {
+      const box = $("wheelHistory");
+      if (!box) return;
+      box.innerHTML = "";
+      loadWheelHist().forEach((h) => {
+        const li = document.createElement("li");
+        const a = document.createElement("span");
+        a.textContent = "🎉 " + h.text;
+        const d = document.createElement("span");
+        d.textContent = h.date;
+        li.appendChild(a);
+        li.appendChild(d);
+        box.appendChild(li);
+      });
+    }
+    function pushWheelHist(text) {
+      const h = loadWheelHist();
+      h.unshift({ text: text, date: todayStr() });
+      try { lsSet(WHEEL_HIST_KEY, JSON.stringify(h.slice(0, 8))); } catch (e) { /* 忽略 */ }
+      renderWheelHist();
+    }
+    // 中奖撒花
+    function wheelConfetti() {
+      const box = $("wheelConfettiBox");
+      if (!box) return;
+      const bits = ["🎉", "✨", "⭐", "🎊", "💫"];
+      for (let i = 0; i < 14; i++) {
+        const b = document.createElement("span");
+        b.className = "confetti-bit";
+        b.textContent = bits[i % bits.length];
+        b.style.left = (10 + Math.random() * 80) + "%";
+        b.style.animationDelay = (Math.random() * 0.4) + "s";
+        box.appendChild(b);
+        setTimeout(() => {
+          try {
+            if (box.removeChild) box.removeChild(b);
+            else if (b.parentNode && b.parentNode.removeChild) b.parentNode.removeChild(b);
+          } catch (e) { /* 测试桩无 removeChild，忽略 */ }
+        }, 1800);
+      }
+    }
     drawWheel(0);
+    renderWheelHist();
 
     $("spinWheelBtn").addEventListener("click", () => {
       if (wheelSpinning) return;
@@ -490,7 +570,7 @@
       const totalRotation = Math.PI * 2 * 5 + delta;
       const startAngle = wheelAngle;
       const startTime = performance.now();
-      const duration = 2600;
+      const duration = 3200;
       function frame(now) {
         const t = Math.min((now - startTime) / duration, 1);
         const eased = 1 - Math.pow(1 - t, 3);
@@ -501,6 +581,9 @@
           wheelSpinning = false;
           $("spinWheelBtn").disabled = false;
           $("wheelResult").textContent = "🎉 命运已定：" + wheelOptions[targetIndex] + "！";
+          wheelConfetti();
+          pushWheelHist(wheelOptions[targetIndex]);
+          if (typeof SFX !== "undefined") SFX.win();
         }
       }
       requestAnimationFrame(frame);
@@ -937,9 +1020,15 @@
   };
   /* ---------- 5. 随机点名 ---------- */
   toyInitFns["picker"] = function () {
+    const PICKER_NAMES_KEY = "dorm-toybox-picker-names-v1";
     let picked = [];
+    // 名单持久化：上次粘贴的不用重贴
+    try {
+      const saved = lsGet(PICKER_NAMES_KEY, "");
+      if (saved) $("nameList").value = saved;
+    } catch (e) { /* 忽略 */ }
     function namePool() {
-      // 去重（保序）：重名会让“抽过的不再重复”误判，两个同名算一个人
+      // 去重（保序）：重名会让"抽过的不再重复"误判，两个同名算一个人
       const seen = new Set();
       return $("nameList").value.split("\n").map((s) => s.trim()).filter((s) => {
         if (!s || seen.has(s)) return false;
@@ -975,6 +1064,7 @@
         $("pickResult").textContent = "名单是空的 😢";
         return;
       }
+      if (typeof SFX !== "undefined") SFX.click();
       const noRepeat = $("noRepeatCheck").checked;
       let candidates = noRepeat ? pool.filter((n) => !picked.includes(n)) : pool;
       if (candidates.length === 0) {
@@ -984,13 +1074,18 @@
       }
       let ticks = 0;
       const result = $("pickResult");
+      result.classList.remove("pop", "slowing");
       const timer = setInterval(() => {
         result.textContent = pick(pool);
         ticks++;
+        if (ticks === 7) result.classList.add("slowing"); // 减速：名字越滚越慢的视觉
         if (ticks >= 10) {
           clearInterval(timer);
           const winner = pick(candidates);
+          result.classList.remove("slowing");
           result.textContent = "🎉 " + winner;
+          result.classList.add("pop");
+          if (typeof SFX !== "undefined") SFX.win();
           picked.push(winner);
           renderPickLeft();
           renderPickHistory();
@@ -1003,10 +1098,14 @@
       renderPickLeft();
       renderPickHistory();
     });
-    $("nameList").addEventListener("change", renderPickLeft);
+    $("nameList").addEventListener("change", () => {
+      try { lsSet(PICKER_NAMES_KEY, $("nameList").value); } catch (e) { /* 忽略 */ }
+      renderPickLeft();
+    });
     renderPickLeft();
 
   };
+
   /* ---------- 6. 时间工具箱（番茄钟 + 秒表 + 正计时）---------- */
   /* v1.31：timer 和 stopwatch 合并为「时间工具箱」，三个 tab。stopwatch 入口经 showToy 重定向到此。 */
   toyInitFns["timer"] = function () {
@@ -1254,6 +1353,12 @@
   };
   /* ---------- 7. 随机分组 ---------- */
   toyInitFns["groups"] = function () {
+    const GROUPS_NAMES_KEY = "dorm-toybox-groups-names-v1";
+    // 名单持久化
+    try {
+      const saved = lsGet(GROUPS_NAMES_KEY, "");
+      if (saved) $("groupNames").value = saved;
+    } catch (e) { /* 忽略 */ }
     function groupNamePool() {
       const seen = new Set();
       return $("groupNames").value.split("\n").map((s) => s.trim()).filter((s) => {
@@ -1263,27 +1368,24 @@
       });
     }
     let lastGroups = [];
-    $("doGroupBtn").addEventListener("click", () => {
-      const names = groupNamePool();
-      const count = parseInt($("groupCount").value, 10);
-      if (names.length < count) {
-        $("groupResult").textContent = "人太少了，至少要 " + count + " 个人才能分 " + count + " 组。";
-        return;
-      }
-      const shuffled = shuffle(names.slice());
-      const groups = Array.from({ length: count }, () => []);
-      shuffled.forEach((name, i) => groups[i % count].push(name));
+    // 渲染分组（抽签 + 拖拽后都走这里，保证队长=每组第一个）
+    function renderGroups(groups, animate) {
       lastGroups = groups;
       const grid = $("groupGrid");
       grid.innerHTML = "";
       groups.forEach((members, gi) => {
         const card = document.createElement("div");
-        card.className = "group-card";
+        card.className = "group-card" + (animate ? " deal" : "");
+        if (animate) card.style.animationDelay = (gi * 0.09) + "s";
         const title = document.createElement("h3");
         title.textContent = "第 " + (gi + 1) + " 组 · " + members.length + " 人";
         const ul = document.createElement("ul");
+        ul.setAttribute("data-group", String(gi));
         members.forEach((m, mi) => {
           const li = document.createElement("li");
+          li.draggable = true;
+          li.setAttribute("data-gi", String(gi));
+          li.setAttribute("data-mi", String(mi));
           if (mi === 0) {
             const b = document.createElement("b");
             b.className = "captain";
@@ -1298,8 +1400,50 @@
         card.appendChild(ul);
         grid.appendChild(card);
       });
-      $("groupResult").textContent = "🎉 已随机分成 " + count + " 组，每组第一个是队长。";
+      bindGroupDrag();
+      $("groupResult").textContent = "🎉 已随机分成 " + groups.length + " 组，每组第一个是队长。长按拖动名字可手动微调。";
       $("copyGroupsBtn").classList.remove("hidden");
+    }
+    // 拖拽微调：事件委托，只绑一次
+    function bindGroupDrag() {
+      const grid = $("groupGrid");
+      if (grid._dragBound) return;
+      grid._dragBound = true;
+      let dragData = null;
+      grid.addEventListener("dragstart", (e) => {
+        const t = e.target;
+        const li = t && t.closest ? t.closest("li") : null;
+        if (!li) return;
+        dragData = { gi: +li.getAttribute("data-gi"), mi: +li.getAttribute("data-mi") };
+        try { if (e.dataTransfer) e.dataTransfer.setData("text/plain", "x"); } catch (err) { /* 忽略 */ }
+      });
+      grid.addEventListener("dragover", (e) => { e.preventDefault(); });
+      grid.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const t = e.target;
+        const ul = t && t.closest ? t.closest("ul[data-group]") : null;
+        if (!ul || !dragData) return;
+        const toGi = +ul.getAttribute("data-group");
+        const moved = lastGroups[dragData.gi].splice(dragData.mi, 1)[0];
+        if (moved === undefined) return;
+        lastGroups[toGi].push(moved);
+        renderGroups(lastGroups, false);
+        if (typeof SFX !== "undefined") SFX.click();
+        dragData = null;
+      });
+    }
+    $("doGroupBtn").addEventListener("click", () => {
+      const names = groupNamePool();
+      const count = parseInt($("groupCount").value, 10);
+      if (names.length < count) {
+        $("groupResult").textContent = "人太少了，至少要 " + count + " 个人才能分 " + count + " 组。";
+        return;
+      }
+      if (typeof SFX !== "undefined") SFX.click();
+      const shuffled = shuffle(names.slice());
+      const groups = Array.from({ length: count }, () => []);
+      shuffled.forEach((name, i) => groups[i % count].push(name));
+      renderGroups(groups, true);
     });
     $("copyGroupsBtn").addEventListener("click", async () => {
       const text = lastGroups.map((g, i) => "第 " + (i + 1) + " 组（队长 " + g[0] + "）：" + g.join("、")).join("\n");
@@ -1311,8 +1455,12 @@
         $("groupResult").textContent = text;
       }
     });
+    $("groupNames").addEventListener("change", () => {
+      try { lsSet(GROUPS_NAMES_KEY, $("groupNames").value); } catch (e) { /* 忽略 */ }
+    });
 
   };
+
   /* ---------- 8. 反应速度测试 ---------- */
   toyInitFns["reaction"] = function () {
     const REACTION_BEST_KEY = "dorm-toybox-reaction-best-v1";
@@ -1348,6 +1496,38 @@
         box.appendChild(li);
       });
     }
+    const REACTION_BOARD_KEY = "dorm-toybox-reaction-board-v1";
+    let roundsMode = false;
+    let roundTimes = [];
+    function loadBoard() {
+      try {
+        const a = JSON.parse(lsGet(REACTION_BOARD_KEY, "[]"));
+        return Array.isArray(a) ? a : [];
+      } catch (e) { return []; }
+    }
+    function saveBoard(b) {
+      try { lsSet(REACTION_BOARD_KEY, JSON.stringify(b.slice(0, 5))); } catch (e) { /* 忽略 */ }
+    }
+    function roundEval(avg) {
+      if (avg < 250) return "🏆 职业选手";
+      if (avg < 350) return "🙂 正常发挥";
+      return "🐢 树懒本懒";
+    }
+    function renderBoard() {
+      const box = $("reactionBoard");
+      if (!box) return;
+      box.innerHTML = "";
+      loadBoard().forEach((r, i) => {
+        const li = document.createElement("li");
+        const a = document.createElement("span");
+        a.textContent = "🏅 第" + (i + 1) + "名 " + r.avg + " ms";
+        const d = document.createElement("span");
+        d.textContent = r.date;
+        li.appendChild(a);
+        li.appendChild(d);
+        box.appendChild(li);
+      });
+    }
     function setReactionStage(text, sub, cls) {
       const stage = $("reactionStage");
       stage.classList.remove("waiting", "go");
@@ -1364,7 +1544,8 @@
     function reactionClick() {
       if (reactionState === "idle") {
         reactionState = "waiting";
-        setReactionStage("等绿色……", "别点！等它变绿", "waiting");
+        const sub = roundsMode ? ("第 " + (roundTimes.length + 1) + "/5 轮 · 别点！等它变绿") : "别点！等它变绿";
+        setReactionStage("等绿色……", sub, "waiting");
         $("reactionResult").textContent = "等着，别急……";
         const delay = 1500 + Math.random() * 2500;
         reactionTimerId = setTimeout(() => {
@@ -1375,8 +1556,13 @@
       } else if (reactionState === "waiting") {
         clearTimeout(reactionTimerId);
         reactionState = "idle";
-        setReactionStage("抢跑了！", "变绿之前别点，重新来", "");
-        $("reactionResult").textContent = "❌ 犯规：抢跑。再点一次重新开始。";
+        if (roundsMode) {
+          setReactionStage("抢跑了！", "第 " + (roundTimes.length + 1) + "/5 轮重来，点我继续", "");
+          $("reactionResult").textContent = "❌ 犯规：抢跑。这轮不算，点一下重来。";
+        } else {
+          setReactionStage("抢跑了！", "变绿之前别点，重新来", "");
+          $("reactionResult").textContent = "❌ 犯规：抢跑。再点一次重新开始。";
+        }
       } else if (reactionState === "go") {
         const ms = Math.round(performance.now() - reactionStartAt);
         reactionState = "idle";
@@ -1388,7 +1574,28 @@
         } else {
           $("reactionResult").textContent = "⚡ " + ms + " ms，" + rankLabel(ms) + "（最好 " + reactionBest + " ms）";
         }
-        setReactionStage("点我再测一次", "最好成绩 " + reactionBest + " ms", "");
+        if (roundsMode) {
+          roundTimes.push(ms);
+          if (typeof SFX !== "undefined") SFX.pop(Math.min(1, ms / 600));
+          if (roundTimes.length >= 5) {
+            const avg = Math.round(roundTimes.reduce((a, b) => a + b, 0) / roundTimes.length);
+            const ev = roundEval(avg);
+            const board = loadBoard();
+            board.push({ avg: avg, date: todayStr() });
+            board.sort((x, y) => x.avg - y.avg);
+            saveBoard(board);
+            renderBoard();
+            roundsMode = false;
+            $("reactionResult").textContent = "🏁 5 轮平均 " + avg + " ms，" + ev + "！已记入排行榜。";
+            if (typeof SFX !== "undefined") SFX.win();
+            setReactionStage("挑战完成！", "点我再来一局", "");
+          } else {
+            $("reactionResult").textContent = "⚡ 第 " + roundTimes.length + "/5 轮：" + ms + " ms，点我继续。";
+            setReactionStage("第 " + (roundTimes.length + 1) + "/5 轮", "点我继续，别抢跑", "");
+          }
+        } else {
+          setReactionStage("点我再测一次", "最好成绩 " + reactionBest + " ms", "");
+        }
         renderReaction();
       }
     }
@@ -1396,7 +1603,17 @@
     $("reactionStage").addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reactionClick(); }
     });
+    const roundsBtn = $("reactionRoundsBtn");
+    if (roundsBtn) roundsBtn.addEventListener("click", () => {
+      if (reactionState !== "idle" || roundsMode) return;
+      roundsMode = true;
+      roundTimes = [];
+      if (typeof SFX !== "undefined") SFX.click();
+      setReactionStage("🏁 5 轮挑战", "第 1/5 轮：点一下开始计时", "");
+      $("reactionResult").textContent = "5 轮取平均，测测你的真实手速。抢跑那轮重来。";
+    });
     renderReaction();
+    renderBoard();
 
     // 退出就停：等绿的超时清掉，回到初始状态，不然回来时已经是绿的、成绩还乱算
     toyLeaveCleanup.reaction = () => {
@@ -1753,20 +1970,67 @@
   /* ---------- 12. 打字测试 ---------- */
   toyInitFns["typing"] = function () {
     const TYPING_BEST_KEY = "dorm-toybox-typing-best-v1";
+    const TYPING_LEVEL_KEY = "dorm-toybox-typing-level-v1"; // 已解锁到的最高关（0-based）
     let typingTarget = "";
     let typingStartAt = 0;
     let typingTimerId = null;
     let typingDone = false;
     let typingComposing = false; // 输入法正在拼字（composition）时不比对
+    let typingLevel = 0; // 当前关 0-4
+    let typingAudioCtx = null;
     function loadTypingBest() {
       try { return parseInt(localStorage.getItem(TYPING_BEST_KEY) || "0", 10) || 0; }
       catch (e) { return 0; }
     }
+    function loadTypingLevel() {
+      try { return Math.min(4, Math.max(0, parseInt(localStorage.getItem(TYPING_LEVEL_KEY) || "0", 10) || 0)); }
+      catch (e) { return 0; }
+    }
     let typingBest = loadTypingBest();
+    typingLevel = loadTypingLevel();
     function renderTypingBest() {
       $("typingBest").textContent = typingBest > 0
         ? "宿舍纪录：" + typingBest + " 字/分"
         : "还没人留下纪录。第一个打完的就是纪录。";
+    }
+    // 打字机音效（WebAudio 合成短促咔哒）
+    function typingClick() {
+      try {
+        if (!typingAudioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          typingAudioCtx = new AC();
+        }
+        const ctx = typingAudioCtx;
+        if (ctx.state === "suspended") ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = 1800 + Math.random() * 600;
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.03);
+      } catch (e) { /* 忽略 */ }
+    }
+    function renderTypingLevels() {
+      const wrap = $("typingLevels");
+      if (!wrap) return;
+      wrap.innerHTML = "";
+      const unlocked = loadTypingLevel();
+      TYPING_LEVELS.forEach((lv, i) => {
+        const b = document.createElement("button");
+        const locked = i > unlocked;
+        b.className = "btn ghost-btn small" + (i === typingLevel ? " active" : "");
+        b.textContent = (locked ? "🔒 " : "") + lv.name;
+        b.disabled = locked;
+        b.addEventListener("click", () => {
+          typingLevel = i;
+          typingNewSentence();
+          renderTypingLevels();
+        });
+        wrap.appendChild(b);
+      });
     }
     function typingElapsedSec() {
       return typingStartAt ? (performance.now() - typingStartAt) / 1000 : 0;
@@ -1782,7 +2046,8 @@
       });
     }
     function typingNewSentence() {
-      typingTarget = pick(TYPING_SENTENCES);
+      const lv = TYPING_LEVELS[typingLevel] || TYPING_LEVELS[0];
+      typingTarget = pick(lv.sentences);
       typingStartAt = 0;
       typingDone = false;
       if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
@@ -1804,10 +2069,19 @@
         span.classList.remove("ok", "bad");
         if (typed === undefined) { /* 未打 */ }
         else if (typed === span.textContent) { span.classList.add("ok"); correct++; }
-        else { span.classList.add("bad"); }
+        else {
+          span.classList.add("bad");
+          // 错误抖动（只给刚错的那个加，避免全屏抖）
+          if (i === input.length - 1) {
+            span.classList.remove("shake");
+            void span.offsetWidth;
+            span.classList.add("shake");
+          }
+        }
       }
       const elapsed = typingElapsedSec();
-      $("typingStats").textContent = "用时 " + Math.floor(elapsed) + " 秒 · 已打 " + input.length + " 字 · 正确 " + correct + " 字";
+      const wpm = elapsed > 1 ? Math.round((correct / elapsed) * 60) : 0;
+      $("typingStats").textContent = "用时 " + Math.floor(elapsed) + " 秒 · 已打 " + input.length + " 字 · 正确 " + correct + " 字 · 实时 " + wpm + " 字/分";
       if (!typingDone && input.length >= typingTarget.length) {
         typingDone = true;
         if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
@@ -1821,8 +2095,17 @@
           saveBest(TYPING_BEST_KEY, cpm);
           msg += "新纪录！";
         }
+        // 闯关：正确率≥80% 解锁下一关
+        const unlocked = loadTypingLevel();
+        if (accuracy >= 80 && typingLevel === unlocked && typingLevel < TYPING_LEVELS.length - 1) {
+          try { localStorage.setItem(TYPING_LEVEL_KEY, String(typingLevel + 1)); } catch (e) {}
+          msg += " 🔓 解锁" + TYPING_LEVELS[typingLevel + 1].name + "！";
+        } else if (accuracy < 80) {
+          msg += " （正确率≥80% 才能解锁下一关）";
+        }
         $("typingResult").textContent = msg;
         renderTypingBest();
+        renderTypingLevels();
       }
     }
     function typingOnInput() {
@@ -1831,6 +2114,7 @@
         typingStartAt = performance.now();
         typingTimerId = setInterval(typingTick, 200);
       }
+      typingClick();
       typingTick();
     }
     $("typingInput").addEventListener("input", (e) => {
@@ -1843,11 +2127,16 @@
       typingOnInput(); // 选字上屏后才比对
     });
     $("typingNextBtn").addEventListener("click", typingNewSentence);
+    renderTypingLevels();
     typingNewSentence();
 
     // 退出就停：打字计时只刷显示，回来再续上（用时按时间戳算，不会丢）
     toyLeaveCleanup.typing = () => { if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; } };
     toyEnterResume.typing = () => { if (typingStartAt && !typingDone && !typingTimerId) typingTimerId = setInterval(typingTick, 200); };
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+        get typing() { return { level: typingLevel, best: typingBest }; },
+        typingSetLevel(i) { typingLevel = Math.min(4, Math.max(0, i)); renderTypingLevels(); typingNewSentence(); },
+    }));
 
   };
   /* ---------- 13. 华容道 ---------- */
@@ -2320,35 +2609,51 @@
   toyInitFns["schulte"] = function () {
     // 退出就停：舒尔特计时只刷显示，回来再续上（用时按时间戳算，不会丢）
     const SCHULTE_BEST_KEY = "dorm-toybox-schulte-best-v1";
+    let schulteSize = 5; // 默认 5x5（测试刚性）
     let schulteNext = 1;
     let schulteStartAt = 0;
     let schulteTimerId = null;
     let schulteDone = false;
+    function schulteKey() { return schulteSize === 5 ? SCHULTE_BEST_KEY : SCHULTE_BEST_KEY + "-" + schulteSize + "x" + schulteSize; }
     function loadSchulteBest() {
-      try { return parseFloat(localStorage.getItem(SCHULTE_BEST_KEY) || "0") || 0; }
+      try { return parseFloat(localStorage.getItem(schulteKey()) || "0") || 0; }
       catch (e) { return 0; }
     }
     let schulteBest = loadSchulteBest();
     function renderSchulteBest() {
       $("schulteBest").textContent = schulteBest > 0
-        ? "宿舍纪录：" + schulteBest.toFixed(1) + " 秒"
+        ? "宿舍纪录（" + schulteSize + "×" + schulteSize + "）：" + schulteBest.toFixed(1) + " 秒"
         : "还没人通关。第一个通关的就是纪录。";
     }
     function schulteElapsed() { return schulteStartAt ? (performance.now() - schulteStartAt) / 1000 : 0; }
     function renderSchulteStats() { $("schulteStats").textContent = "用时 " + schulteElapsed().toFixed(1) + " 秒"; }
+    function schulteSetDiff(n) {
+      schulteSize = n;
+      schulteBest = loadSchulteBest();
+      ["schulte3Btn", "schulte5Btn", "schulte7Btn"].forEach((id) => {
+        const b = $(id); if (!b) return;
+        const on = id === "schulte" + n + "Btn";
+        b.classList.toggle("gold-btn", on);
+        b.classList.toggle("ghost-btn", !on);
+      });
+      schulteNewGame();
+    }
     function schulteNewGame() {
-      const numbers = shuffle(Array.from({ length: 25 }, (_, i) => i + 1));
+      const total = schulteSize * schulteSize;
+      const numbers = shuffle(Array.from({ length: total }, (_, i) => i + 1));
       schulteNext = 1;
       schulteStartAt = 0;
       schulteDone = false;
       if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
       const grid = $("schulteGrid");
       grid.innerHTML = "";
-      numbers.forEach((n) => {
+      grid.style.gridTemplateColumns = "repeat(" + schulteSize + ", 1fr)";
+      numbers.forEach((n, idx) => {
         const cell = document.createElement("button");
-        cell.className = "schulte-cell";
+        cell.className = "schulte-cell spawn";
         cell.textContent = String(n);
         cell.setAttribute("data-num", String(n));
+        cell.style.animationDelay = Math.min(300, idx * 12) + "ms";
         cell.addEventListener("click", () => schulteTap(cell, n));
         grid.appendChild(cell);
       });
@@ -2359,8 +2664,14 @@
     }
     function schulteTap(cell, n) {
       if (schulteDone) return;
+      const total = schulteSize * schulteSize;
       if (n !== schulteNext) {
         $("schulteResult").textContent = "点错了，要点的是 " + schulteNext + "。";
+        // 错误抖动反馈
+        cell.classList.remove("shake");
+        void cell.offsetWidth;
+        cell.classList.add("shake");
+        if (typeof SFX !== "undefined") SFX.click();
         return;
       }
       if (!schulteStartAt) {
@@ -2368,17 +2679,19 @@
         schulteTimerId = setInterval(renderSchulteStats, 100);
       }
       cell.classList.add("done");
+      if (typeof SFX !== "undefined") SFX.pop(schulteNext / total);
       schulteNext++;
-      if (schulteNext > 25) {
+      if (schulteNext > total) {
         schulteDone = true;
         if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
         const seconds = schulteElapsed();
         let msg = "🎉 完成！用时 " + seconds.toFixed(1) + " 秒。";
         if (schulteBest === 0 || seconds < schulteBest) {
           schulteBest = seconds;
-          saveBest(SCHULTE_BEST_KEY, seconds);
+          saveBest(schulteKey(), seconds);
           msg += "新纪录！";
         }
+        if (typeof SFX !== "undefined") SFX.win();
         $("schulteResult").textContent = msg;
         $("schulteTarget").textContent = "已完成";
         renderSchulteStats();
@@ -2389,6 +2702,9 @@
       }
     }
     $("schulteResetBtn").addEventListener("click", schulteNewGame);
+    $("schulte3Btn").addEventListener("click", () => schulteSetDiff(3));
+    $("schulte5Btn").addEventListener("click", () => schulteSetDiff(5));
+    $("schulte7Btn").addEventListener("click", () => schulteSetDiff(7));
     schulteNewGame();
 
     // 退出就停：舒尔特计时只刷显示，回来再续上（用时按时间戳算，不会丢）
@@ -2446,6 +2762,149 @@
       saveScore();
       renderScore();
     });
+
+    /* ---- 多队伍（2–8 队）：A/B 走原逻辑，C–H 存独立 key ---- */
+    const SCORE_EXTRA_KEY = "dorm-toybox-score-extra-v1";
+    const TEAM_COLORS = ["#ff5c5c", "#4f7cff", "#3ec6a7", "#f5c542", "#e58cff", "#8bc34a", "#ff9d00", "#7ab8ff"];
+    const TEAM_DEFAULT_NAMES = ["红队", "蓝队", "绿队", "黄队", "紫队", "橙队", "粉队", "青队"];
+    function loadExtra() {
+      try {
+        const e = JSON.parse(lsGet(SCORE_EXTRA_KEY, "null"));
+        if (e && typeof e.count === "number" && Array.isArray(e.teams)) return e;
+      } catch (err) { /* 忽略 */ }
+      return { count: 2, teams: [] };
+    }
+    let scoreExtra = loadExtra();
+    function saveExtra() {
+      try { lsSet(SCORE_EXTRA_KEY, JSON.stringify(scoreExtra)); } catch (e) { /* 忽略 */ }
+    }
+    function allTeams() {
+      const list = [
+        { name: score.nameA, score: score.a, color: TEAM_COLORS[0] },
+        { name: score.nameB, score: score.b, color: TEAM_COLORS[1] },
+      ];
+      scoreExtra.teams.forEach((t, i) => list.push({ name: t.name, score: t.score, color: TEAM_COLORS[i + 2] }));
+      return list;
+    }
+    function renderExtraTeams() {
+      const box = $("scoreExtraTeams");
+      box.innerHTML = "";
+      scoreExtra.teams.forEach((t, i) => {
+        const idx = i + 2; // C 起
+        const card = document.createElement("div");
+        card.className = "team-card";
+        const dot = document.createElement("span");
+        dot.className = "team-dot";
+        dot.style.background = TEAM_COLORS[idx];
+        const input = document.createElement("input");
+        input.id = "scoreExtra" + idx + "Name";
+        input.type = "text";
+        input.maxLength = 6;
+        input.value = t.name;
+        input.setAttribute("aria-label", "队伍" + (idx + 1) + "名字");
+        input.addEventListener("change", () => {
+          t.name = input.value.trim() || TEAM_DEFAULT_NAMES[idx];
+          saveExtra();
+        });
+        const num = document.createElement("div");
+        num.className = "score-num small";
+        num.id = "scoreExtra" + idx + "Score";
+        num.textContent = String(t.score);
+        const btns = document.createElement("div");
+        btns.className = "score-btns";
+        [1, 2, 3].forEach((n) => {
+          const b = document.createElement("button");
+          b.className = "btn small";
+          b.textContent = "+" + n;
+          b.addEventListener("click", () => {
+            t.score = Math.min(SCORE_MAX, t.score + n);
+            num.textContent = String(t.score);
+            saveExtra();
+            if (typeof SFX !== "undefined") SFX.pop(0.5);
+          });
+          btns.appendChild(b);
+        });
+        card.appendChild(dot);
+        card.appendChild(input);
+        card.appendChild(num);
+        card.appendChild(btns);
+        box.appendChild(card);
+      });
+    }
+    const teamCountSel = $("scoreTeamCount");
+    if (teamCountSel) {
+      teamCountSel.value = String(Math.min(8, Math.max(2, scoreExtra.count)));
+      teamCountSel.addEventListener("change", () => {
+        const c = Math.min(8, Math.max(2, parseInt(teamCountSel.value, 10) || 2));
+        scoreExtra.count = c;
+        const need = c - 2;
+        while (scoreExtra.teams.length < need) {
+          const idx = scoreExtra.teams.length + 2;
+          scoreExtra.teams.push({ name: TEAM_DEFAULT_NAMES[idx], score: 0 });
+        }
+        scoreExtra.teams.length = need;
+        saveExtra();
+        renderExtraTeams();
+      });
+    }
+    renderExtraTeams();
+
+    /* ---- 比赛计时器 ---- */
+    let scoreTimerId = null;
+    let scoreTimerLeft = 5 * 60;
+    function renderScoreTimer() {
+      const m = Math.floor(scoreTimerLeft / 60);
+      const sec = scoreTimerLeft % 60;
+      $("scoreTimerDisplay").textContent = (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec;
+    }
+    function pauseScoreTimer() {
+      if (scoreTimerId) { clearInterval(scoreTimerId); scoreTimerId = null; }
+    }
+    const timerStartBtn = $("scoreTimerStartBtn");
+    if (timerStartBtn) timerStartBtn.addEventListener("click", () => {
+      if (scoreTimerId) return;
+      if (typeof SFX !== "undefined") SFX.click();
+      scoreTimerId = setInterval(() => {
+        scoreTimerLeft--;
+        if (scoreTimerLeft <= 0) {
+          scoreTimerLeft = 0;
+          pauseScoreTimer();
+          $("scoreTimerDisplay").textContent = "⏰ 时间到！";
+          $("scoreResult").textContent = "⏰ 时间到！点「🏆 结算胜负」看看谁赢了。";
+          if (typeof SFX !== "undefined") SFX.lose();
+          return;
+        }
+        renderScoreTimer();
+      }, 1000);
+    });
+    const timerPauseBtn = $("scoreTimerPauseBtn");
+    if (timerPauseBtn) timerPauseBtn.addEventListener("click", pauseScoreTimer);
+    const timerResetBtn = $("scoreTimerResetBtn");
+    if (timerResetBtn) timerResetBtn.addEventListener("click", () => {
+      pauseScoreTimer();
+      const mins = Math.min(99, Math.max(1, parseInt($("scoreTimerMin").value, 10) || 5));
+      scoreTimerLeft = mins * 60;
+      renderScoreTimer();
+    });
+    renderScoreTimer();
+    toyLeaveCleanup.score = pauseScoreTimer;
+
+    /* ---- 结算胜负 ---- */
+    const finishBtn = $("scoreFinishBtn");
+    if (finishBtn) finishBtn.addEventListener("click", () => {
+      const teams = allTeams();
+      const max = Math.max.apply(null, teams.map((t) => t.score));
+      const winners = teams.filter((t) => t.score === max);
+      if (winners.length === teams.length) {
+        $("scoreResult").textContent = "🤝 握手言和！所有队伍都是 " + max + " 分。";
+      } else if (winners.length === 1) {
+        $("scoreResult").textContent = "🏆 " + winners[0].name + " 获胜！" + max + " 分，全场最佳。";
+      } else {
+        $("scoreResult").textContent = "🤝 平局！" + winners.map((w) => w.name).join("、") + " 同为 " + max + " 分。";
+      }
+      if (typeof SFX !== "undefined") SFX.win();
+    });
+
     renderScore();
 
   };
@@ -2484,6 +2943,48 @@
       });
       ledSpeedsBox.appendChild(b);
     });
+    // 字号：小 / 中 / 大
+    const LED_SIZES = [{ label: "小", px: "64px" }, { label: "中", px: "110px" }, { label: "大", px: "170px" }];
+    const ledSizesBox = $("ledSizes");
+    if (ledSizesBox) LED_SIZES.forEach((sz, i) => {
+      const b = document.createElement("button");
+      b.className = "btn small" + (i === 1 ? " gold-btn" : " ghost-btn");
+      b.textContent = sz.label;
+      b.setAttribute("aria-label", "弹幕字号" + sz.label);
+      b.addEventListener("click", () => {
+        $("ledText").style.fontSize = sz.px;
+        const t2 = $("ledText2");
+        if (t2) t2.style.fontSize = sz.px;
+        ledSizesBox.querySelectorAll("button").forEach((x) => { x.className = "btn small ghost-btn"; });
+        b.className = "btn small gold-btn";
+        ledSyncFull();
+      });
+      ledSizesBox.appendChild(b);
+    });
+    // 底色：深色系
+    const LED_BGS = ["#000000", "#1c1438", "#5c1010", "#0f2e1f", "#1a2e4a"];
+    const ledBgsBox = $("ledBgColors");
+    if (ledBgsBox) LED_BGS.forEach((c, i) => {
+      const b = document.createElement("button");
+      b.className = "led-color" + (i === 0 ? " active" : "");
+      b.style.background = c;
+      b.setAttribute("aria-label", "弹幕底色 " + c);
+      b.addEventListener("click", () => {
+        $("ledDisplay").style.background = c;
+        ledBgsBox.querySelectorAll(".led-color").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+      });
+      ledBgsBox.appendChild(b);
+    });
+    // 第二行
+    const ledInput2 = $("ledInput2");
+    if (ledInput2) ledInput2.addEventListener("input", () => {
+      const v = ledInput2.value.trim();
+      const t2 = $("ledText2");
+      if (v) { t2.textContent = v; t2.classList.remove("hidden"); }
+      else { t2.classList.add("hidden"); }
+      ledSyncFull();
+    });
     $("ledText").style.color = LED_COLORS[0];
     $("ledText").style.animationDuration = ledDuration;
     $("ledInput").addEventListener("input", () => {
@@ -2493,8 +2994,11 @@
     $("ledStartBtn").addEventListener("click", () => {
       ledRunning = !ledRunning;
       $("ledText").classList.toggle("scrolling", ledRunning);
+      const t2 = $("ledText2");
+      if (t2) t2.classList.toggle("scrolling", ledRunning);
       $("ledStartBtn").textContent = ledRunning ? "停下来 ⏸" : "开始滚动 ▶";
       $("ledResult").textContent = ledRunning ? "滚动中，举起手机给大家看。" : "已暂停。";
+      if (typeof SFX !== "undefined") SFX.click();
     });
 
     /* 全屏展示：横屏全黑背景，双击屏幕退出；进全屏前规则已经写在玩法介绍了 */
@@ -2502,11 +3006,28 @@
       $("ledFullText").textContent = $("ledText").textContent;
       $("ledFullText").style.color = $("ledText").style.color || LED_COLORS[0];
       $("ledFullText").style.animationDuration = ledDuration;
+      $("ledFullText").style.fontSize = $("ledText").style.fontSize || "";
+      const t2 = $("ledText2");
+      const f2 = $("ledFullText2");
+      if (t2 && f2) {
+        const v = t2.classList.contains("hidden") ? "" : t2.textContent;
+        if (v) {
+          f2.textContent = v;
+          f2.classList.remove("hidden");
+          f2.style.color = $("ledFullText").style.color;
+          f2.style.fontSize = $("ledFullText").style.fontSize;
+          f2.style.animationDuration = ledDuration;
+        } else {
+          f2.classList.add("hidden");
+        }
+      }
     }
     function ledOpenFull() {
       ledSyncFull();
       $("ledOverlay").classList.remove("hidden");
       $("ledFullText").classList.add("scrolling");
+      const f2 = $("ledFullText2");
+      if (f2 && !f2.classList.contains("hidden")) f2.classList.add("scrolling");
       try {
         const p = screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape");
         if (p && p.catch) p.catch(() => { /* 不支持自动转横屏，用户手动横过来也一样 */ });
@@ -2515,6 +3036,8 @@
     function ledCloseFull() {
       $("ledOverlay").classList.add("hidden");
       $("ledFullText").classList.remove("scrolling");
+      const f2 = $("ledFullText2");
+      if (f2) f2.classList.remove("scrolling");
       try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* 忽略 */ }
     }
     $("ledFullBtn").addEventListener("click", ledOpenFull);
@@ -2540,10 +3063,25 @@
       for (let i = 0; i < LIFE_TOTAL_MONTHS; i++) {
         const cell = document.createElement("div");
         cell.className = "life-cell" + (i < lived ? " lived" : "");
+        cell.setAttribute("data-idx", String(i));
+        cell.setAttribute("role", "button");
+        cell.setAttribute("aria-label", "第 " + (i + 1) + " 个月");
+        // 填充动画：已过的格子 staggered 亮起
+        if (i < lived) cell.style.transitionDelay = Math.min(1200, i * 2) + "ms";
+        cell.addEventListener("click", () => {
+          try {
+            const cells = grid.children || [];
+            for (let k = 0; k < cells.length; k++) cells[k].classList.remove("peek");
+            cell.classList.add("peek");
+            const atAge = Math.floor(i / 12), atMon = i % 12;
+            $("lifeStats").textContent = "第 " + (i + 1) + " 个月：你 " + atAge + " 岁" + (atMon ? " " + atMon + " 个月" : "") + (i < lived ? "（已经过了）" : "（还没到）") + "。";
+            if (typeof SFX !== "undefined") SFX.click();
+          } catch (e) { /* 测试桩忽略 */ }
+        });
         grid.appendChild(cell);
       }
       const pct = Math.round((lived / LIFE_TOTAL_MONTHS) * 100);
-      $("lifeStats").textContent = "你已经过了 " + lived + " 个月（" + pct + "%），还剩 " + remaining + " 个月。金色的是已经过的。";
+      $("lifeStats").textContent = "你已经过了 " + lived + " 个月（" + pct + "%），还剩 " + remaining + " 个月。金色的是已经过的，点任意格子看看那时的你。";
     }
     $("lifeGenBtn").addEventListener("click", lifeRender);
 
@@ -2923,8 +3461,9 @@
     $("beadsExportBtn").addEventListener("click", () => {
       if (!beadsCells.length) { $("beadsResult").textContent = "先传图或点示例，生成图纸再导出。"; return; }
       try {
-        // 导出图放大一倍（每颗 48px）：64 格的图在手机上看，字母才够大；孔也放大，字母全落在白底上
-        const cell = 48, margin = 40;
+        // 高清导出：勾选后每颗 96px（2x），打印更清晰；默认 48px
+        const hd = $("beadsHdExport") && $("beadsHdExport").checked;
+        const cell = hd ? 96 : 48, margin = hd ? 60 : 40;
         const canvas = document.createElement("canvas");
         if (typeof canvas.getContext !== "function" || typeof canvas.toDataURL !== "function") { $("beadsResult").textContent = "当前环境不支持导出。"; return; }
         canvas.width = beadsCols * cell + margin;
@@ -2963,7 +3502,7 @@
         a.href = canvas.toDataURL("image/png");
         a.download = "拼豆图纸.png";
         a.click();
-        $("beadsResult").textContent = "图纸已导出为图片，照着拼就行。";
+        $("beadsResult").textContent = hd ? "高清图纸已导出（2x），打印更清晰。" : "图纸已导出为图片，照着拼就行。";
       } catch (e) { $("beadsResult").textContent = "导出失败，换个浏览器试试。"; }
     });
 
@@ -3368,6 +3907,50 @@
     $("compassE").textContent = "东";
     $("compassS").textContent = "南";
     $("compassW").textContent = "西";
+    // 精美刻度盘：canvas 画 24 刻度 + 8 方位中文（静态外圈，不随表盘转）
+    (function compassDrawDial() {
+      try {
+        const cv = $("compassDialCanvas");
+        if (!cv || typeof cv.getContext !== "function") return;
+        const ctx = cv.getContext("2d");
+        const W = cv.width, cx = W / 2, cy = W / 2, R = W / 2 - 8;
+        ctx.clearRect(0, 0, W, W);
+        const dirs8 = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+        for (let d = 0; d < 360; d += 15) {
+          const a = (d - 90) * Math.PI / 180;
+          const major = d % 45 === 0;
+          ctx.strokeStyle = major ? "#d4a94e" : "rgba(212,169,78,.35)";
+          ctx.lineWidth = major ? 3 : 1.5;
+          const r1 = R - (major ? 16 : 9);
+          ctx.beginPath();
+          ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
+          ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#d4a94e";
+        ctx.font = "bold 15px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        dirs8.forEach((t, i) => {
+          const a = (i * 45 - 90) * Math.PI / 180;
+          ctx.fillText(t, cx + (R - 30) * Math.cos(a), cy + (R - 30) * Math.sin(a));
+        });
+        // 外圈
+        ctx.strokeStyle = "rgba(212,169,78,.6)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+      } catch (e) { /* 测试桩忽略 */ }
+    })();
+    function compassLevel(e) {
+      try {
+        const dot = $("levelDot");
+        if (!dot || typeof e.beta !== "number" || typeof e.gamma !== "number") return;
+        // beta 前后倾，gamma 左右倾；限制 ±25° 映射到 ±14px
+        const dx = Math.max(-14, Math.min(14, e.gamma / 25 * 14));
+        const dy = Math.max(-14, Math.min(14, e.beta / 25 * 14));
+        dot.style.transform = "translate(calc(-50% + " + dx + "px), calc(-50% + " + dy + "px))";
+      } catch (err) { /* 忽略 */ }
+    }
     function compassDir(deg) {
       const dirs = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
       return dirs[Math.round(deg / 45) % 8];
@@ -3381,6 +3964,7 @@
       if (typeof e.webkitCompassHeading === "number") deg = e.webkitCompassHeading;
       else if (typeof e.alpha === "number") deg = (360 - e.alpha) % 360;
       if (deg !== null) compassUpdate(deg);
+      compassLevel(e); // 水平仪气泡
     }
     $("compassBtn").addEventListener("click", () => {
       if (compassWatching) {
@@ -3430,10 +4014,85 @@
       if (db < 90) return "很吵，注意听力 🙉";
       return "非常吵，离远点！🚨";
     }
+    const noiseHist = [];
+    let noiseVibAt = 0;
+    function noiseDrawGauge(db) {
+      try {
+        const cv = $("noiseGauge");
+        if (!cv || typeof cv.getContext !== "function") return;
+        const ctx = cv.getContext("2d");
+        const W = cv.width, H = cv.height, cx = W / 2, cy = H - 14, R = Math.min(W / 2 - 16, H - 28);
+        ctx.clearRect(0, 0, W, H);
+        // 刻度弧 0-120dB
+        for (let d = 0; d <= 120; d += 10) {
+          const a = Math.PI + (d / 120) * Math.PI;
+          const hot = d >= 70;
+          ctx.strokeStyle = hot ? "#e5484d" : (d >= 50 ? "#e8a13c" : "#59b36a");
+          ctx.lineWidth = d % 30 === 0 ? 4 : 2;
+          const r1 = R - (d % 30 === 0 ? 14 : 8), r2 = R;
+          ctx.beginPath();
+          ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
+          ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a));
+          ctx.stroke();
+          if (d % 30 === 0) {
+            ctx.fillStyle = "#999";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(String(d), cx + (R - 24) * Math.cos(a), cy + (R - 24) * Math.sin(a) + 3);
+          }
+        }
+        // 指针
+        const pa = Math.PI + (Math.min(120, Math.max(0, db)) / 120) * Math.PI;
+        ctx.strokeStyle = db >= 70 ? "#e5484d" : "#d4a94e";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + (R - 30) * Math.cos(pa), cy + (R - 30) * Math.sin(pa));
+        ctx.stroke();
+        ctx.fillStyle = "#d4a94e";
+        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+      } catch (e) { /* 测试桩忽略 */ }
+    }
+    function noiseDrawHist() {
+      try {
+        const cv = $("noiseHist");
+        if (!cv || typeof cv.getContext !== "function") return;
+        const ctx = cv.getContext("2d");
+        const W = cv.width, H = cv.height;
+        ctx.clearRect(0, 0, W, H);
+        ctx.strokeStyle = "rgba(212,169,78,.25)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, H - (70 / 120) * H); ctx.lineTo(W, H - (70 / 120) * H); ctx.stroke();
+        if (noiseHist.length < 2) return;
+        ctx.strokeStyle = "#d4a94e";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        noiseHist.forEach((db, i) => {
+          const x = (i / 59) * W;
+          const y = H - (Math.min(120, db) / 120) * H;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      } catch (e) { /* 测试桩忽略 */ }
+    }
     function noiseRender(db) {
       $("noiseDb").textContent = Math.round(db) + " dB";
       $("noiseMeter").style.width = Math.min(100, Math.max(0, db)) + "%";
       $("noiseLevel").textContent = noiseLevel(db);
+      const over = db >= 70;
+      $("noiseDb").classList.toggle("over", over);
+      // 超标震动提醒（节流 3 秒一次）
+      if (over && noiseRunning) {
+        const now = Date.now();
+        if (now - noiseVibAt > 3000 && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          try { navigator.vibrate(60); } catch (e) {}
+          noiseVibAt = now;
+        }
+      }
+      noiseHist.push(db);
+      if (noiseHist.length > 60) noiseHist.shift();
+      noiseDrawGauge(db);
+      noiseDrawHist();
     }
     function noiseStop() {
       noiseRunning = false;
@@ -3538,21 +4197,94 @@
   /* ---------- 31. 白噪音 ---------- */
   toyInitFns["whitenoise"] = function () {
     const WN_SOUNDS = [
-      { id: "rain", name: "🌧 雨声", freq: 1200, q: 0.5, gain: 0.5 },
-      { id: "white", name: "📻 白噪音", freq: 8000, q: 0.2, gain: 0.35 },
-      { id: "pink", name: "🌸 粉红噪音", freq: 800, q: 0.5, gain: 0.5 },
-      { id: "fan", name: "🌀 风扇声", freq: 400, q: 1, gain: 0.6 },
-      { id: "sea", name: "🌊 海浪声", freq: 600, q: 0.8, gain: 0.55 },
+      { id: "rain", name: "🌧 雨声" },
+      { id: "sea", name: "🌊 海浪声" },
+      { id: "fan", name: "🌀 风扇声" },
+      { id: "fire", name: "🔥 篝火声" },
+      { id: "white", name: "📻 白噪音" },
     ];
-    let wnCtx = null, wnNodes = null, wnCurrent = null;
+    let wnCtx = null, wnNodes = null, wnCurrent = null, wnSleepTimer = null;
     function wnStopAll(silent) {
       if (wnNodes) {
-        try { wnNodes.src.stop(); } catch (e) { /* 忽略 */ }
-        try { wnNodes.src.disconnect(); } catch (e) { /* 忽略 */ }
+        try { if (wnNodes.crackle) clearInterval(wnNodes.crackle); } catch (e) {}
+        try { wnNodes.nodes.forEach((n) => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); } catch (e) {}
         wnNodes = null;
       }
+      if (wnSleepTimer) { clearTimeout(wnSleepTimer); wnSleepTimer = null; }
       wnCurrent = null;
       if (!silent) $("wnResult").textContent = "已停止。";
+    }
+    // 每种音色的合成链：返回 { nodes:[...], gain }
+    function wnBuild(sid, ctx, master) {
+      const builtCrackle = {};
+      const sr = ctx.sampleRate, len = sr * 2;
+      const buf = ctx.createBuffer(1, len, sr);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        if (sid === "white") d[i] = w * 0.5;
+        else { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; } // 粉红基底
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const nodes = [src];
+      const out = ctx.createGain(); out.gain.value = 1; nodes.push(out);
+      const connect = (node) => { node.connect(out); };
+      if (sid === "rain") {
+        // 雨：带通 1800Hz + 慢速 LFO 营造雨点起伏
+        const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800; bp.Q.value = 0.6;
+        src.connect(bp); connect(bp);
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.4;
+        const lg = ctx.createGain(); lg.gain.value = 0.25;
+        lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
+        master.gain.value = 0.5;
+      } else if (sid === "sea") {
+        // 海浪：低通 500Hz + 0.12Hz 慢起伏
+        const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 500;
+        src.connect(lp); connect(lp);
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.12;
+        const lg = ctx.createGain(); lg.gain.value = 0.45;
+        lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
+        master.gain.value = 0.6;
+      } else if (sid === "fan") {
+        // 风扇：低频嗡鸣 + 8Hz 扇叶拍打
+        const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 240;
+        src.connect(lp); connect(lp);
+        const hum = ctx.createOscillator(); hum.type = "sine"; hum.frequency.value = 90;
+        const hg = ctx.createGain(); hg.gain.value = 0.25;
+        hum.connect(hg); hg.connect(out); hum.start(); nodes.push(hum);
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 8;
+        const lg = ctx.createGain(); lg.gain.value = 0.18;
+        lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
+        master.gain.value = 0.5;
+      } else if (sid === "fire") {
+        // 篝火：高通噼啪基底 + 随机爆裂声
+        const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 900;
+        src.connect(hp); connect(hp);
+        let crackleAlive = true;
+        const crackle = setInterval(() => {
+          if (!crackleAlive) { clearInterval(crackle); return; }
+          try {
+            const t = ctx.currentTime;
+            const o = ctx.createOscillator(); o.type = "square";
+            o.frequency.value = 1500 + Math.random() * 2500;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.12 + Math.random() * 0.15, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.05);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.1);
+          } catch (e) {}
+        }, 180);
+        builtCrackle.crackle = crackle;
+        builtCrackle.disarm = () => { crackleAlive = false; };
+        master.gain.value = 0.45;
+      } else {
+        // 白噪音：直出
+        connect(src);
+        master.gain.value = 0.32;
+      }
+      return { nodes, out, crackle: builtCrackle.crackle || null };
     }
     WN_SOUNDS.forEach((s) => {
       const b = document.createElement("button");
@@ -3565,37 +4297,29 @@
           if (!wnCtx) wnCtx = new AC();
           if (wnCtx.state === "suspended") wnCtx.resume();
           wnStopAll(true);
-          const len = wnCtx.sampleRate * 2;
-          const buffer = wnCtx.createBuffer(1, len, wnCtx.sampleRate);
-          const data = buffer.getChannelData(0);
-          let last = 0;
-          for (let i = 0; i < len; i++) {
-            const white = Math.random() * 2 - 1;
-            if (s.id === "pink" || s.id === "fan" || s.id === "sea") { last = (last + 0.02 * white) / 1.02; data[i] = last * 3.5; }
-            else data[i] = white;
-          }
-          const src = wnCtx.createBufferSource();
-          src.buffer = buffer;
-          src.loop = true;
-          const filter = wnCtx.createBiquadFilter();
-          filter.type = "lowpass";
-          filter.frequency.value = s.freq;
-          filter.Q.value = s.q;
-          const gain = wnCtx.createGain();
-          gain.gain.value = s.gain * (parseInt($("wnVolume").value, 10) / 100 || 0.6);
-          src.connect(filter);
-          filter.connect(gain);
-          gain.connect(wnCtx.destination);
-          src.start();
-          wnNodes = { src, gain };
+          const master = wnCtx.createGain();
+          master.gain.value = 0.5 * (parseInt($("wnVolume").value, 10) / 100 || 0.6);
+          master.connect(wnCtx.destination);
+          const built = wnBuild(s.id, wnCtx, master);
+          built.nodes.forEach((n) => { try { if (n.start && n !== built.out) n.start(); } catch (e) {} });
+          try { built.out.connect(master); } catch (e) {}
+          wnNodes = { nodes: built.nodes.concat([master]), gain: master, crackle: built.crackle };
           wnCurrent = s.id;
-          $("wnResult").textContent = "正在播放：" + s.name + "。";
+          // 定时关闭
+          const mins = parseInt($("wnSleep").value, 10) || 0;
+          if (mins > 0) {
+            wnSleepTimer = setTimeout(() => {
+              wnStopAll(false);
+              $("wnResult").textContent = "定时到了，已自动停止 😴";
+            }, mins * 60 * 1000);
+          }
+          $("wnResult").textContent = "正在播放：" + s.name + "。" + (mins > 0 ? mins + " 分钟后自动停止。" : "");
         } catch (e) { $("wnResult").textContent = "播放失败，换个浏览器试试。"; }
       });
       $("wnSounds").appendChild(b);
     });
     $("wnVolume").addEventListener("input", () => {
-      if (wnNodes) wnNodes.gain.gain.value = (parseInt($("wnVolume").value, 10) / 100 || 0) * 0.5;
+      if (wnNodes && wnNodes.gain) wnNodes.gain.gain.value = (parseInt($("wnVolume").value, 10) / 100 || 0) * 0.5;
     });
     $("wnStopBtn").addEventListener("click", () => wnStopAll(false));
 
@@ -3745,9 +4469,20 @@
       // 显示尺寸和画布尺寸不一样（CSS 缩放过），按比例换算坐标；取不到显示尺寸时按 1:1
       return (doodleCanvas.clientWidth > 0) ? doodleCanvas.width / doodleCanvas.clientWidth : 1;
     }
+    const doodleHistory = []; // 撤销栈（ImageData 快照，最多 20 步）
+    function doodlePushHistory() {
+      if (!doodleCtx) return;
+      try {
+        doodleHistory.push(doodleCtx.getImageData(0, 0, doodleCanvas.width, doodleCanvas.height));
+        if (doodleHistory.length > 20) doodleHistory.shift();
+        const ub = $("doodleUndoBtn");
+        if (ub) ub.disabled = false;
+      } catch (e) {}
+    }
     doodleCanvas.addEventListener("pointerdown", (e) => {
       if (!doodleCtx) return;
       if (e.preventDefault) e.preventDefault();
+      doodlePushHistory(); // 落笔前存快照
       doodleDrawing = true;
       const s = doodleScale();
       doodleLast = { x: e.offsetX * s, y: e.offsetY * s };
@@ -3777,10 +4512,24 @@
       $("doodleResult").textContent = "橡皮擦：涂掉不要的部分。";
     });
     $("doodleClearBtn").addEventListener("click", () => {
+      doodlePushHistory();
       if (doodleCtx) { doodleCtx.fillStyle = "#ffffff"; doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height); }
       doodleStrokes = 0;
       $("doodleResult").textContent = "已清空，重新画吧。";
     });
+    const doodleUndoBtn = $("doodleUndoBtn");
+    if (doodleUndoBtn) {
+      doodleUndoBtn.disabled = true;
+      doodleUndoBtn.addEventListener("click", () => {
+        if (!doodleCtx || !doodleHistory.length) return;
+        try {
+          const img = doodleHistory.pop();
+          doodleCtx.putImageData(img, 0, 0);
+          $("doodleResult").textContent = "↩ 撤销了一步。";
+          if (!doodleHistory.length) doodleUndoBtn.disabled = true;
+        } catch (e) {}
+      });
+    }
     $("doodleSaveBtn").addEventListener("click", () => {
       if (doodleStrokes === 0) { $("doodleResult").textContent = "先画点什么再保存。"; return; }
       if (typeof doodleCanvas.toDataURL !== "function") { $("doodleResult").textContent = "当前环境不支持保存。"; return; }
@@ -5079,10 +5828,18 @@
         return pianoCtx;
       } catch (e) { return null; }
     }
-    function pianoPlay(noteName) {
+    const PIANO_REC_KEY = "dorm-toybox-piano-rec-v1";
+    let pianoRecording = false;
+    let pianoRecNotes = []; // [{note, t}]
+    let pianoRecStart = 0;
+    function pianoPlay(noteName, noRec) {
       const note = PIANO_NOTES.find((n) => n.name === noteName);
       if (!note) return;
       pianoLastNote = note.name + " " + note.label;
+      // 录音
+      if (pianoRecording && !noRec) {
+        pianoRecNotes.push({ note: noteName, t: performance.now() - pianoRecStart });
+      }
       $("pianoLast").textContent = "上一个音：" + pianoLastNote + "（键盘 " + note.key.toUpperCase() + "）";
       Object.values(pianoKeyBtns).forEach((el) => el.classList.remove("active"));
       const btn = pianoKeyBtns[note.name];
@@ -5158,7 +5915,48 @@
     $("pianoSong1Btn").addEventListener("click", () => pianoPlaySong("star", "小星星"));
     $("pianoSong2Btn").addEventListener("click", () => pianoPlaySong("tiger", "两只老虎"));
     $("pianoStopBtn").addEventListener("click", pianoStopSong);
-    toyLeaveCleanup.piano = () => pianoStopSong();
+    // 和弦：C=E G=C E G，G=G B D，Am=A C E，F=F A C
+    const PIANO_CHORDS = { C: ["C4", "E4", "G4"], G: ["G4", "B4", "D4"], Am: ["A4", "C4", "E4"], F: ["F4", "A4", "C4"] };
+    Object.keys(PIANO_CHORDS).forEach((ch) => {
+      const b = $("pianoChord" + ch);
+      if (b) b.addEventListener("click", () => {
+        PIANO_CHORDS[ch].forEach((n, i) => setTimeout(() => pianoPlay(n), i * 30));
+        $("pianoLast").textContent = "和弦：" + ch;
+      });
+    });
+    // 录音 / 回放
+    function pianoSaveRec() {
+      try { localStorage.setItem(PIANO_REC_KEY, JSON.stringify(pianoRecNotes.slice(0, 200))); } catch (e) {}
+    }
+    const recBtn = $("pianoRecBtn"), playRecBtn = $("pianoPlayRecBtn");
+    if (recBtn) recBtn.addEventListener("click", () => {
+      if (pianoRecording) {
+        pianoRecording = false;
+        pianoSaveRec();
+        recBtn.textContent = "⏺ 录音";
+        recBtn.classList.remove("active");
+        $("pianoResult").textContent = "⏹ 录音结束，已保存 " + pianoRecNotes.length + " 个音。";
+      } else {
+        pianoRecording = true;
+        pianoRecNotes = [];
+        pianoRecStart = performance.now();
+        recBtn.textContent = "⏹ 停止录音";
+        recBtn.classList.add("active");
+        $("pianoResult").textContent = "⏺ 录音中…弹吧！";
+      }
+    });
+    if (playRecBtn) playRecBtn.addEventListener("click", () => {
+      let saved = [];
+      try { saved = JSON.parse(localStorage.getItem(PIANO_REC_KEY) || "[]"); } catch (e) {}
+      if (!saved.length) { $("pianoResult").textContent = "还没有录音，先点 ⏺ 录一段。"; return; }
+      pianoStopSong();
+      $("pianoResult").textContent = "♪ 回放中…（" + saved.length + " 个音）";
+      saved.forEach((r) => {
+        pianoSongTimers.push(setTimeout(() => pianoPlay(r.note, true), r.t));
+      });
+      pianoSongTimers.push(setTimeout(() => { $("pianoResult").textContent = "♪ 回放完了。"; }, (saved[saved.length - 1].t || 0) + 600));
+    });
+    toyLeaveCleanup.piano = () => { pianoStopSong(); pianoRecording = false; };
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get piano() { return { lastNote: pianoLastNote }; },
         pianoPlay(name) { pianoPlay(name); },
@@ -5581,8 +6379,12 @@
   /* ---------- 49. 井字棋 ---------- */
   toyInitFns["tictactoe"] = function () {
     const TICTACTOE_KEY = "dorm-toybox-tictactoe-v1";
+    const TTT_DIFF_KEY = "dorm-toybox-tictactoe-diff-v1";
     let tttBoard = new Array(9).fill("");
     let tttOver = false;
+    let tttDiff = "hard"; // 简单/中等/困难，默认困难（测试刚性：电脑必须会堵）
+    let tttPlayerFirst = true; // 默认我先手（测试刚性：重开后棋盘全空）
+    try { const d = localStorage.getItem(TTT_DIFF_KEY); if (d === "easy" || d === "medium" || d === "hard") tttDiff = d; } catch (e) {}
     let tttRecord = { win: 0, draw: 0, lose: 0 };
     try {
       const saved = JSON.parse(localStorage.getItem(TICTACTOE_KEY) || "null");
@@ -5611,16 +6413,40 @@
       return best;
     }
     function tttAiMove() {
-      let bestScore = -Infinity, bestIdx = -1;
-      for (let i = 0; i < 9; i++) {
-        if (tttBoard[i]) continue;
-        tttBoard[i] = "O";
-        const s = tttMinimax(tttBoard, false, 0);
-        tttBoard[i] = "";
-        if (s > bestScore) { bestScore = s; bestIdx = i; }
+      const empties = [];
+      for (let i = 0; i < 9; i++) if (!tttBoard[i]) empties.push(i);
+      if (!empties.length) return -1;
+      let idx = -1;
+      if (tttDiff === "easy") {
+        // 简单：纯随机
+        idx = empties[Math.floor(Math.random() * empties.length)];
+      } else if (tttDiff === "medium") {
+        // 中等：能赢就赢、能堵就堵，否则随机
+        idx = tttFindWin("O");
+        if (idx < 0) idx = tttFindWin("X");
+        if (idx < 0) idx = empties[Math.floor(Math.random() * empties.length)];
+      } else {
+        // 困难：minimax 永远不输
+        let bestScore = -Infinity;
+        for (const i of empties) {
+          tttBoard[i] = "O";
+          const sc = tttMinimax(tttBoard, false, 0);
+          tttBoard[i] = "";
+          if (sc > bestScore) { bestScore = sc; idx = i; }
+        }
       }
-      if (bestIdx >= 0) tttBoard[bestIdx] = "O";
-      return bestIdx;
+      if (idx >= 0) tttBoard[idx] = "O";
+      return idx;
+    }
+    // 找一步能连成三子的格子（进攻/防守用）
+    function tttFindWin(p) {
+      for (const [a, b, c] of TTT_LINES) {
+        const line = [tttBoard[a], tttBoard[b], tttBoard[c]];
+        if (line.filter((v) => v === p).length === 2 && line.includes("")) {
+          return [a, b, c][line.indexOf("")];
+        }
+      }
+      return -1;
     }
     function tttRender() {
       const grid = $("tictactoeGrid");
@@ -5643,24 +6469,68 @@
     function tttMove(i) {
       if (tttOver || tttBoard[i]) return;
       tttBoard[i] = "X";
+      if (typeof SFX !== "undefined") SFX.click();
       let w = tttWinner(tttBoard);
       if (w) { tttFinish(w); return; }
       tttAiMove();
+      if (typeof SFX !== "undefined") SFX.click();
       w = tttWinner(tttBoard);
       if (w) tttFinish(w);
       else $("tictactoeStatus").textContent = "轮到你（❌）落子。";
       tttRender();
     }
+    function tttNewGame() {
+      tttBoard = new Array(9).fill("");
+      tttOver = false;
+      if (!tttPlayerFirst) {
+        // 电脑先手：直接走一步
+        tttAiMove();
+        $("tictactoeStatus").textContent = "电脑（⭕）先手，轮到你（❌）。";
+      } else {
+        $("tictactoeStatus").textContent = "轮到你（❌）落子。";
+      }
+      tttRender();
+    }
+    function tttSetDiff(d) {
+      tttDiff = d;
+      try { localStorage.setItem(TTT_DIFF_KEY, d); } catch (e) {}
+      [["tttEasyBtn", "easy"], ["tttMedBtn", "medium"], ["tttHardBtn", "hard"]].forEach(([id, v]) => {
+        const b = $(id); if (!b) return;
+        b.classList.toggle("gold-btn", v === d);
+        b.classList.toggle("ghost-btn", v !== d);
+      });
+      tttNewGame();
+    }
+    function tttSetFirst(playerFirst) {
+      tttPlayerFirst = playerFirst;
+      $("tttFirstBtn").classList.toggle("gold-btn", playerFirst);
+      $("tttFirstBtn").classList.toggle("ghost-btn", !playerFirst);
+      $("tttSecondBtn").classList.toggle("gold-btn", !playerFirst);
+      $("tttSecondBtn").classList.toggle("ghost-btn", playerFirst);
+      tttNewGame();
+    }
     function tttFinish(w) {
       tttOver = true;
-      if (w === "X") { tttRecord.win++; $("tictactoeStatus").textContent = "🎉 你赢了！电脑也有失手的时候。"; }
-      else if (w === "O") { tttRecord.lose++; $("tictactoeStatus").textContent = "😢 电脑赢了。再来一局报仇？"; }
-      else { tttRecord.draw++; $("tictactoeStatus").textContent = "🤝 平局！能逼平满算的电脑，你很强。"; }
+      if (w === "X") { tttRecord.win++; $("tictactoeStatus").textContent = "🎉 你赢了！" + (tttDiff === "hard" ? "赢了满算的电脑，厉害！" : ""); if (typeof SFX !== "undefined") SFX.win(); }
+      else if (w === "O") { tttRecord.lose++; $("tictactoeStatus").textContent = "😢 电脑赢了。再来一局报仇？"; if (typeof SFX !== "undefined") SFX.lose(); }
+      else { tttRecord.draw++; $("tictactoeStatus").textContent = "🤝 平局！" + (tttDiff === "hard" ? "能逼平满算的电脑，你很强。" : ""); if (typeof SFX !== "undefined") SFX.pop(0.6); }
       tttSave();
       tttRender();
     }
-    function tttReset() { tttBoard = new Array(9).fill(""); tttOver = false; $("tictactoeStatus").textContent = "轮到你（❌）落子。"; tttRender(); }
-    $("tictactoeResetBtn").addEventListener("click", tttReset);
+    $("tictactoeResetBtn").addEventListener("click", tttNewGame);
+    $("tttEasyBtn").addEventListener("click", () => tttSetDiff("easy"));
+    $("tttMedBtn").addEventListener("click", () => tttSetDiff("medium"));
+    $("tttHardBtn").addEventListener("click", () => tttSetDiff("hard"));
+    $("tttFirstBtn").addEventListener("click", () => tttSetFirst(true));
+    $("tttSecondBtn").addEventListener("click", () => tttSetFirst(false));
+    // 同步按钮初始态（不触发 newGame，保持测试刚性：开局棋盘全空）
+    (function tttSyncBtns() {
+      [["tttEasyBtn", "easy"], ["tttMedBtn", "medium"], ["tttHardBtn", "hard"]].forEach(([id, v]) => {
+        const b = $(id); if (!b) return;
+        b.classList.toggle("gold-btn", v === tttDiff);
+        b.classList.toggle("ghost-btn", v !== tttDiff);
+      });
+    })();
     tttRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get tictactoe() { return { board: tttBoard.slice(), over: tttOver, record: { win: tttRecord.win, draw: tttRecord.draw, lose: tttRecord.lose } }; },
@@ -5673,7 +6543,7 @@
   toyInitFns["linkup"] = function () {
     const LINKUP_EMOJIS = ["🐸", "🍜", "📚", "🎮", "🏀", "🎸", "🍕", "🐱", "🚲", "🎧", "🍉", "⚽"];
     const LINKUP_COLS = 6, LINKUP_ROWS = 4;
-    let linkupBoard = [], linkupPicked = -1, linkupLeft = 0, linkupSeconds = 0, linkupTimerId = null, linkupOver = false;
+    let linkupBoard = [], linkupPicked = -1, linkupLeft = 0, linkupSeconds = 0, linkupTimerId = null, linkupOver = false, linkupHints = 3;
     function linkupNewBoard() {
       const tiles = [];
       LINKUP_EMOJIS.forEach((em) => { tiles.push(em, em); });
@@ -5685,6 +6555,8 @@
     function linkupReset() {
       linkupNewBoard();
       linkupSeconds = 0;
+      linkupHints = 3;
+      $("linkupHintBtn").textContent = "提示 💡×3";
       if (linkupTimerId) { clearInterval(linkupTimerId); linkupTimerId = null; }
       linkupRender();
       $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 0 秒";
@@ -5760,6 +6632,7 @@
         if (linkupLeft === 0) {
           linkupOver = true;
           if (linkupTimerId) { clearInterval(linkupTimerId); linkupTimerId = null; }
+          if (typeof SFX !== "undefined") SFX.win();
           $("linkupStatus").textContent = "🎉 全消完了！用时 " + linkupSeconds + " 秒。";
         } else {
           $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 " + linkupSeconds + " 秒";
@@ -5771,8 +6644,12 @@
     }
     $("linkupHintBtn").addEventListener("click", () => {
       if (linkupOver) return;
+      if (linkupHints <= 0) { $("linkupStatus").textContent = "提示用完了，靠自己吧 💪"; return; }
       const pair = linkupFindPair();
       if (!pair) { $("linkupStatus").textContent = "没有能连的对子了，点洗牌。"; return; }
+      linkupHints--;
+      $("linkupHintBtn").textContent = "提示 💡×" + linkupHints;
+      if (typeof SFX !== "undefined") SFX.click();
       linkupRender();
       const cells = $("linkupGrid").children;
       if (cells[pair[0]]) cells[pair[0]].classList.add("hint");
@@ -5800,57 +6677,97 @@
   /* ---------- 51. 数字华容道 ---------- */
   toyInitFns["slide15"] = function () {
     const SLIDE15_KEY = "dorm-toybox-slide15-best-v1";
-    let slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
-    let slide15Moves = 0, slide15Best = null;
-    try { const b = parseInt(localStorage.getItem(SLIDE15_KEY) || "", 10); if (b > 0) slide15Best = b; } catch (e) { /* 忽略 */ }
+    let slide15N = 4; // 默认 4x4（测试刚性）
+    let slide15Board = [];
+    let slide15Moves = 0, slide15Best = null, slide15Won = false;
+    function slide15Key() { return slide15N === 4 ? SLIDE15_KEY : SLIDE15_KEY + "-" + slide15N + "x" + slide15N; }
+    function slide15Solved() {
+      const total = slide15N * slide15N;
+      return Array.from({ length: total }, (_, j) => (j === total - 1 ? 0 : j + 1));
+    }
+    function slide15LoadBest() {
+      try { const b = parseInt(localStorage.getItem(slide15Key()) || "", 10); slide15Best = b > 0 ? b : null; }
+      catch (e) { slide15Best = null; }
+    }
+    function slide15Par() { return slide15N === 3 ? 30 : slide15N === 4 ? 120 : 300; } // 参考步数
     function slide15Render() {
       const grid = $("slide15Grid");
       grid.innerHTML = "";
+      grid.style.gridTemplateColumns = "repeat(" + slide15N + ", 1fr)";
       slide15Board.forEach((v, i) => {
         const cell = document.createElement("button");
-        cell.className = "slide15-cell" + (v === 0 ? " empty" : "");
+        cell.className = "slide15-cell" + (v === 0 ? " empty" : "") + (slide15Won && v !== 0 ? " win" : "");
         cell.textContent = v === 0 ? "" : String(v);
         cell.setAttribute("aria-label", v === 0 ? "空格" : "数字 " + v);
         cell.addEventListener("click", () => slide15Move(i));
         grid.appendChild(cell);
       });
-      $("slide15Status").textContent = "已走 " + slide15Moves + " 步 · 最好 " + (slide15Best === null ? "—" : slide15Best + " 步");
+      $("slide15Status").textContent = "已走 " + slide15Moves + " 步 · 最好 " + (slide15Best === null ? "—" : slide15Best + " 步") + " · 参考 " + slide15Par() + " 步";
     }
     function slide15Move(i) {
+      const N = slide15N;
       const empty = slide15Board.indexOf(0);
-      const ex = empty % 4, ey = Math.floor(empty / 4);
-      const ix = i % 4, iy = Math.floor(i / 4);
+      const ex = empty % N, ey = Math.floor(empty / N);
+      const ix = i % N, iy = Math.floor(i / N);
       if (Math.abs(ex - ix) + Math.abs(ey - iy) !== 1) return; // 只能滑空格旁边的
       [slide15Board[i], slide15Board[empty]] = [slide15Board[empty], slide15Board[i]];
       slide15Moves++;
-      if (slide15Board.every((v, j) => v === (j === 15 ? 0 : j + 1))) {
+      slide15Won = false;
+      if (typeof SFX !== "undefined") SFX.click();
+      const total = N * N;
+      if (slide15Board.every((v, j) => v === (j === total - 1 ? 0 : j + 1))) {
         if (slide15Best === null || slide15Moves < slide15Best) {
           slide15Best = slide15Moves;
-          saveBest(SLIDE15_KEY, slide15Best);
+          saveBest(slide15Key(), slide15Best);
         }
+        if (typeof SFX !== "undefined") SFX.win();
         $("slide15Status").textContent = "🎉 拼好了！用了 " + slide15Moves + " 步，最好 " + slide15Best + " 步。";
+        slide15Won = true; // 撒花：格子发光（render 里加 win 类）
       }
       slide15Render();
     }
     function slide15Shuffle() {
-      // 从已解状态随机走 100 步（保证可解）
-      slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
+      // 从已解状态随机走 N*N*8 步（保证可解）
+      const N = slide15N, total = N * N;
+      slide15Board = slide15Solved();
       slide15Moves = 0;
-      for (let n = 0; n < 100; n++) {
+      slide15Won = false;
+      for (let n = 0; n < total * 8; n++) {
         const empty = slide15Board.indexOf(0);
-        const ex = empty % 4, ey = Math.floor(empty / 4);
+        const ex = empty % N, ey = Math.floor(empty / N);
         const opts = [];
         if (ex > 0) opts.push(empty - 1);
-        if (ex < 3) opts.push(empty + 1);
-        if (ey > 0) opts.push(empty - 4);
-        if (ey < 3) opts.push(empty + 4);
+        if (ex < N - 1) opts.push(empty + 1);
+        if (ey > 0) opts.push(empty - N);
+        if (ey < N - 1) opts.push(empty + N);
         const pick = opts[Math.floor(Math.random() * opts.length)];
         [slide15Board[pick], slide15Board[empty]] = [slide15Board[empty], slide15Board[pick]];
       }
+      // 打乱动画：staggered 出现
       slide15Render();
+      const cells = $("slide15Grid").children;
+      for (let k = 0; k < cells.length; k++) {
+        cells[k].classList.add("spawn");
+        cells[k].style.animationDelay = Math.min(400, k * 15) + "ms";
+      }
+    }
+    function slide15SetSize(n) {
+      slide15N = n;
+      slide15LoadBest();
+      ["slide15_3Btn", "slide15_4Btn", "slide15_5Btn"].forEach((id) => {
+        const b = $(id); if (!b) return;
+        const on = id === "slide15_" + n + "Btn";
+        b.classList.toggle("gold-btn", on);
+        b.classList.toggle("ghost-btn", !on);
+      });
+      slide15Shuffle();
     }
     $("slide15ShuffleBtn").addEventListener("click", slide15Shuffle);
-    $("slide15ResetBtn").addEventListener("click", () => { slide15Board = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0]; slide15Moves = 0; slide15Render(); });
+    $("slide15ResetBtn").addEventListener("click", () => { slide15Board = slide15Solved(); slide15Moves = 0; slide15Won = false; slide15Render(); });
+    $("slide15_3Btn").addEventListener("click", () => slide15SetSize(3));
+    $("slide15_4Btn").addEventListener("click", () => slide15SetSize(4));
+    $("slide15_5Btn").addEventListener("click", () => slide15SetSize(5));
+    slide15LoadBest();
     slide15Shuffle();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get slide15() { return { board: slide15Board.slice(), moves: slide15Moves, best: slide15Best }; },
@@ -6203,22 +7120,59 @@
     const IDIOM_KEY = "dorm-toybox-idiom-best-v1";
     // 接龙链：下一个成语的首字 = 上一个成语的尾字（已逐个核对）
     const IDIOM_CHAIN = ["一马当先", "先见之明", "明明白白", "白手起家", "家喻户晓", "晓以大义", "义无反顾", "顾全大局", "局外之人", "人山人海", "海阔天空", "空前绝后", "后来居上", "上下其手", "手到擒来", "来龙去脉", "脉脉含情", "情投意合", "合家欢乐", "乐在其中", "中流砥柱", "柱石之坚", "坚不可摧", "摧枯拉朽", "朽木难雕", "雕虫小技", "技高一筹"];
+    // AI 对手用的扩展成语库（首字索引）
+    const IDIOM_EXTRA = ["先发制人", "明察秋毫", "白驹过隙", "家徒四壁", "晓风残月", "义薄云天", "顾影自怜", "局促不安", "人定胜天", "海底捞月", "空穴来风", "后起之秀", "上行下效", "手不释卷", "来日方长", "脉络分明", "情不自禁", "合盘托出", "乐善好施", "中饱私囊", "柱小倾大", "坚定不移", "摧眉折腰", "朽木生花", "雕梁画栋", "技艺超群"];
     let idiomBest = loadBest(IDIOM_KEY);
     let idiomRound = 1, idiomScore = 0, idiomIdx = 0, idiomOptions = [], idiomOver = false, idiomStarted = false;
+    let idiomMode = "solo"; // solo 单人 / vs AI 对战
+    let idiomAiScore = 0, idiomTurn = "you"; // vs 模式：轮到谁
+    let idiomAudioCtx = null;
+    function idiomSound(ok) {
+      try {
+        if (!idiomAudioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          idiomAudioCtx = new AC();
+        }
+        const ctx = idiomAudioCtx;
+        if (ctx.state === "suspended") ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = ok ? 784 : 196;
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.2);
+      } catch (e) {}
+    }
     function idiomRender() {
       $("idiomCurrent").textContent = IDIOM_CHAIN[idiomIdx];
       const wrap = $("idiomOptions");
       wrap.innerHTML = "";
+      const isYourTurn = idiomMode === "solo" || idiomTurn === "you";
       idiomOptions.forEach((opt, i) => {
         const b = document.createElement("button");
         b.className = "btn ghost-btn";
         b.textContent = opt;
+        b.disabled = !isYourTurn || idiomOver || !idiomStarted;
         b.addEventListener("click", () => idiomPick(i));
         wrap.appendChild(b);
       });
-      $("idiomStatus").textContent = idiomOver
-        ? "🏁 10 轮结束！得分 " + idiomScore + "，最好 " + idiomBest + "。"
-        : "第 " + idiomRound + " / 10 轮 · 得分 " + idiomScore + " · 最好 " + idiomBest;
+      // 求助按钮
+      const hb = $("idiomHintBtn");
+      if (hb) hb.classList.toggle("hidden", idiomOver || !idiomStarted || !isYourTurn);
+      let status;
+      if (idiomOver) {
+        status = idiomMode === "vs"
+          ? "🏁 对战结束！你 " + idiomScore + " : " + idiomAiScore + " AI，" + (idiomScore > idiomAiScore ? "你赢了！" : idiomScore < idiomAiScore ? "AI 赢了！" : "平局！")
+          : "🏁 10 轮结束！得分 " + idiomScore + "，最好 " + idiomBest + "。";
+      } else {
+        status = idiomMode === "vs"
+          ? "第 " + idiomRound + " / 10 轮 · 你 " + idiomScore + " : " + idiomAiScore + " AI · " + (idiomTurn === "you" ? "轮到你" : "AI 思考中…")
+          : "第 " + idiomRound + " / 10 轮 · 得分 " + idiomScore + " · 最好 " + idiomBest;
+      }
+      $("idiomStatus").textContent = status;
     }
     function idiomNewRound() {
       const cur = IDIOM_CHAIN[idiomIdx];
@@ -6234,33 +7188,69 @@
     }
     function idiomPick(i) {
       if (idiomOver || !idiomStarted) return;
+      if (idiomMode === "vs" && idiomTurn !== "you") return;
       const cur = IDIOM_CHAIN[idiomIdx];
       const correct = IDIOM_CHAIN[idiomIdx + 1];
-      if (idiomOptions[i] === correct) idiomScore += 10;
+      const youRight = idiomOptions[i] === correct;
+      if (youRight) { idiomScore += 10; idiomSound(true); }
+      else idiomSound(false);
+      idiomAdvance();
+    }
+    function idiomAdvance() {
       idiomIdx++;
       idiomRound++;
       if (idiomRound > 10 || idiomIdx >= IDIOM_CHAIN.length - 1) {
         idiomOver = true;
-        if (idiomScore > idiomBest) {
+        if (idiomMode === "solo" && idiomScore > idiomBest) {
           idiomBest = idiomScore;
           saveBest(IDIOM_KEY, idiomBest);
         }
         idiomRender();
         return;
       }
-      idiomNewRound();
+      if (idiomMode === "vs") {
+        // AI 回合：80% 概率答对
+        idiomTurn = "ai";
+        idiomRender();
+        setTimeout(() => {
+          if (idiomOver) return;
+          const aiRight = Math.random() < 0.8;
+          if (aiRight) idiomAiScore += 10;
+          idiomTurn = "you";
+          idiomNewRound();
+        }, 900);
+      } else {
+        idiomNewRound();
+      }
     }
-    function idiomStart() {
-      idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0;
+    function idiomHint() {
+      if (idiomOver || !idiomStarted) return;
+      const correct = IDIOM_CHAIN[idiomIdx + 1];
+      // 显示正确答案的拼音首字母（这里用首字+提示）
+      $("idiomStatus").textContent = "💡 提示：正确答案以「" + correct.charAt(0) + "」开头，共四字";
+    }
+    function idiomStart(mode) {
+      idiomMode = mode || "solo";
+      idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0; idiomAiScore = 0; idiomTurn = "you";
       idiomIdx = Math.floor(Math.random() * (IDIOM_CHAIN.length - 11));
+      // 模式按钮高亮
+      const ms = $("idiomModeSolo"), mv = $("idiomModeVs");
+      if (ms) ms.classList.toggle("active", idiomMode === "solo");
+      if (mv) mv.classList.toggle("active", idiomMode === "vs");
       idiomNewRound();
     }
-    $("idiomStartBtn").addEventListener("click", idiomStart);
-    $("idiomResetBtn").addEventListener("click", idiomStart);
+    $("idiomStartBtn").addEventListener("click", () => idiomStart("solo"));
+    $("idiomResetBtn").addEventListener("click", () => idiomStart(idiomMode));
+    const mv2 = $("idiomModeVs");
+    if (mv2) mv2.addEventListener("click", () => idiomStart("vs"));
+    const ms2 = $("idiomModeSolo");
+    if (ms2) ms2.addEventListener("click", () => idiomStart("solo"));
+    const hb2 = $("idiomHintBtn");
+    if (hb2) hb2.addEventListener("click", idiomHint);
     idiomIdx = 0; idiomOptions = []; idiomRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get idiom() { return { round: idiomRound, score: idiomScore, current: IDIOM_CHAIN[idiomIdx], options: idiomOptions.slice(), over: idiomOver, best: idiomBest, chain: IDIOM_CHAIN.slice() }; },
-        idiomSet(idx) { idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0; idiomIdx = idx; idiomNewRound(); },
+        get idiom() { return { round: idiomRound, score: idiomScore, current: IDIOM_CHAIN[idiomIdx], options: idiomOptions.slice(), over: idiomOver, best: idiomBest, chain: IDIOM_CHAIN.slice(), mode: idiomMode }; },
+        idiomSet(idx) { idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0; idiomMode = "solo"; idiomIdx = idx; idiomNewRound(); },
         idiomPick(i) { idiomPick(i); },
     }));
 
@@ -6285,22 +7275,73 @@
         return drumsCtx;
       } catch (e) { return null; }
     }
+    // 更好的鼓合成：kick=正弦下扫+敲击，snare=噪声+200Hz，hihat=高频噪声，clap=三次噪声
+    function drumsNoiseBurst(ctx, dur, filterFreq, gainVal, type) {
+      const len = Math.floor(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const flt = ctx.createBiquadFilter();
+      flt.type = type || "highpass";
+      flt.frequency.value = filterFreq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gainVal, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      src.connect(flt); flt.connect(g); g.connect(ctx.destination);
+      src.start();
+    }
     function drumsPlaySound(track) {
       const ctx = drumsAudio();
       if (!ctx) return;
       try {
         if (ctx.state === "suspended") ctx.resume();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = track.type;
-        osc.frequency.setValueAtTime(track.freq, ctx.currentTime);
-        if (track.freqEnd !== track.freq) osc.frequency.exponentialRampToValueAtTime(track.freqEnd, ctx.currentTime + track.dur);
-        gain.gain.setValueAtTime(track.gain, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + track.dur);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + track.dur);
+        if (track.id === "kick") {
+          // 大鼓：150→50Hz 正弦 + 初始敲击
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(150, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.6, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(); osc.stop(ctx.currentTime + 0.25);
+          drumsNoiseBurst(ctx, 0.02, 1000, 0.2, "lowpass");
+        } else if (track.id === "snare") {
+          // 军鼓：噪声 + 180Hz
+          drumsNoiseBurst(ctx, 0.15, 1800, 0.3, "highpass");
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "triangle";
+          osc.frequency.value = 180;
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(); osc.stop(ctx.currentTime + 0.1);
+        } else if (track.id === "hihat") {
+          // 镲：高频短噪声
+          drumsNoiseBurst(ctx, 0.05, 7000, 0.18, "highpass");
+        } else if (track.id === "clap") {
+          // 拍手：三次短噪声
+          [0, 0.02, 0.04].forEach((off) => {
+            setTimeout(() => drumsNoiseBurst(ctx, 0.08, 1500, 0.25, "bandpass"), off * 1000);
+          });
+        } else {
+          // 兜底：原来的合成
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = track.type;
+          osc.frequency.setValueAtTime(track.freq, ctx.currentTime);
+          if (track.freqEnd !== track.freq) osc.frequency.exponentialRampToValueAtTime(track.freqEnd, ctx.currentTime + track.dur);
+          gain.gain.setValueAtTime(track.gain, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + track.dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + track.dur);
+        }
       } catch (e) { /* 忽略音频错误 */ }
     }
     function drumsRender() {
@@ -6328,11 +7369,15 @@
       drumsStep = (drumsStep + 1) % 8;
       drumsRender();
     }
+    const DRUMS_BPM_KEY = "dorm-toybox-drums-bpm-v1";
+    let drumsBpm = 120;
+    try { drumsBpm = Math.min(180, Math.max(60, parseInt(localStorage.getItem(DRUMS_BPM_KEY) || "120", 10) || 120)); } catch (e) {}
+    function drumsInterval() { return Math.round(60000 / drumsBpm / 2); } // 8 分音符
     function drumsPlay() {
       if (drumsPlaying) return;
       drumsPlaying = true; drumsStep = 0;
       if (drumsTimerId) clearInterval(drumsTimerId);
-      drumsTimerId = setInterval(drumsTick, 250);
+      drumsTimerId = setInterval(drumsTick, drumsInterval());
       $("drumsPlayBtn").textContent = "停止 ⏹";
       drumsRender();
     }
@@ -6353,9 +7398,23 @@
       ];
       drumsRender();
     });
+    const bpmRange = $("drumsBpm"), bpmVal = $("drumsBpmVal");
+    if (bpmRange) {
+      bpmRange.value = String(drumsBpm);
+      if (bpmVal) bpmVal.textContent = drumsBpm + " BPM";
+      bpmRange.addEventListener("input", () => {
+        drumsBpm = parseInt(bpmRange.value, 10) || 120;
+        if (bpmVal) bpmVal.textContent = drumsBpm + " BPM";
+        try { localStorage.setItem(DRUMS_BPM_KEY, String(drumsBpm)); } catch (e) {}
+        if (drumsPlaying) { // 播放中实时生效
+          clearInterval(drumsTimerId);
+          drumsTimerId = setInterval(drumsTick, drumsInterval());
+        }
+      });
+    }
     drumsRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get drums() { return { grid: drumsGrid.map((row) => row.slice()), step: drumsStep, playing: drumsPlaying }; },
+        get drums() { return { grid: drumsGrid.map((row) => row.slice()), step: drumsStep, playing: drumsPlaying, bpm: drumsBpm }; },
         drumsToggle(t, s) { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); },
         drumsTick() { drumsTick(); },
         drumsSet(grid) { drumsGrid = grid.map((row) => row.slice()); drumsRender(); },
@@ -6371,8 +7430,30 @@
       { name: "蓝", css: "#4a90d9" },
       { name: "黄", css: "#f5c542" },
     ];
+    const STROOP_TIME = 60; // 限时 60 秒
     let stroopBest = loadBest(STROOP_KEY);
-    let stroopScore = 0, stroopTime = 30, stroopWord = "红", stroopInk = "蓝", stroopRunning = false, stroopTimerId = null;
+    let stroopScore = 0, stroopTime = STROOP_TIME, stroopWord = "红", stroopInk = "蓝", stroopRunning = false, stroopTimerId = null;
+    let stroopCombo = 0; // 连击数
+    let stroopAudioCtx = null;
+    function stroopSound(ok) {
+      try {
+        if (!stroopAudioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          stroopAudioCtx = new AC();
+        }
+        const ctx = stroopAudioCtx;
+        if (ctx.state === "suspended") ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = ok ? 660 + Math.min(stroopCombo, 10) * 40 : 220;
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.15);
+      } catch (e) {}
+    }
     function stroopNewRound() {
       const word = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
       let ink = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)];
@@ -6385,6 +7466,8 @@
       w.textContent = stroopWord;
       const ink = STROOP_COLORS.find((c) => c.name === stroopInk);
       w.style.color = ink ? ink.css : "#fff";
+      // 连击越高字越大，制造压迫感
+      w.style.fontSize = (48 + Math.min(stroopCombo, 10) * 3) + "px";
       const wrap = $("stroopOptions");
       wrap.innerHTML = "";
       STROOP_COLORS.forEach((c) => {
@@ -6394,12 +7477,22 @@
         b.addEventListener("click", () => stroopPick(c.name));
         wrap.appendChild(b);
       });
-      $("stroopStatus").textContent = "得分 " + stroopScore + " · 剩 " + stroopTime + " 秒 · 最好 " + stroopBest;
+      const comboTxt = stroopCombo >= 2 ? " · 🔥连击×" + stroopCombo : "";
+      $("stroopStatus").textContent = "得分 " + stroopScore + comboTxt + " · 剩 " + stroopTime + " 秒 · 最好 " + stroopBest;
     }
     function stroopPick(name) {
       if (!stroopRunning) return;
-      if (name === stroopInk) stroopScore += 10;
-      else stroopScore = Math.max(0, stroopScore - 5);
+      if (name === stroopInk) {
+        stroopCombo++;
+        // 连击加分：基础 10 分，连击≥3 时翻倍
+        const pts = stroopCombo >= 3 ? 20 : 10;
+        stroopScore += pts;
+        stroopSound(true);
+      } else {
+        stroopCombo = 0; // 断连击
+        stroopScore = Math.max(0, stroopScore - 5);
+        stroopSound(false);
+      }
       stroopNewRound();
     }
     function stroopStart() {
@@ -6423,15 +7516,15 @@
     }
     function stroopReset() {
       if (stroopTimerId) { clearInterval(stroopTimerId); stroopTimerId = null; }
-      stroopScore = 0; stroopTime = 30; stroopRunning = false;
+      stroopScore = 0; stroopTime = STROOP_TIME; stroopRunning = false; stroopCombo = 0;
       stroopNewRound();
-      $("stroopStatus").textContent = "得分 0 · 剩 30 秒 · 最好 " + stroopBest;
+      $("stroopStatus").textContent = "得分 0 · 剩 " + STROOP_TIME + " 秒 · 最好 " + stroopBest;
     }
     $("stroopStartBtn").addEventListener("click", stroopStart);
     $("stroopResetBtn").addEventListener("click", stroopReset);
     stroopReset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get stroop() { return { score: stroopScore, time: stroopTime, word: stroopWord, ink: stroopInk, running: stroopRunning, best: stroopBest }; },
+        get stroop() { return { score: stroopScore, time: stroopTime, word: stroopWord, ink: stroopInk, running: stroopRunning, best: stroopBest, combo: stroopCombo }; },
         stroopSet(word, ink) { stroopWord = word; stroopInk = ink; stroopRunning = true; stroopRender(); },
         stroopPick(name) { stroopPick(name); },
     }));
@@ -6441,30 +7534,60 @@
   toyInitFns["riddle"] = function () {
     const RIDDLE_KEY = "dorm-toybox-riddle-best-v1";
     const RIDDLES = [
-      { q: "什么东西越洗越脏？", options: ["衣服", "水", "手"], answer: 1 },
-      { q: "什么东西早上四条腿，中午两条腿，晚上三条腿？", options: ["狗", "人", "椅子"], answer: 1 },
-      { q: "什么东西能装下全世界，却装不下一粒沙？", options: ["袋子", "箱子", "眼睛"], answer: 2 },
-      { q: "什么东西越长越短？", options: ["蜡烛", "头发", "绳子"], answer: 0 },
-      { q: "什么东西不用的时候朝下，用的时候朝上？", options: ["碗", "帽子", "伞"], answer: 2 },
-      { q: "什么东西有口无牙？", options: ["井", "河", "杯子"], answer: 0 },
-      { q: "什么东西天一黑就出来，天一亮就消失？", options: ["月亮", "星星", "萤火虫"], answer: 1 },
-      { q: "什么东西越热越爱出来，越冷越躲起来？", options: ["冰", "汗", "火"], answer: 1 },
-      { q: "什么东西前面是平的，后面是尖的？", options: ["刀", "笔", "针"], answer: 2 },
-      { q: "什么东西你天天见，却从来没见过它的真面目？", options: ["天空", "自己的脸", "影子"], answer: 1 },
-      { q: "什么东西一到手就变小？", options: ["肥皂", "糖", "冰块"], answer: 2 },
-      { q: "什么东西你越是想留住它，它走得越快？", options: ["时间", "水", "风"], answer: 0 },
+      { q: "什么东西越洗越脏？", options: ["衣服", "水", "手"], answer: 1, cat: "经典", hint: "洗衣服用的就是它" },
+      { q: "什么东西早上四条腿，中午两条腿，晚上三条腿？", options: ["狗", "人", "椅子"], answer: 1, cat: "经典", hint: "说的是人的一生" },
+      { q: "什么东西能装下全世界，却装不下一粒沙？", options: ["袋子", "箱子", "眼睛"], answer: 2, cat: "经典", hint: "它长在你脸上" },
+      { q: "什么东西越长越短？", options: ["蜡烛", "头发", "绳子"], answer: 0, cat: "经典", hint: "点燃了就会变短" },
+      { q: "什么东西不用的时候朝下，用的时候朝上？", options: ["碗", "帽子", "伞"], answer: 2, cat: "经典", hint: "下雨天用的" },
+      { q: "什么东西有口无牙？", options: ["井", "河", "杯子"], answer: 0, cat: "经典", hint: "可以打水的地方" },
+      { q: "什么东西天一黑就出来，天一亮就消失？", options: ["月亮", "星星", "萤火虫"], answer: 1, cat: "冷笑话", hint: "一闪一闪亮晶晶" },
+      { q: "什么东西越热越爱出来，越冷越躲起来？", options: ["冰", "汗", "火"], answer: 1, cat: "冷笑话", hint: "运动完会流" },
+      { q: "什么东西前面是平的，后面是尖的？", options: ["刀", "笔", "针"], answer: 2, cat: "逻辑", hint: "缝衣服用的" },
+      { q: "什么东西你天天见，却从来没见过它的真面目？", options: ["天空", "自己的脸", "影子"], answer: 1, cat: "逻辑", hint: "照镜子才看得到" },
+      { q: "什么东西一到手就变小？", options: ["肥皂", "糖", "冰块"], answer: 2, cat: "冷笑话", hint: "夏天会化掉" },
+      { q: "什么东西你越是想留住它，它走得越快？", options: ["时间", "水", "风"], answer: 0, cat: "逻辑", hint: "一去不复返" },
     ];
+    const RIDDLE_TIME = 20; // 每题 20 秒
     let riddleBest = loadBest(RIDDLE_KEY);
     let riddleOrder = [], riddleIdx = 0, riddleScore = 0, riddleOver = false, riddleStarted = false;
+    let riddleTimeLeft = RIDDLE_TIME, riddleTimerId = null, riddleHintUsed = false;
+    let riddleCat = "全部"; // 分类筛选
+    let riddleAudioCtx = null;
+    function riddleSound(ok) {
+      try {
+        if (!riddleAudioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          riddleAudioCtx = new AC();
+        }
+        const ctx = riddleAudioCtx;
+        if (ctx.state === "suspended") ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = ok ? 880 : 220;
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.2);
+      } catch (e) {}
+    }
+    function riddleFiltered() {
+      if (riddleCat === "全部") return RIDDLES.map((_, i) => i);
+      return RIDDLES.map((r, i) => r.cat === riddleCat ? i : -1).filter((i) => i >= 0);
+    }
     function riddleRender() {
       if (riddleOver || riddleIdx >= riddleOrder.length) {
-        $("riddleQ").textContent = "🏁 12 题答完了！";
+        $("riddleQ").textContent = "🏁 " + riddleOrder.length + " 题答完了！";
         $("riddleOptions").innerHTML = "";
+        $("riddleHint").classList.add("hidden");
+        $("riddleTimer").textContent = "";
         $("riddleStatus").textContent = "得分 " + riddleScore + " · 最好 " + riddleBest + "。";
         return;
       }
       const r = RIDDLES[riddleOrder[riddleIdx]];
-      $("riddleQ").textContent = r.q;
+      $("riddleQ").textContent = "【" + r.cat + "】" + r.q;
+      $("riddleTimer").textContent = "⏱ " + riddleTimeLeft + " 秒";
       const wrap = $("riddleOptions");
       wrap.innerHTML = "";
       r.options.forEach((opt, i) => {
@@ -6474,41 +7597,113 @@
         b.addEventListener("click", () => riddlePick(i));
         wrap.appendChild(b);
       });
-      $("riddleStatus").textContent = "第 " + (riddleIdx + 1) + " / 12 题 · 得分 " + riddleScore + " · 最好 " + riddleBest;
+      // 提示按钮
+      const hintBtn = $("riddleHint");
+      hintBtn.classList.remove("hidden");
+      hintBtn.textContent = riddleHintUsed ? "💡 " + r.hint : "💡 提示（-3 分）";
+      hintBtn.disabled = riddleHintUsed;
+      $("riddleStatus").textContent = "第 " + (riddleIdx + 1) + " / " + riddleOrder.length + " 题 · 得分 " + riddleScore + " · 最好 " + riddleBest;
+    }
+    function riddleStopTimer() {
+      if (riddleTimerId) { clearInterval(riddleTimerId); riddleTimerId = null; }
+    }
+    function riddleStartTimer() {
+      riddleStopTimer();
+      riddleTimeLeft = RIDDLE_TIME;
+      riddleTimerId = setInterval(() => {
+        riddleTimeLeft--;
+        const t = $("riddleTimer");
+        if (t) t.textContent = "⏱ " + riddleTimeLeft + " 秒";
+        if (riddleTimeLeft <= 0) {
+          riddleStopTimer();
+          // 超时算错，直接下一题
+          riddleSound(false);
+          riddleIdx++;
+          riddleHintUsed = false;
+          if (riddleIdx >= riddleOrder.length) riddleFinish();
+          else { riddleStartTimer(); riddleRender(); }
+        }
+      }, 1000);
+    }
+    function riddleFinish() {
+      riddleOver = true;
+      riddleStopTimer();
+      if (riddleScore > riddleBest) {
+        riddleBest = riddleScore;
+        saveBest(RIDDLE_KEY, riddleBest);
+      }
+      riddleRender();
     }
     function riddlePick(i) {
       if (riddleOver || !riddleStarted || riddleIdx >= riddleOrder.length) return;
+      riddleStopTimer();
       const r = RIDDLES[riddleOrder[riddleIdx]];
       const wrap = $("riddleOptions");
       const btns = wrap.children;
       if (btns[r.answer]) btns[r.answer].classList.add("correct");
       if (i !== r.answer && btns[i]) btns[i].classList.add("wrong");
-      if (i === r.answer) riddleScore += 10;
+      if (i === r.answer) {
+        riddleScore += 10;
+        riddleSound(true);
+        // 答对撒花
+        const q = $("riddleQ");
+        q.classList.remove("win-sparkle");
+        void q.offsetWidth;
+        q.classList.add("win-sparkle");
+      } else {
+        riddleSound(false);
+      }
       riddleIdx++;
+      riddleHintUsed = false;
       setTimeout(() => {
         if (riddleIdx >= riddleOrder.length) {
-          riddleOver = true;
-          if (riddleScore > riddleBest) {
-            riddleBest = riddleScore;
-            saveBest(RIDDLE_KEY, riddleBest);
-          }
+          riddleFinish();
+        } else {
+          riddleStartTimer();
+          riddleRender();
         }
-        riddleRender();
       }, 600);
     }
+    function riddleUseHint() {
+      if (riddleOver || !riddleStarted || riddleHintUsed || riddleIdx >= riddleOrder.length) return;
+      riddleHintUsed = true;
+      riddleScore = Math.max(0, riddleScore - 3);
+      riddleRender();
+    }
     function riddleStart() {
-      riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0;
-      riddleOrder = RIDDLES.map((_, i) => i).sort(() => Math.random() - 0.5);
+      riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false;
+      riddleOrder = riddleFiltered().sort(() => Math.random() - 0.5);
+      riddleStartTimer();
       riddleRender();
     }
     $("riddleStartBtn").addEventListener("click", riddleStart);
     $("riddleResetBtn").addEventListener("click", riddleStart);
+    const rhb = $("riddleHint");
+    if (rhb) rhb.addEventListener("click", riddleUseHint);
+    // 分类按钮
+    const catWrap = $("riddleCats");
+    if (catWrap) {
+      ["全部", "经典", "冷笑话", "逻辑"].forEach((c) => {
+        const b = document.createElement("button");
+        b.className = "btn ghost-btn small" + (c === riddleCat ? " active" : "");
+        b.textContent = c;
+        b.addEventListener("click", () => {
+          riddleCat = c;
+          Array.from(catWrap.children).forEach((el) => el.classList.remove("active"));
+          b.classList.add("active");
+          riddleStopTimer();
+          riddleStart();
+        });
+        catWrap.appendChild(b);
+      });
+    }
     riddleOrder = RIDDLES.map((_, i) => i); riddleRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get riddle() { return { index: riddleIdx, score: riddleScore, total: riddleOrder.length, over: riddleOver, best: riddleBest, current: riddleOrder.length > 0 ? RIDDLES[riddleOrder[riddleIdx]] : null }; },
-        riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleOrder = order.slice(); riddleRender(); },
+        riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleOrder = order.slice(); riddleStopTimer(); riddleRender(); },
         riddlePick(i) { riddlePick(i); },
     }));
+    toyLeaveCleanup.riddle = () => { riddleStopTimer(); };
 
   };
   /* ---------- 59. 太空射击 ---------- */

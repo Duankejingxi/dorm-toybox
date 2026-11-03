@@ -9262,6 +9262,9 @@
       };
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } });
+      // iOS 双保险：touch 事件 + preventDefault
+      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientY: t.clientY }); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } }, { passive: false });
+      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientY: t.clientY }); }, { passive: false });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function pongKeys(e) {
       if ($("toy-pong") && $("toy-pong").classList.contains("hidden")) return;
@@ -10832,6 +10835,9 @@
       };
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
+      // iOS 双保险
+      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); }, { passive: false });
+      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); }, { passive: false });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function dodgeKeys(e) {
       if ($("toy-dodge") && $("toy-dodge").classList.contains("hidden")) return;

@@ -1757,3 +1757,10 @@ input:focus, textarea:focus, select:focus {
 @media (prefers-reduced-motion: reduce) {
   .home-grid.tile-enter .tile:not(.hidden) { animation: none; }
 }
+
+/* v3.0-hotfix3：所有游戏画布/棋盘禁浏览器触屏默认行为（用户反馈：乒乓/弹幕躲避等竖滑被当滚屏） */
+.toy canvas { touch-action: none; }
+.mines2-board, .sudoku-grid, .schulte-grid, .slide15-grid, .tictactoe-grid,
+.memory-grid, .mole-grid, .gomoku-board, .linkup-grid, .match3-board,
+.puzzle-grid, .maze-board, .spotdiff-grid, .reaction-board, .drums-grid,
+.life-grid { touch-action: none; user-select: none; -webkit-user-select: none; }

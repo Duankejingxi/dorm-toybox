@@ -560,6 +560,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 
 /* v1.26：太空射击 / 一笔画 / 弹珠机 / 24点 */
 .shooter-canvas { display: block; width: 100%; max-width: 340px; margin: 14px auto 0; border-radius: 12px; background: linear-gradient(180deg, #10101f, #1b1b3a); touch-action: none; }
+#pongCanvas { touch-action: none; }
 .onestroke-board { position: relative; width: 300px; height: 260px; margin: 14px auto 0; background: rgba(255, 255, 255, .04); border-radius: 12px; touch-action: none; }
 .onestroke-dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a8, var(--gold2)); border: 2px solid #8a6d1f; cursor: pointer; z-index: 2; }
 .onestroke-line { position: absolute; height: 4px; background: #7ec8ff; transform-origin: 0 50%; border-radius: 2px; z-index: 1; }

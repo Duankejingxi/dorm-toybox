@@ -4873,6 +4873,17 @@
         if (ub) ub.disabled = false;
       } catch (e) {}
     }
+    doodleCanvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (!doodleCtx) return;
+      doodlePushHistory();
+      doodleDrawing = true;
+      const r = doodleCanvas.getBoundingClientRect();
+      const t = e.touches[0];
+      doodleLast = { x: (t.clientX - r.left) / r.width * doodleCanvas.width, y: (t.clientY - r.top) / r.height * doodleCanvas.height };
+      doodleStrokes++;
+      $("doodleResult").textContent = "已画 " + doodleStrokes + " 笔，点保存存成图片。";
+    }, { passive: false });
     doodleCanvas.addEventListener("pointerdown", (e) => {
       if (!doodleCtx) return;
       if (e.preventDefault) e.preventDefault();
@@ -4883,6 +4894,22 @@
       doodleStrokes++;
       $("doodleResult").textContent = "已画 " + doodleStrokes + " 笔，点保存存成图片。";
     });
+    doodleCanvas.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (!doodleDrawing || !doodleCtx) return;
+      const r = doodleCanvas.getBoundingClientRect();
+      const t = e.touches[0];
+      const s = doodleScale();
+      const p = { x: (t.clientX - r.left) / r.width * doodleCanvas.width, y: (t.clientY - r.top) / r.height * doodleCanvas.height };
+      doodleCtx.strokeStyle = doodleColor;
+      doodleCtx.lineWidth = parseInt($("doodleSize").value, 10) || 8;
+      doodleCtx.lineCap = "round";
+      doodleCtx.beginPath();
+      doodleCtx.moveTo(doodleLast.x, doodleLast.y);
+      doodleCtx.lineTo(p.x, p.y);
+      doodleCtx.stroke();
+      doodleLast = p;
+    }, { passive: false });
     doodleCanvas.addEventListener("pointermove", (e) => {
       if (!doodleDrawing || !doodleCtx) return;
       const s = doodleScale();
@@ -5222,6 +5249,7 @@
       $("scratchResult").textContent = "🎉 刮出：" + $("scratchPrize").textContent.replace("🎁 ", "") + "！";
     }
     scratchCanvas.addEventListener("pointerdown", (e) => { scratchDrawing = true; scratchAt(e); });
+    scratchCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); if (scratchDrawing) { const t = e.touches[0]; const r = scratchCanvas.getBoundingClientRect(); scratchAt({ offsetX: t.clientX - r.left, offsetY: t.clientY - r.top }); } }, { passive: false });
     scratchCanvas.addEventListener("pointermove", (e) => { if (scratchDrawing) scratchAt(e); });
     scratchCanvas.addEventListener("pointerup", () => { scratchDrawing = false; });
     scratchCanvas.addEventListener("pointerleave", () => { scratchDrawing = false; });
@@ -6751,6 +6779,7 @@
       breakoutRender();
     }
     breakoutCanvas.addEventListener("pointerdown", (e) => breakoutMovePaddle(e.clientX));
+    breakoutCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); breakoutMovePaddle(e.touches[0].clientX); }, { passive: false });
     breakoutCanvas.addEventListener("pointermove", (e) => { if (e.buttons) breakoutMovePaddle(e.clientX); });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
@@ -7493,6 +7522,7 @@
       $("catchBasket").style.left = catchBasketX + "px";
     }
     $("catchStage").addEventListener("pointerdown", (e) => catchMoveBasket(e.clientX));
+    $("catchStage").addEventListener("touchmove", (e) => { e.preventDefault(); catchMoveBasket(e.touches[0].clientX); }, { passive: false });
     $("catchStage").addEventListener("pointermove", (e) => { if (e.buttons) catchMoveBasket(e.clientX); });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
@@ -8206,6 +8236,7 @@
       shooterDraw();
     }
     $("shooterCanvas").addEventListener("pointerdown", (e) => shooterMoveShip(e.clientX));
+    $("shooterCanvas").addEventListener("touchmove", (e) => { e.preventDefault(); shooterMoveShip(e.touches[0].clientX); }, { passive: false });
     $("shooterCanvas").addEventListener("pointermove", (e) => { if (e.buttons) shooterMoveShip(e.clientX); });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
@@ -8601,6 +8632,8 @@
       const p = fruitCanvasPos(e);
       fruitSliceAt(p.x, p.y);
     });
+    $("fruitsliceCanvas").addEventListener("touchstart", (e) => { e.preventDefault(); const t = e.touches[0]; const p = fruitCanvasPos(t); fruitSliceAt(p.x, p.y); }, { passive: false });
+    $("fruitsliceCanvas").addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; const p = fruitCanvasPos(t); fruitSliceAt(p.x, p.y); }, { passive: false });
     $("fruitsliceStartBtn").addEventListener("click", fruitStart);
     $("fruitsliceResetBtn").addEventListener("click", fruitReset);
     fruitReset();
@@ -9443,6 +9476,8 @@
       };
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
+      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX }); }, { passive: false });
+      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX }); }, { passive: false });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function arkanoidKeys(e) {
       if ($("toy-arkanoid") && $("toy-arkanoid").classList.contains("hidden")) return;

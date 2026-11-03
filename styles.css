@@ -73,9 +73,9 @@ body {
 .big-btn:active { transform: scale(.985); }
 .btn {
   border-radius: 12px; padding: 12px 14px; font-size: 15px; cursor: pointer; border: 1px solid var(--line);
-  background: rgba(255, 255, 255, .05); color: var(--ink);
-}
-.btn.small { font-size: 13px; padding: 8px 12px; margin-top: 12px; }
+  background: rgba(255, 255, 255, .05); color: var(--ink); min-height: 44px;
+} /* R4: 触屏最小 44px */
+.btn.small { font-size: 13px; padding: 12px 14px; margin-top: 12px; min-height: 44px; } /* R4: 触屏 44px */
 .gold-btn {
   background: linear-gradient(120deg, var(--gold), #ff9d00); color: #241300;
   border-color: transparent; font-weight: 700;
@@ -412,6 +412,10 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .drawer { position: fixed; top: 0; left: 0; height: 100%; width: 300px; max-width: 86vw; background: #14102b; border-right: 1px solid var(--line); z-index: 70; transform: translateX(-105%); transition: transform .25s ease; padding: 16px; overflow-y: auto; }
 .drawer.open { transform: translateX(0); }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+/* v3.0 第7轮：抽屉内搜索框 */
+.drawer-search { width: 100%; padding: 9px 12px; border-radius: 10px; font-size: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); margin: 0 0 6px; }
+.drawer-search::placeholder { color: rgba(255, 255, 255, .4); }
+.drawer-search:focus { outline: none; border-color: var(--gold); }
 .drawer-label { grid-column: 1 / -1; font-size: 13px; font-weight: 800; color: var(--gold); margin: 10px 2px 2px; }
 .drawer-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .tile { aspect-ratio: 1; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02)); color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px 4px; }
@@ -608,8 +612,8 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 /* 8. 主页标题和玩具标题统一：金色小横线；两个分区之间加隐形分隔 */
 .home-panel h2 { position: relative; padding-bottom: 8px; }
 .home-panel h2::after { content: ""; position: absolute; left: 0; bottom: 0; width: 44px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--gold2), transparent); }
-.home-panel .home-grid + h2 { margin-top: 26px; padding-top: 18px; border-top: 1px dashed rgba(245, 197, 66, .2); }
-.home-panel .home-grid + h2::after { bottom: 8px; }
+.home-panel .home-grid + h2, .home-panel #homePinnedSection + h2 { margin-top: 26px; padding-top: 18px; border-top: 1px dashed rgba(245, 197, 66, .2); }
+.home-panel .home-grid + h2::after, .home-panel #homePinnedSection + h2::after { bottom: 8px; }
 @media (prefers-reduced-motion: reduce) {
   .tile, .btn, .big-btn, #toySearch { transition: none; }
 }
@@ -1716,4 +1720,39 @@ input:focus, textarea:focus, select:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .cat-tab { transition: none; }
+}
+
+/* v3.1：3 新玩具 */
+.sk-roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.sk-card { padding: 14px 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: #1e2230; color: #fff; font-size: 14px; cursor: pointer; }
+.sk-card.open { border-color: #4f7cff; background: #26304d; }
+.sk-card.dead { opacity: 0.4; text-decoration: line-through; }
+.sk-clue { display: flex; gap: 8px; margin-top: 10px; }
+.sk-clue input { flex: 1; min-width: 0; }
+.sk-clues { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: #aab4d4; }
+.resume-form { display: grid; gap: 8px; margin: 10px 0; }
+.resume-form input, .resume-form textarea { width: 100%; box-sizing: border-box; }
+.resume-preview { background: #fff; color: #222; border-radius: 12px; padding: 20px; margin-top: 8px; }
+.resume-preview .rs-head { border-bottom: 3px solid #4f7cff; margin-bottom: 8px; }
+.resume-preview.tpl-gray .rs-head { border-bottom-color: #666; }
+.rs-head h3 { margin: 0 0 4px; font-size: 20px; color: #111; }
+.rs-head p { margin: 0 0 10px; font-size: 12px; color: #666; }
+.rs-sec h4 { font-size: 14px; margin: 12px 0 4px; color: #4f7cff; }
+.tpl-gray .rs-sec h4 { color: #555; }
+.rs-sec ul { margin: 0; padding-left: 18px; font-size: 13px; color: #333; }
+.rs-sec li { margin-bottom: 3px; }
+@media print {
+  body * { visibility: hidden; }
+  #toy-resume, #toy-resume * { visibility: visible; }
+  #toy-resume { position: absolute; top: 0; left: 0; width: 100%; }
+  .resume-form, #toy-resume .btn-row, #toy-resume .hint, #toy-resume h2, #toy-resume .section-title { display: none; }
+}
+
+/* v3.0 第5轮：分类切换 stagger 入场动画 */
+.home-grid.tile-enter .tile:not(.hidden) { animation: tileIn .3s cubic-bezier(.2,.7,.3,1.15) backwards; }
+@keyframes tileIn { from { opacity: 0; transform: scale(.9) translateY(8px); } }
+/* v3.0 第5轮：83 tile 滚动性能（低端机） */
+.home-grid .tile { content-visibility: auto; contain-intrinsic-size: auto 110px; }
+@media (prefers-reduced-motion: reduce) {
+  .home-grid.tile-enter .tile:not(.hidden) { animation: none; }
 }

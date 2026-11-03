@@ -14,7 +14,7 @@
 <header class="hero">
   <p class="eyebrow">🧸 打开就能玩 · 不用下载 · 不用注册</p>
   <h1>宿舍<span class="gold">玩具盒</span></h1>
-  <p class="subtitle">六十六个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
+  <p class="subtitle">八十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
     <button class="btn ghost-btn small" id="homeBtn">🏠 主页</button>
     <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
@@ -40,6 +40,7 @@
     <span>全部玩具</span>
     <button class="btn ghost-btn small" id="drawerCloseBtn" aria-label="关闭菜单">✕</button>
   </div>
+  <input id="drawerSearch" type="search" placeholder="🔍 搜玩具…" aria-label="在抽屉中搜索玩具" class="drawer-search">
   <nav class="drawer-list" id="drawerNav" aria-label="玩具选择"></nav>
 </aside>
 
@@ -52,11 +53,13 @@
       <h2>🕘 最近玩过</h2>
       <div class="recent-strip" id="recentStrip"></div>
     </div>
+    <div id="homePinnedSection">
     <h2>📌 置顶推荐</h2>
     <p class="hint">最常用的 8 个，点一下就玩。</p>
     <div class="home-grid" id="homePinnedGrid"></div>
+    </div>
     <h2>全部游戏</h2>
-    <p class="hint">66 个小玩意都在这儿，点一下就玩。</p>
+    <p class="hint">83 个小玩意都在这儿，点一下就玩。</p>
     <div class="home-grid" id="homeAllGrid"></div>
   </section>
 
@@ -284,7 +287,7 @@
     <p class="result-line" id="puzzleResult">点一块滑进空格。</p>
     <p class="count-line" id="puzzleStats">步数 0</p>
     <p class="count-line" id="puzzleBest"></p>
-    <button class="btn gold-btn small" id="puzzleResetBtn">重新打乱 ↺</button>
+    <button class="btn gold-btn small" id="puzzleResetBtn">重开 ↺</button>
   </section>
 
   <!-- 老虎机 -->
@@ -337,7 +340,7 @@
     <p class="result-line" id="schulteResult">点 1 开始计时。</p>
     <p class="count-line" id="schulteStats">用时 0.0 秒</p>
     <p class="count-line" id="schulteBest"></p>
-    <button class="btn gold-btn small" id="schulteResetBtn">重新打乱 ↺</button>
+    <button class="btn gold-btn small" id="schulteResetBtn">重开 ↺</button>
   </section>
 
   <!-- 记分牌 -->
@@ -871,7 +874,7 @@
     <p class="result-line" id="g2048Score">得分 0 · 最高 0</p>
     <p class="result-line" id="g2048Status">滑动开始合并。</p>
     <div class="beads-controls">
-      <button class="btn gold-btn small" id="g2048NewBtn">新一局 🔄</button>
+      <button class="btn gold-btn small" id="g2048NewBtn">重开 ↺</button>
     </div>
   </section>
 
@@ -887,7 +890,7 @@
     <div class="mines-grid" id="minesGrid"></div>
     <p class="result-line" id="minesStatus">点任意格子开始。</p>
     <div class="beads-controls">
-      <button class="btn gold-btn small" id="minesNewBtn">新一局 🔄</button>
+      <button class="btn gold-btn small" id="minesNewBtn">重开 ↺</button>
       <button class="btn ghost-btn small" id="minesFlagBtn">🚩 插旗模式：关</button>
     </div>
   </section>
@@ -1044,7 +1047,7 @@
       <button class="btn small gold-btn" id="tttFirstBtn">我先手</button>
       <button class="btn small ghost-btn" id="tttSecondBtn">电脑先手</button>
     </div>
-    <button class="btn gold-btn small" id="tictactoeResetBtn">再来一局 ↺</button>
+    <button class="btn gold-btn small" id="tictactoeResetBtn">重开 ↺</button>
   </section>
 
   <!-- 连连看 -->
@@ -1092,7 +1095,7 @@
     </div>
     <p class="result-line" id="jumpScore">得分 0 · 最好 0</p>
     <p class="result-line" id="jumpStatus">按住蓄力，松手起跳。</p>
-    <button class="btn gold-btn small" id="jumpResetBtn">再来一局 ↺</button>
+    <button class="btn gold-btn small" id="jumpResetBtn">重开 ↺</button>
   </section>
 
   <!-- 找不同 -->
@@ -1280,8 +1283,193 @@
     </div>
   </section>
 
+  <!-- v3.0：14 个新玩具 -->
+  <section class="panel toy hidden" id="toy-flappy">
+    <h2>🐤 像素鸟</h2>
+    <p class="hint">点屏幕小鸟往上飞，穿过水管别撞上。</p>
+    <canvas id="flappyCanvas" width="320" height="400" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="flappyScore">得分 0 · 最好 0</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="flappyResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-snake2">
+    <h2>🐍🐍 双人贪吃蛇</h2>
+    <p class="hint">单人：挑战 AI。双人：P1 用 WASD，P2 用方向键。手机点左/右半屏转向。撞墙/撞蛇/撞自己都输。</p>
+    <canvas id="snake2Canvas" width="320" height="320" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="snake2Score">P1 🟢 0 · P2 🔵 0</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="snake2ModeBtn">🤖 单人打AI</button><button class="btn ghost-btn small" id="snake2ResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-pong">
+    <h2>🏓 乒乓对战</h2>
+    <p class="hint">手指/鼠标上下移动挡板，或用↑↓键。先到 5 分赢。</p>
+    <div class="btn-row" id="pongDiffRow">
+      <button class="btn ghost-btn small" data-diff="0">简单</button>
+      <button class="btn ghost-btn small" data-diff="1">中等</button>
+      <button class="btn ghost-btn small" data-diff="2">困难</button>
+    </div>
+    <canvas id="pongCanvas" width="320" height="220" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="pongScore">你 0 : 0 电脑</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="pongResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-arkanoid">
+    <h2>🧱 打砖块2</h2>
+    <p class="hint">左右移动挡板。道具：🟢多球 🟡加长 🔴激光。3 关。</p>
+    <canvas id="arkanoidCanvas" width="320" height="400" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="arkanoidScore">第 1 关 · 分 0 · 命 3</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="arkanoidResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-mines2">
+    <h2>💣 大扫雷</h2>
+    <p class="hint">16×16，40 雷。点开格子，长按/右键插旗。排完赢。</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="mines2FlagBtn">🚩 插旗模式：关</button>
+      <button class="btn ghost-btn small" id="mines2ResetBtn">重开 ↺</button>
+    </div>
+    <div id="mines2Board" class="mines2-board"></div>
+    <p class="result-line" id="mines2Score">🚩 40 · 最好 --</p>
+  </section>
+  <section class="panel toy hidden" id="toy-chess">
+    <h2>♟️ 象棋</h2>
+    <p class="hint">你执红先走。点棋子再点目标格。AI 会走，别被将死。</p>
+    <canvas id="chessCanvas" width="320" height="352" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="chessMsg">轮到你走</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="chessResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-go">
+    <h2>⚫ 围棋9路</h2>
+    <p class="hint">你执黑。点交叉点下子，围住对方提子。点"停一手"跳过。</p>
+    <canvas id="goCanvas" width="320" height="320" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="goScore">黑 0 · 白 0 · 提子 黑0 白0</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="goPassBtn">停一手</button>
+      <button class="btn ghost-btn small" id="goResetBtn">重开 ↺</button>
+    </div>
+  </section>
+  <section class="panel toy hidden" id="toy-uno">
+    <h2>🃏 UNO</h2>
+    <p class="hint">颜色或数字相同可出。轮到你时点手牌出牌，无牌可出点摸牌。</p>
+    <div id="unoTop" class="uno-top"></div>
+    <div id="unoHand" class="uno-hand"></div>
+    <p class="result-line" id="unoMsg">轮到你</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="unoDrawBtn">摸牌</button>
+      <button class="btn ghost-btn small" id="unoResetBtn">重开 ↺</button>
+    </div>
+  </section>
+  <section class="panel toy hidden" id="toy-mahjong">
+    <h2>🀄 简化麻将</h2>
+    <p class="hint">筒条万 1-9。点一张打出，凑 4 副刻子/顺子 + 1 对就胡。</p>
+    <div id="mjHand" class="mj-hand"></div>
+    <p class="result-line" id="mjMsg">轮到你打牌</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="mjResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-poker">
+    <h2>♠️ 德州扑克</h2>
+    <p class="hint">2 张底牌 + 5 张公共牌，和 AI 比牌型。100 筹码，赢光 AI 就赢。</p>
+    <div id="pokerTable" class="poker-table"></div>
+    <p class="result-line" id="pokerMsg">你的回合</p>
+    <div class="btn-row">
+      <button class="btn gold-btn small" id="pokerCallBtn">跟注</button>
+      <button class="btn ghost-btn small" id="pokerFoldBtn">弃牌</button>
+      <button class="btn ghost-btn small" id="pokerResetBtn">重开 ↺</button>
+    </div>
+  </section>
+  <section class="panel toy hidden" id="toy-rhythm">
+    <h2>🎵 音游</h2>
+    <p class="hint">音符掉到判定线时按 D F J K（或点轨道），Perfect+300 Good+100。</p>
+    <canvas id="rhythmCanvas" width="320" height="420" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="rhythmScore">分 0 · 连击 0 · 最好 0</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="rhythmResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-tower">
+    <h2>🏗️ 叠塔</h2>
+    <p class="hint">点屏幕放下移动的方块，叠歪会掉，看看叠多高。</p>
+    <canvas id="towerCanvas" width="320" height="420" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="towerScore">高度 0 · 最好 0</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="towerResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-dodge">
+    <h2>✈️ 弹幕躲避</h2>
+    <p class="hint">拖飞机躲子弹，擦弹（贴着过）+10 分，3 条命。</p>
+    <canvas id="dodgeCanvas" width="320" height="420" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="dodgeScore">分 0 · 命 3 · 最好 0</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="dodgeResetBtn">重开 ↺</button></div>
+  </section>
+  <section class="panel toy hidden" id="toy-maze3d">
+    <h2>🌀 3D迷宫</h2>
+    <p class="hint">WASD/方向键走（手机点屏幕上下左右区），找到绿色出口。</p>
+    <canvas id="maze3dCanvas" width="320" height="240" style="width:100%;max-width:320px"></canvas>
+    <p class="result-line" id="maze3dMsg">找出口！</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="maze3dResetBtn">重开 ↺</button></div>
+  </section>
+
+  <section class="panel toy hidden" id="toy-scriptkill">
+    <h2>🔪 剧本杀主持人</h2>
+    <p class="hint">没人会主持？它带全程：分身份 → 走流程 → 发线索。点牌翻身份，双击牌标记出局。</p>
+    <div class="btn-row">
+      <label>人数 <input id="skCount" type="number" min="4" max="12" value="6" style="width:56px"></label>
+      <button class="btn gold-btn small" id="skDealBtn">发身份</button>
+      <button class="btn ghost-btn small" id="skResetBtn">重开 ↺</button>
+    </div>
+    <div id="skRoles" class="sk-roles"></div>
+    <div id="skFlow" class="hidden">
+      <p class="result-line" id="skPhase">准备开始</p>
+      <div class="btn-row">
+        <button class="btn gold-btn small" id="skNextBtn">下一步 →</button>
+        <button class="btn ghost-btn small" id="skTimerBtn">⏱ 60s 计时</button>
+      </div>
+      <p class="result-line" id="skTimerLine"></p>
+      <div class="sk-clue">
+        <input id="skClueWho" placeholder="几号玩家" style="width:80px">
+        <input id="skClueText" placeholder="线索内容">
+        <button class="btn ghost-btn small" id="skClueBtn">发线索</button>
+      </div>
+      <ul id="skClueList" class="sk-clues"></ul>
+    </div>
+  </section>
+  <section class="panel toy hidden" id="toy-memegen">
+    <h2>😂 表情包制作</h2>
+    <p class="hint">传图 + 加字，一键下载，斗图弹药自己造。</p>
+    <canvas id="memegenCanvas" width="320" height="320" style="width:100%;max-width:320px"></canvas>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="memegenTpl0">🙂 黄脸</button>
+      <button class="btn ghost-btn small" id="memegenTpl1">❓ 问号</button>
+      <button class="btn ghost-btn small" id="memegenTpl2">🐶 狗头</button>
+      <label class="btn ghost-btn small">📤 上传<input id="memegenFile" type="file" accept="image/*" class="hidden"></label>
+    </div>
+    <input id="memegenTop" placeholder="顶部文字" maxlength="30" style="width:100%;margin-bottom:8px">
+    <input id="memegenBottom" placeholder="底部文字" maxlength="30" style="width:100%;margin-bottom:8px">
+    <div class="btn-row">
+      <label>字号 <input id="memegenSize" type="range" min="20" max="64" value="40"></label>
+      <button class="btn gold-btn small" id="memegenDlBtn">⬇ 下载 PNG</button>
+    </div>
+    <p class="result-line" id="memegenMsg"></p>
+  </section>
+  <section class="panel toy hidden" id="toy-resume">
+    <h2>📄 简历制作</h2>
+    <p class="hint">填完直接打印，草稿自动保存。</p>
+    <div class="btn-row">
+      <button class="btn ghost-btn small" id="resumeTpl0">简约蓝</button>
+      <button class="btn ghost-btn small" id="resumeTpl1">商务灰</button>
+      <button class="btn gold-btn small" id="resumePrintBtn">🖨 打印</button>
+      <button class="btn ghost-btn small" id="resumeDlBtn">⬇ 导出HTML</button>
+      <button class="btn ghost-btn small" id="resumeClearBtn">清空</button>
+    </div>
+    <div class="resume-form">
+      <input id="rsName" placeholder="姓名">
+      <input id="rsPhone" placeholder="电话">
+      <input id="rsMail" placeholder="邮箱">
+      <input id="rsTarget" placeholder="求职意向，如：前端开发实习生">
+      <textarea id="rsEdu" placeholder="教育经历（每行一条）" rows="3"></textarea>
+      <textarea id="rsIntern" placeholder="实习经历（每行一条）" rows="3"></textarea>
+      <textarea id="rsProj" placeholder="项目经历（每行一条）" rows="3"></textarea>
+      <textarea id="rsSkill" placeholder="技能（每行一条）" rows="2"></textarea>
+    </div>
+    <h3 class="section-title">实时预览</h3>
+    <div id="resumePreview" class="resume-preview tpl-blue"></div>
+  </section>
+
 <footer>
-  <p>宿舍玩具盒 v2.0 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v3.0 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

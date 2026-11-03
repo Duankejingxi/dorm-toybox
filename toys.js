@@ -7,6 +7,8 @@
 
   /* ---------- 侧边栏：置顶 7 个在最前面，其余按顺序，一行两个方块 ---------- */
   const PINNED_IDS = ["wheel", "dice", "reaction", "guess", "score", "beads", "frog", "fortune"];
+  const TOY_ORDER = {}; // v3.0 第5轮：TOYS 原顺序，搜索清空后恢复用
+  TOYS.forEach((t, i) => { TOY_ORDER[t.id] = i; });
   const drawerNav = $("drawerNav");
   function splitLabel(label) {
     const i = label.indexOf(" ");
@@ -27,6 +29,7 @@
     btn.appendChild(em);
     btn.appendChild(nm);
     btn._q = (parts.emoji + parts.name + (t.py || "") + (t.label || "")).toLowerCase(); // v1.30 搜索缓存；v2.0 加拼音首字母
+    btn._name = parts.name.toLowerCase(); // v3.0 第5轮：搜索相关性排序用
     btn._cat = t.cat || ""; // v2.0：分类筛选
     btn.addEventListener("click", () => { showToy(t.id); closeDrawer(); });
     return btn;
@@ -39,8 +42,46 @@
   }
   drawerNav.appendChild(drawerLabel("📌 置顶"));
   PINNED_IDS.map((id) => TOYS.find((t) => t.id === id)).filter(Boolean).forEach((t) => drawerNav.appendChild(makeTile(t)));
-  drawerNav.appendChild(drawerLabel("全部玩具"));
-  TOYS.filter((t) => !PINNED_IDS.includes(t.id)).forEach((t) => drawerNav.appendChild(makeTile(t)));
+  // v3.0 第7轮：抽屉按分类分组（83 个平铺太难翻）
+  const DRAWER_CATS = [["game", "🎮 游戏"], ["puzzle", "🧠 益智"], ["tool", "🛠 工具"], ["party", "🎉 派对"]];
+  DRAWER_CATS.forEach(([cat, name]) => {
+    const list = TOYS.filter((t) => !PINNED_IDS.includes(t.id) && (t.cat || "") === cat);
+    if (list.length === 0) return;
+    drawerNav.appendChild(drawerLabel(name));
+    list.forEach((t) => drawerNav.appendChild(makeTile(t)));
+  });
+  // 兜底：没有 cat 字段的玩具
+  const drawerNoCat = TOYS.filter((t) => !PINNED_IDS.includes(t.id) && !(t.cat || ""));
+  if (drawerNoCat.length > 0) {
+    drawerNav.appendChild(drawerLabel("其它"));
+    drawerNoCat.forEach((t) => drawerNav.appendChild(makeTile(t)));
+  }
+  // v3.0 第7轮：搜索/过滤后，隐藏没有可见玩具的分组标题
+  function updateDrawerLabels() {
+    const nav = $("drawerNav");
+    if (!nav || !nav.children) return;
+    let cur = null, vis = 0;
+    const flush = () => { if (cur && cur.classList) cur.classList.toggle("hidden", vis === 0); };
+    Array.from(nav.children).forEach((c) => {
+      if (!c.classList) return;
+      if (c.classList.contains("drawer-label")) { flush(); cur = c; vis = 0; }
+      else if (c.classList.contains("tile") && !c.classList.contains("hidden")) vis++;
+    });
+    flush();
+  }
+  // v3.0 第7轮：抽屉过滤（主搜索/抽屉搜索/分类叠加，抽屉搜索优先）
+  function refreshDrawerFilter() {
+    const dq = ($("drawerSearch") && $("drawerSearch").value || "").trim().toLowerCase();
+    const mq = ($("toySearch") && $("toySearch").value || "").trim().toLowerCase();
+    const q = dq || mq;
+    allTiles().forEach((b) => {
+      let show = true;
+      if (q) show = searchScore(q, b) !== 0;
+      else if (activeCat !== "all") show = b._cat === activeCat;
+      b.classList.toggle("hidden", !show);
+    });
+    updateDrawerLabels();
+  }
   function allTiles() {
     return [...drawerNav.querySelectorAll(".tile")];
   }
@@ -268,8 +309,9 @@
     if (typeof ledCloseFull === "function") ledCloseFull();
   }
   let currentToy = null;
+  let homeScrollY = 0; // v3.0 第7轮：记住主页滚动位置，返回时恢复
   /* v1.31：工具箱合并——多个入口共享同一个工具箱界面（不同默认 tab）。
-     TOYS 列表 66 个 id 不变；点 stopwatch/aa/fx/bmi 会重定向到对应工具箱。 */
+     TOYS 列表 80 个 id 不变；点 stopwatch/aa/fx/bmi 会重定向到对应工具箱。 */
   const TOOLBOX_REDIRECT = {
     "stopwatch": "timer",
     "aa": "ledger",
@@ -285,6 +327,8 @@
   function showToy(id) {
     const clickedId = id; // 用户实际点的入口（用于最近玩过和高亮）
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
+    // v3.0 第7轮：从主页进入时记住滚动位置（玩具间跳转不覆盖）
+    if (!currentToy) { try { homeScrollY = window.scrollY || 0; } catch (e) {} }
     // 工具箱重定向：共享界面，默认 tab 不同
     if (TOOLBOX_REDIRECT[id]) {
       window._toolboxDefaultTab = TOOLBOX_DEFAULT_TAB[id];
@@ -377,7 +421,8 @@
     h2.appendChild(b);
   }
   /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
-  function showHome() {
+  function showHome(toTop) {
+    const fromToy = !!currentToy; // v3.0 第7轮：是否从玩具返回（决定滚动行为）
     if (currentToy) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-home").classList.remove("hidden");
@@ -389,18 +434,32 @@
       if (window.history && window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
       else window.location.hash = "";
     } catch (e) { /* 桩里没有 history，忽略 */ }
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // v3.0 第7轮：从玩具返回→恢复滚动位置；搜索等场景传 toTop→回顶部；在主页不动
+    try {
+      if (toTop) window.scrollTo({ top: 0, behavior: "smooth" });
+      else if (fromToy) window.scrollTo({ top: homeScrollY, behavior: "auto" });
+    } catch (e) {}
   }
   function openDrawer() {
     $("sideDrawer").classList.add("open");
     $("drawerOverlay").classList.remove("hidden");
+    // v3.0 第7轮：打开抽屉时清空抽屉搜索，恢复主过滤状态
+    if ($("drawerSearch")) $("drawerSearch").value = "";
+    refreshDrawerFilter();
   }
   function closeDrawer() {
     $("sideDrawer").classList.remove("open");
     $("drawerOverlay").classList.add("hidden");
+    // v3.0 第7轮：关闭时清空抽屉搜索，下次打开是干净状态
+    if ($("drawerSearch")) $("drawerSearch").value = "";
+    refreshDrawerFilter();
   }
   $("menuBtn").addEventListener("click", openDrawer);
-  $("homeBtn").addEventListener("click", showHome);
+  $("homeBtn").addEventListener("click", () => {
+    // v3.0 第7轮：在玩具里点主页→恢复滚动位置；在主页点→回顶部
+    if (currentToy) showHome();
+    else { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} }
+  });
   $("drawerCloseBtn").addEventListener("click", closeDrawer);
   $("drawerOverlay").addEventListener("click", closeDrawer);
   // v1.32：音效开关
@@ -1177,11 +1236,11 @@
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         });
         ctx.closePath();
-        ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+        ctx.fillStyle = "rgba(79, 124, 255, 0.3)";
         ctx.fill();
-        ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = "#4f7cff"; ctx.lineWidth = 2; ctx.stroke();
         // 数据点
-        ctx.fillStyle = "#ffd700";
+        ctx.fillStyle = "#4f7cff";
         dims.forEach((v, i) => {
           const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
           const r = (R * v) / 100;
@@ -1213,6 +1272,7 @@
         void fortuneTube.offsetWidth;
         fortuneTube.classList.add("shaking");
       }
+      SFX.pop();
       const f = pick(FORTUNES);
       // 生成五维运势（大吉偏高，凶偏低）
       const base = f.tier === "大吉" ? 75 : f.tier === "中吉" ? 65 : f.tier === "小吉" ? 55 : f.tier === "吉" ? 50 : 35;
@@ -1886,9 +1946,9 @@
         el.classList.remove("rps-shake"); void el.offsetWidth; el.classList.add("rps-shake");
       });
       let msg;
-      if (you === cpu) { msg = "平局！再来。"; }
-      else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; }
-      else { rpsScore.cpu++; msg = "😤 电脑赢了这局。"; }
+      if (you === cpu) { msg = "平局！再来。"; SFX.pop(); }
+      else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; SFX.win(); }
+      else { rpsScore.cpu++; msg = "😤 电脑赢了这局。"; SFX.lose(); }
       if (predicted) msg += "（AI 觉得你要出" + RPS_HANDS[predicted] + "）";
       if (rpsScore.you >= RPS_TARGET) msg = "🏆 5 局 3 胜，你赢下了整场！AI 服了。";
       else if (rpsScore.cpu >= RPS_TARGET) msg = "💻 AI 5 局 3 胜拿下整场。它快把你看透了，换套路再来？";
@@ -2044,6 +2104,7 @@
     $("guessResetBtn").addEventListener("click", () => {
       guessTarget = 1 + Math.floor(Math.random() * 100);
       guessTries = [];
+      resetGuessRange();
       renderGuessChips();
       renderGuessCount();
       $("guessResult").textContent = "换了个数，重新猜。";
@@ -2546,6 +2607,7 @@
     function slotsSpin(who) {
       if (slotsSpinning || slotsStats.turn !== who) return;
       slotsSpinning = true;
+      SFX.coin();
       renderSlotsStats();
       slotsResultEl(who).textContent = slotsPlayerName(who) + "拉着呢……";
       // 滚轮滚动动画
@@ -2583,6 +2645,9 @@
               setTimeout(() => machineEl.classList.remove("slots-win"), 1500);
             }
             slotsWinSound();
+            SFX.win();
+          } else {
+            SFX.lose();
           }
           slotsResultEl(who).textContent = "本局 +" + points + " 分" + (lines > 0 ? "（" + lines + " 条线中奖）" : "（没中奖）") + "。";
           if (who === "a") { slotsStats.turn = "b"; }
@@ -2610,23 +2675,75 @@
     renderSlotsStats();
 
   };
+  /* ---------- v3.0 第5轮：搜索——模糊匹配（错别字/同音）+ 相关性排序 ---------- */
+  function fuzzySubseq(q, target) {
+    let i = 0;
+    for (let k = 0; k < target.length && i < q.length; k++) {
+      if (target[k] === q[i]) i++;
+    }
+    return i === q.length;
+  }
+  // 错别字容忍：查询≥3字时允许删一字（如"五子琪"→"五子棋"）；短查询严格，避免误杀
+  function fuzzyHit(q, target) {
+    if (fuzzySubseq(q, target)) return true;
+    if (q.length >= 3) {
+      for (let k = 0; k < q.length; k++) {
+        if (fuzzySubseq(q.slice(0, k) + q.slice(k + 1), target)) return true;
+      }
+    }
+    return false;
+  }
+  // 相关性打分：4 完全相等 > 3 开头匹配 > 2 包含 > 1 模糊
+  function searchScore(q, b) {
+    const name = b._name || "";
+    if (name === q) return 4;
+    if (name.indexOf(q) === 0) return 3;
+    if ((b._q || "").indexOf(q) >= 0) return 2;
+    if (fuzzyHit(q, b._q || "")) return 1;
+    return 0;
+  }
+  // 搜索/分类过滤时隐藏置顶区（避免和"全部游戏"重复）
+  function updatePinnedVisibility() {
+    const q = ($("toySearch").value || "").trim();
+    const sec = $("homePinnedSection");
+    if (!sec) return;
+    const show = q === "" && activeCat === "all";
+    sec.classList.toggle("hidden", !show);
+  }
   /* ---------- 玩具搜索：搜名字，主页方块和抽屉方块一起过滤，露出主页结果 ---------- */
   $("toySearch").addEventListener("input", () => {
     const q = $("toySearch").value.trim().toLowerCase(); // v2.0：小写，支持拼音首字母搜索
+    if ($("drawerSearch")) $("drawerSearch").value = ""; // v3.0 第7轮：主搜索时清空抽屉搜索
     let visibleCount = 0;
-    allTiles().forEach((b) => {
-      const hit = q === "" || (b._q || b.textContent).toLowerCase().includes(q);
-      b.classList.toggle("hidden", !hit);
-    });
+    // 抽屉：过滤（v3.0 第7轮：抽屉按分类分组 + 标签显隐）
+    refreshDrawerFilter();
+    // 主页：过滤 + 相关性排序（完全匹配排前面）
+    const scored = [];
     allHomeTiles().forEach((b) => {
-      const hit = q === "" || (b._q || b.textContent).toLowerCase().includes(q);
-      b.classList.toggle("hidden", !hit);
-      if (hit) visibleCount++;
+      const s = q === "" ? 1 : searchScore(q, b);
+      b.classList.toggle("hidden", s === 0);
+      b._score = s;
+      if (s > 0) { scored.push(b); visibleCount++; }
     });
+    try {
+      const grid = $("homeAllGrid");
+      if (grid && typeof grid.appendChild === "function" && grid.children) {
+        const kids = Array.from(grid.children);
+        if (q === "") {
+          // 清空：恢复 TOYS 原顺序
+          kids.sort((a, b) => (TOY_ORDER[a.getAttribute("data-toy")] ?? 9999) - (TOY_ORDER[b.getAttribute("data-toy")] ?? 9999));
+        } else {
+          // 按分数降序，同分按原顺序（只排本 grid 的 tile，置顶区不动）
+          kids.sort((a, b) => ((b._score || 0) - (a._score || 0)) || ((TOY_ORDER[a.getAttribute("data-toy")] ?? 9999) - (TOY_ORDER[b.getAttribute("data-toy")] ?? 9999)));
+        }
+        kids.forEach((k) => grid.appendChild(k));
+      }
+    } catch (e) { /* 测试 stub 无 parentNode/children，跳过排序 */ }
     // v2.0：空状态——无结果时显示"随便玩玩"
     const emptyEl = $("searchEmpty");
     if (emptyEl) emptyEl.classList.toggle("hidden", !(q !== "" && visibleCount === 0));
-    if (q !== "") { closeDrawer(); showHome(); }
+    updatePinnedVisibility();
+    if (q !== "") { closeDrawer(); showHome(true); } // v3.0 第7轮：搜索回顶部看结果
   });
   // v2.0：随便玩玩——随机开一个玩具
   const surpriseBtn = $("surpriseBtn");
@@ -2643,12 +2760,32 @@
       const q = ($("toySearch").value || "").trim();
       if (q === "") b.classList.toggle("hidden", !matchCat);
     });
-    // 抽屉也过滤
-    allTiles().forEach((b) => {
-      const matchCat = activeCat === "all" || b._cat === activeCat;
-      const q = ($("toySearch").value || "").trim();
-      if (q === "") b.classList.toggle("hidden", !matchCat);
-    });
+    // 抽屉也过滤（v3.0 第7轮：走统一逻辑，带分组标签显隐）
+    if ($("drawerSearch")) $("drawerSearch").value = "";
+    refreshDrawerFilter();
+  }
+  // v3.0 第7轮：抽屉内搜索框（只过滤抽屉，不关抽屉）
+  (function wireDrawerSearch() {
+    const ds = $("drawerSearch");
+    if (!ds || ds._wired) return;
+    ds._wired = true;
+    ds.addEventListener("input", refreshDrawerFilter);
+  })();
+  // v3.0 第5轮：分类切换 stagger 入场动画
+  function animateGrid(grid) {
+    if (!grid || typeof grid.children === "undefined") return;
+    try {
+      const vis = Array.from(grid.children).filter((b) => b.classList && !b.classList.contains("hidden"));
+      vis.forEach((b, i) => { if (b.style) b.style.animationDelay = Math.min(i * 18, 270) + "ms"; });
+      grid.classList.remove("tile-enter");
+      void grid.offsetWidth; // reflow 重启动画
+      grid.classList.add("tile-enter");
+      clearTimeout(grid._animT);
+      grid._animT = setTimeout(() => {
+        grid.classList.remove("tile-enter");
+        vis.forEach((b) => { if (b.style) b.style.animationDelay = ""; });
+      }, 650);
+    } catch (e) {}
   }
   const catTabs = $("catTabs");
   if (catTabs) {
@@ -2666,6 +2803,9 @@
       const emptyEl = $("searchEmpty");
       if (emptyEl) emptyEl.classList.add("hidden");
       applyCatFilter();
+      updatePinnedVisibility(); // v3.0 第5轮：分类过滤时隐藏置顶区
+      animateGrid($("homeAllGrid")); // v3.0 第5轮：stagger 入场
+      animateGrid($("homePinnedGrid"));
     });
   }
 
@@ -2786,6 +2926,7 @@
       }
       sudokuWon = true;
       if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; }
+      SFX.win();
       const seconds = Math.max(Math.round(sudokuElapsedSec()), 1);
       let msg = "🎉 通关！用了 " + seconds + " 秒 · 错 " + sudokuMistakes + " 次。";
       if (sudokuBest === 0 || seconds < sudokuBest) {
@@ -5876,7 +6017,7 @@
         saveBest(MOLE_KEY, moleBest);
       }
       $("moleResult").textContent = "⏰ 时间到！得分 " + moleScore + (isBest ? "，新纪录！🎉" : "，最好 " + moleBest + "。");
-      $("moleStartBtn").textContent = "再来一局 ↺";
+      $("moleStartBtn").textContent = "重开 ↺";
       moleRender();
     }
     function moleStart() {
@@ -6538,7 +6679,7 @@
     function breakoutRender() {
       if (!breakoutCtx) return;
       breakoutCtx.clearRect(0, 0, BREAKOUT_W, BREAKOUT_H);
-      breakoutCtx.fillStyle = "#f5c542";
+      breakoutCtx.fillStyle = "#4f7cff";
       breakoutBricks.forEach((b) => { if (b.alive) breakoutCtx.fillRect(b.x, b.y, b.w, b.h); });
       breakoutCtx.fillStyle = "#fff";
       breakoutCtx.fillRect(breakoutPaddleX, BREAKOUT_H - 14, 60, 10);
@@ -7134,6 +7275,7 @@
         jumpRelease() { jumpRelease(); },
     }));
 
+    toyLeaveCleanup.jump = () => { try { if (typeof jumpChargeId !== "undefined" && jumpChargeId) { clearInterval(jumpChargeId); } } catch (e) {} };
   };
   /* ---------- 53. 找不同 ---------- */
   toyInitFns["spotdiff"] = function () {
@@ -7229,6 +7371,7 @@
         spotdiffPick(i) { spotdiffPick(i); },
     }));
 
+    toyLeaveCleanup.spotdiff = () => { try { if (typeof spotdiffTimerId !== "undefined" && spotdiffTimerId) { clearInterval(spotdiffTimerId); } } catch (e) {} };
   };
   /* ---------- 54. 接金币 ---------- */
   toyInitFns["catch"] = function () {
@@ -7438,7 +7581,7 @@
       const d1 = distract[Math.floor(Math.random() * distract.length)];
       let d2 = distract[Math.floor(Math.random() * distract.length)];
       while (d2 === d1) d2 = distract[Math.floor(Math.random() * distract.length)];
-      idiomOptions = [correct, d1, d2].sort(() => Math.random() - 0.5);
+      idiomOptions = shuffle([correct, d1, d2]);
       idiomRender();
     }
     function idiomPick(i) {
@@ -7927,7 +8070,7 @@
     }
     function riddleStart() {
       riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false;
-      riddleOrder = riddleFiltered().sort(() => Math.random() - 0.5);
+      riddleOrder = shuffle(riddleFiltered());
       riddleStartTimer();
       riddleRender();
     }
@@ -8747,6 +8890,2357 @@
     }));
 
   };
+  /* ================= v3.0 新玩具（14 个） ================= */
+  /* ---- 1. flappy 像素鸟 ---- */
+  toyInitFns["flappy"] = function () {
+    const KEY = "dorm-toybox-flappy-best-v1";
+    let best = loadBest(KEY);
+    let bird = null, pipes = [], score = 0, running = false, raf = null, frame = 0;
+    let lastT = 0, spawnAcc = 0;
+    const W = 320, H = 400, BW = 34, BH = 26, GRAV = 0.5, FLAP = -8, PW = 52;
+    let GAP = 120, SPEED = 2.2, isNewBest = false; // 难度随分数递增
+    function reset() {
+      bird = { x: 70, y: H / 2, vy: 0, rot: 0 };
+      pipes = []; score = 0; running = true; frame = 0; lastT = 0; spawnAcc = 0;
+      GAP = 120; SPEED = 2.2; isNewBest = false;
+      render();
+    }
+    function flap() {
+      if (!running) { reset(); return; }
+      bird.vy = FLAP;
+      if (SFX.enabled) SFX.jump();
+    }
+    function step(now) {
+      if (!running) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(50, now - lastT); // ms，防切后台跳变
+      lastT = now;
+      const k = dt / 16.7; // 以 60fps 为基准缩放，与刷新率无关
+      frame++;
+      bird.vy += GRAV * k;
+      bird.y += bird.vy * k;
+      bird.rot = Math.max(-0.4, Math.min(1.2, bird.vy * 0.08));
+      spawnAcc += dt;
+      if (spawnAcc >= 85 * 16.7) {
+        spawnAcc = 0;
+        const gy = 60 + Math.random() * (H - 120 - GAP);
+        pipes.push({ x: W, gapY: gy, scored: false });
+      }
+      for (const p of pipes) {
+        p.x -= SPEED * k;
+        if (!p.scored && p.x + PW < bird.x) {
+          p.scored = true; score++;
+          // 难度递增：速度 +0.03/分（上限 3.6），缝隙 -0.8/分（下限 96）
+          SPEED = Math.min(3.6, 2.2 + score * 0.03);
+          GAP = Math.max(96, 120 - score * 0.8);
+          if (SFX.enabled) SFX.pop(0.5 + score * 0.02);
+        }
+      }
+      pipes = pipes.filter((p) => p.x > -PW - 10);
+      // 碰撞
+      let dead = bird.y < 0 || bird.y + BH > H;
+      for (const p of pipes) {
+        if (bird.x + BW > p.x && bird.x < p.x + PW) {
+          if (bird.y < p.gapY || bird.y + BH > p.gapY + GAP) dead = true;
+        }
+      }
+      if (dead) {
+        running = false;
+        if (score > best) { best = score; saveBest(KEY, best); isNewBest = score > 0; }
+        if (SFX.enabled) { if (isNewBest) SFX.win(); else SFX.lose(); }
+      }
+      draw();
+      render();
+      if (running) raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("flappyCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        // 天空
+        ctx.fillStyle = "#70c5ce"; ctx.fillRect(0, 0, W, H);
+        // 云
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        const cx = (frame * 0.5) % (W + 100) - 50;
+        ctx.beginPath(); ctx.arc(cx, 60, 22, 0, 7); ctx.arc(cx + 22, 55, 18, 0, 7); ctx.fill();
+        // 水管
+        for (const p of pipes) {
+          ctx.fillStyle = "#5cb85c";
+          ctx.fillRect(p.x, 0, PW, p.gapY);
+          ctx.fillRect(p.x, p.gapY + GAP, PW, H - p.gapY - GAP);
+          ctx.fillStyle = "#4a9a4a";
+          ctx.fillRect(p.x - 3, p.gapY - 18, PW + 6, 18);
+          ctx.fillRect(p.x - 3, p.gapY + GAP, PW + 6, 18);
+        }
+        // 地面
+        ctx.fillStyle = "#ded895"; ctx.fillRect(0, H - 24, W, 24);
+        if (!running && (score > 0 || pipes.length > 0)) {
+          ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(isNewBest ? "🎉 新纪录！" : "💥 撞了！", W / 2, H / 2 - 10);
+          ctx.font = "18px sans-serif";
+          ctx.fillText("得分 " + score + " · 最好 " + best, W / 2, H / 2 + 24);
+          ctx.fillText("点屏幕再来", W / 2, H / 2 + 52);
+        }
+        // 鸟
+        ctx.save();
+        ctx.translate(bird.x + BW / 2, bird.y + BH / 2);
+        ctx.rotate(bird.rot);
+        ctx.fillStyle = "#fbd343";
+        ctx.beginPath(); ctx.ellipse(0, 0, BW / 2, BH / 2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(8, -5, 6, 0, 7); ctx.fill();
+        ctx.fillStyle = "#222";
+        ctx.beginPath(); ctx.arc(10, -5, 2.5, 0, 7); ctx.fill();
+        ctx.fillStyle = "#fb8c00";
+        ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(24, -4); ctx.lineTo(24, 4); ctx.fill();
+        ctx.fillStyle = "#fbd343";
+        ctx.beginPath(); ctx.ellipse(-6, 2, 10, 5, -0.4, 0, 7); ctx.fill();
+        ctx.restore();
+      } catch (e) {}
+    }
+    function render() {
+      $("flappyScore").textContent = running || score > 0
+        ? "得分 " + score + " · 最好 " + best
+        : "点屏幕开始 · 最好 " + best;
+    }
+    const cv = $("flappyCanvas");
+    if (cv) {
+      cv.addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); flap(); if (!raf || !running) { if (running) { cancelAnimationFrame(raf); } raf = requestAnimationFrame(step); } });
+    }
+    $("flappyResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); raf = null; reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.flappy = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get flappy() { return { score, best, running, birdY: bird ? bird.y : 0 }; },
+      flappyFlap() { if (!running) { reset(); } flap(); if (!raf) raf = requestAnimationFrame(step); },
+      flappyForceDead() { running = false; if (score > best) { best = score; saveBest(KEY, best); } render(); },
+    }));
+  };
+
+  /* ---- 2. snake2 双人贪吃蛇 ---- */
+  toyInitFns["snake2"] = function () {
+    const W = 320, H = 320, CELL = 16, N = 20;
+    let s1 = null, s2 = null, food = null, running = false, raf = null, tick = 0, winner = "";
+    let lastT = 0, moveAcc = 0, aiMode = true; // 默认单人打 AI
+    function reset() {
+      s1 = { body: [{ x: 5, y: 10 }, { x: 4, y: 10 }, { x: 3, y: 10 }], dir: { x: 1, y: 0 }, color: "#4caf50", score: 0, alive: true, name: "P1" };
+      s2 = { body: [{ x: 14, y: 10 }, { x: 15, y: 10 }, { x: 16, y: 10 }], dir: { x: -1, y: 0 }, color: "#2196f3", score: 0, alive: true, name: "P2" };
+      placeFood(); running = true; winner = ""; tick = 0; lastT = 0; moveAcc = 0;
+      render();
+    }
+    function placeFood() {
+      const occupied = new Set();
+      [...s1.body, ...s2.body].forEach((s) => occupied.add(s.x + "," + s.y));
+      let x, y, tries = 0;
+      do { x = Math.floor(Math.random() * N); y = Math.floor(Math.random() * N); tries++; }
+      while (occupied.has(x + "," + y) && tries < 200);
+      food = { x, y };
+    }
+    function stepSnake(s, other) {
+      if (!s.alive) return;
+      const head = { x: s.body[0].x + s.dir.x, y: s.body[0].y + s.dir.y };
+      // 撞墙
+      if (head.x < 0 || head.x >= N || head.y < 0 || head.y >= N) { s.alive = false; return; }
+      // 撞自己或对方
+      const hitSelf = s.body.some((b, i) => i > 0 && b.x === head.x && b.y === head.y);
+      const hitOther = other.body.some((b) => b.x === head.x && b.y === head.y);
+      if (hitSelf || hitOther) { s.alive = false; return; }
+      // 对头相撞：都死
+      const oh = other.body[0];
+      if (oh && oh.x + other.dir.x === head.x && oh.y + other.dir.y === head.y && other.alive) {
+        // 简化：先动的赢，后动的撞上已移动的头
+      }
+      s.body.unshift(head);
+      if (food && head.x === food.x && head.y === food.y) {
+        s.score++; if (SFX.enabled) SFX.pop(0.4 + s.score * 0.03);
+        placeFood();
+      } else {
+        s.body.pop();
+      }
+    }
+    function step(now) {
+      if (!running) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(100, now - lastT);
+      lastT = now;
+      moveAcc += dt;
+      tick++;
+      if (moveAcc >= 7 * 16.7) { // 每 ~117ms 走一格，与刷新率无关
+        moveAcc = 0;
+        aiThink();
+        stepSnake(s1, s2);
+        stepSnake(s2, s1);
+        if (!s1.alive || !s2.alive) {
+          running = false;
+          winner = !s1.alive && !s2.alive ? "平局！" : !s1.alive ? (aiMode ? "🤖 AI 获胜！" : "P2 🔵 获胜！") : "P1 🟢 获胜！";
+          if (SFX.enabled) SFX.win();
+        }
+        draw(); render();
+      }
+      if (running) raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("snake2Canvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        if (food) { ctx.fillStyle = "#ff5252"; ctx.beginPath(); ctx.arc(food.x * CELL + 8, food.y * CELL + 8, 6, 0, 7); ctx.fill(); }
+        [s1, s2].forEach((s) => {
+          s.body.forEach((b, i) => {
+            ctx.fillStyle = i === 0 ? s.color : s.color + "aa";
+            ctx.fillRect(b.x * CELL + 1, b.y * CELL + 1, CELL - 2, CELL - 2);
+          });
+        });
+        if (!running && winner) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(winner, W / 2, H / 2);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      const p2name = aiMode ? "🤖 AI" : "P2 🔵";
+      $("snake2Score").textContent = winner || ("P1 🟢 " + s1.score + " · " + p2name + " " + s2.score);
+      const mb = $("snake2ModeBtn");
+      if (mb) mb.textContent = aiMode ? "👥 双人对战" : "🤖 单人打AI";
+    }
+    // 简单 AI：贪心追食物，避墙避身
+    function aiThink() {
+      if (!aiMode || !s2.alive || !food) return;
+      const h = s2.body[0];
+      const dirs = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+      let bestD = null, bestScore = -1e9;
+      for (const d of dirs) {
+        if (d.x === -s2.dir.x && d.y === -s2.dir.y) continue; // 不回头
+        const nx = h.x + d.x, ny = h.y + d.y;
+        if (nx < 0 || nx >= N || ny < 0 || ny >= N) continue; // 撞墙
+        if (s2.body.some((b, i) => i > 0 && b.x === nx && b.y === ny)) continue; // 撞自己
+        if (s1.body.some((b) => b.x === nx && b.y === ny)) continue; // 撞对方
+        // 评分：离食物越近越好，离墙/蛇身留空间
+        let sc = -(Math.abs(nx - food.x) + Math.abs(ny - food.y)) * 10;
+        // 周围空格越多越安全
+        let space = 0;
+        for (const dd of dirs) {
+          const ax = nx + dd.x, ay = ny + dd.y;
+          if (ax >= 0 && ax < N && ay >= 0 && ay < N &&
+              !s2.body.some((b) => b.x === ax && b.y === ay) &&
+              !s1.body.some((b) => b.x === ax && b.y === ay)) space++;
+        }
+        sc += space * 3 + Math.random() * 2;
+        if (sc > bestScore) { bestScore = sc; bestD = d; }
+      }
+      if (bestD) s2.dir = bestD;
+      // 无路可走就保持直行（听天由命）
+    }
+    function setDir(s, dx, dy) {
+      if (!running || !s.alive) return;
+      if (s.dir.x === -dx && s.dir.y === -dy) return;
+      if (s.dir.x === dx && s.dir.y === dy) return;
+      s.dir = { x: dx, y: dy };
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function snake2Keys(e) {
+      if ($("toy-snake2") && $("toy-snake2").classList.contains("hidden")) return;
+      const k = e.key.toLowerCase();
+      if (k === "w") setDir(s1, 0, -1);
+      else if (k === "s") setDir(s1, 0, 1);
+      else if (k === "a") setDir(s1, -1, 0);
+      else if (k === "d") setDir(s1, 1, 0);
+      else if (e.key === "ArrowUp") { setDir(s2, 0, -1); e.preventDefault(); }
+      else if (e.key === "ArrowDown") { setDir(s2, 0, 1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { setDir(s2, -1, 0); e.preventDefault(); }
+      else if (e.key === "ArrowRight") { setDir(s2, 1, 0); e.preventDefault(); }
+    });
+    const cv = $("snake2Canvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      SFX.unlock();
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 320 };
+      const x = e.clientX - rect.left;
+      // 左半屏转 P1，右半屏转 P2（顺时针转）
+      const s = x < rect.width / 2 ? s1 : s2;
+      const d = s.dir;
+      setDir(s, -d.y, d.x);
+    });
+    $("snake2ResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    const modeBtn = $("snake2ModeBtn");
+    if (modeBtn) modeBtn.addEventListener("click", () => { aiMode = !aiMode; if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.snake2 = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get snake2() { return { p1: s1.score, p2: s2.score, running, winner }; },
+      snake2SetDir(p, dx, dy) { setDir(p === 1 ? s1 : s2, dx, dy); },
+      snake2Step() { stepSnake(s1, s2); stepSnake(s2, s1); draw(); render(); },
+    }));
+  };
+
+  /* ---- 3. pong 乒乓 ---- */
+  toyInitFns["pong"] = function () {
+    const W = 320, H = 220, PW = 10, PH = 56;
+    let py = H / 2, cy = H / 2, ball = null, ps = 0, cs = 0, running = false, raf = null, diff = 1, over = false;
+    let lastT = 0;
+    const DIFFS = [{ ai: 2.2, label: "简单" }, { ai: 3.6, label: "中等" }, { ai: 5.2, label: "困难" }];
+    function reset() {
+      py = H / 2; cy = H / 2; ps = 0; cs = 0; over = false; lastT = 0;
+      serve(Math.random() < 0.5 ? 1 : -1);
+      running = true; render();
+    }
+    function serve(dir) {
+      const ang = (Math.random() - 0.5) * 0.9;
+      ball = { x: W / 2, y: H / 2, vx: dir * 3.4 * Math.cos(ang), vy: 3.4 * Math.sin(ang) };
+    }
+    function step(now) {
+      if (!running || over) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(50, now - lastT);
+      lastT = now;
+      const k = dt / 16.7;
+      ball.x += ball.vx * k; ball.y += ball.vy * k;
+      if (ball.y < 6) { ball.y = 6; ball.vy *= -1; }
+      if (ball.y > H - 6) { ball.y = H - 6; ball.vy *= -1; }
+      // 玩家挡板
+      if (ball.vx < 0 && ball.x - 6 < 16 + PW && ball.x > 16 && ball.y > py - PH / 2 && ball.y < py + PH / 2) {
+        const rel = (ball.y - py) / (PH / 2);
+        const sp = Math.min(7, Math.hypot(ball.vx, ball.vy) * 1.06);
+        const ang = rel * 0.9;
+        ball.vx = sp * Math.cos(ang); ball.vy = sp * Math.sin(ang);
+        ball.x = 16 + PW + 6;
+        if (SFX.enabled) SFX.click();
+      }
+      // AI 挡板
+      if (ball.vx > 0 && ball.x + 6 > W - 16 - PW && ball.x < W - 16 && ball.y > cy - PH / 2 && ball.y < cy + PH / 2) {
+        const rel = (ball.y - cy) / (PH / 2);
+        const sp = Math.min(7, Math.hypot(ball.vx, ball.vy) * 1.06);
+        const ang = rel * 0.9;
+        ball.vx = -sp * Math.cos(ang); ball.vy = sp * Math.sin(ang);
+        ball.x = W - 16 - PW - 6;
+        if (SFX.enabled) SFX.click();
+      }
+      // AI 移动
+      const target = ball.vx > 0 ? ball.y : H / 2;
+      const d = target - cy;
+      cy += Math.max(-DIFFS[diff].ai * k, Math.min(DIFFS[diff].ai * k, d * 0.12 * k));
+      cy = Math.max(PH / 2, Math.min(H - PH / 2, cy));
+      // 得分
+      if (ball.x < 0) { cs++; if (SFX.enabled) SFX.lose(); checkOver(); if (!over) serve(1); }
+      if (ball.x > W) { ps++; if (SFX.enabled) SFX.pop(0.7); checkOver(); if (!over) serve(-1); }
+      draw(); render();
+      if (!over) raf = requestAnimationFrame(step);
+    }
+    function checkOver() {
+      if (ps >= 5 || cs >= 5) {
+        over = true; running = false;
+        if (SFX.enabled) { if (ps >= 5) SFX.win(); else SFX.lose(); }
+      }
+    }
+    function draw() {
+      const cv = $("pongCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#4f7cff"; ctx.fillRect(16, py - PH / 2, PW, PH);
+        ctx.fillStyle = "#ff5252"; ctx.fillRect(W - 16 - PW, cy - PH / 2, PW, PH);
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 6, 0, 7); ctx.fill();
+        if (over) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(ps >= 5 ? "🎉 你赢了！" : "😅 电脑赢了", W / 2, H / 2);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      $("pongScore").textContent = "你 " + ps + " : " + cs + " 电脑 · " + DIFFS[diff].label + (over ? " · 结束" : "");
+    }
+    const cv = $("pongCanvas");
+    if (cv) {
+      const move = (e) => {
+        const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { top: 0, height: 220 };
+        const y = (e.clientY - rect.top) * 220 / (rect.height || 220);
+        py = Math.max(PH / 2, Math.min(H - PH / 2, y));
+      };
+      cv.addEventListener("pointermove", move);
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } });
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function pongKeys(e) {
+      if ($("toy-pong") && $("toy-pong").classList.contains("hidden")) return;
+      if (e.key === "ArrowUp") { py = Math.max(PH / 2, py - 14); e.preventDefault(); }
+      if (e.key === "ArrowDown") { py = Math.min(H - PH / 2, py + 14); e.preventDefault(); }
+    });
+    $("pongDiffRow").addEventListener("click", (e) => {
+      const d = e.target && e.target.getAttribute && e.target.getAttribute("data-diff");
+      if (d !== null && d !== undefined) { diff = parseInt(d, 10); render(); }
+    });
+    $("pongResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.pong = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get pong() { return { ps, cs, diff, over }; },
+      pongSetDiff(d) { diff = d; render(); },
+      pongStart() { if (!running && !over) { running = true; raf = requestAnimationFrame(step); } },
+    }));
+  };
+
+  /* ---- 4. arkanoid 打砖块2 ---- */
+  toyInitFns["arkanoid"] = function () {
+    const W = 320, H = 400;
+    let paddle = null, balls = [], bricks = [], items = [], lasers = [], level = 1, score = 0, lives = 3, running = false, raf = null, longT = 0;
+    let lastT = 0;
+    const LEVELS = [
+      ["rrrrr", "oooyo", "bbbbb", "ggggg"],
+      ["rbrbr", "yoyoy", "gbgbg", "ororo", "bbbbb"],
+      ["ggggggg", "roooooy", "rbbbbb y".replace(" ", ""), "roooooy", "ggggggg"],
+    ];
+    function buildLevel(lv) {
+      bricks = [];
+      const rows = LEVELS[(lv - 1) % LEVELS.length];
+      const bw = W / rows[0].length;
+      rows.forEach((row, r) => {
+        [...row].forEach((ch, c) => {
+          if (ch === "o") return;
+          const colors = { r: "#e5484d", g: "#4caf50", b: "#4f7cff", y: "#f5c542" };
+          bricks.push({ x: c * bw + 2, y: 30 + r * 22, w: bw - 4, h: 18, color: colors[ch] || "#999", hp: ch === "y" ? 2 : 1 });
+        });
+      });
+    }
+    function reset() {
+      level = 1; score = 0; lives = 3;
+      paddle = { x: W / 2 - 40, w: 80 };
+      balls = [{ x: W / 2, y: H - 40, vx: 2.6, vy: -3.4, r: 6 }];
+      items = []; lasers = []; longT = 0; lastT = 0;
+      buildLevel(1); running = true;
+      render();
+    }
+    function step(now) {
+      if (!running) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(50, now - lastT);
+      lastT = now;
+      const k = dt / 16.7;
+      const pw = longT > 0 ? 120 : 80;
+      if (longT > 0) longT -= dt;
+      // 球
+      for (const b of balls) {
+        b.x += b.vx * k; b.y += b.vy * k;
+        if (b.x < b.r) { b.x = b.r; b.vx *= -1; }
+        if (b.x > W - b.r) { b.x = W - b.r; b.vx *= -1; }
+        if (b.y < b.r) { b.y = b.r; b.vy *= -1; }
+        // 挡板
+        if (b.vy > 0 && b.y + b.r > H - 24 && b.y < H - 10 && b.x > paddle.x && b.x < paddle.x + pw) {
+          const rel = (b.x - (paddle.x + pw / 2)) / (pw / 2);
+          const sp = Math.min(6, Math.hypot(b.vx, b.vy) * 1.02);
+          b.vx = sp * rel * 0.9; b.vy = -Math.abs(sp * Math.cos(rel * 0.7));
+          b.y = H - 24 - b.r;
+          if (SFX.enabled) SFX.click();
+        }
+        // 砖块
+        for (const br of bricks) {
+          if (br.hp <= 0) continue;
+          if (b.x > br.x - b.r && b.x < br.x + br.w + b.r && b.y > br.y - b.r && b.y < br.y + br.h + b.r) {
+            br.hp--;
+            if (br.hp <= 0) {
+              score += 10;
+              if (SFX.enabled) SFX.pop(0.5);
+              if (Math.random() < 0.22) {
+                const kinds = ["multi", "long", "laser"];
+                items.push({ x: br.x + br.w / 2, y: br.y, kind: kinds[Math.floor(Math.random() * 3)], vy: 1.6 });
+              }
+            }
+            b.vy *= -1;
+            break;
+          }
+        }
+      }
+      // 掉球
+      balls = balls.filter((b) => b.y < H + 20);
+      if (balls.length === 0) {
+        lives--;
+        if (SFX.enabled) SFX.lose();
+        if (lives <= 0) { running = false; draw(); render(); return; }
+        balls = [{ x: paddle.x + pw / 2, y: H - 40, vx: 2.6, vy: -3.4, r: 6 }];
+      }
+      // 道具
+      for (const it of items) {
+        it.y += it.vy * k;
+        if (it.y > H - 30 && it.y < H && it.x > paddle.x && it.x < paddle.x + pw) {
+          it.taken = true;
+          if (SFX.enabled) SFX.coin();
+          if (it.kind === "multi") {
+            const nb = [];
+            for (const b of balls) nb.push({ x: b.x, y: b.y, vx: -b.vx, vy: b.vy, r: 6 }, { x: b.x, y: b.y, vx: b.vx * 0.7, vy: -Math.abs(b.vy), r: 6 });
+            balls = balls.concat(nb).slice(0, 8);
+          } else if (it.kind === "long") longT = 10000;
+          else if (it.kind === "laser") {
+            lasers.push({ x: paddle.x + 10 }, { x: paddle.x + pw - 10 });
+            setTimeout(() => { lasers = []; }, 6000);
+          }
+        }
+      }
+      items = items.filter((it) => !it.taken && it.y < H + 10);
+      // 激光
+      // （简化：激光自动打最下方的砖）
+      if (lasers.length && Math.random() < 0.1) {
+        const alive = bricks.filter((b) => b.hp > 0);
+        if (alive.length) {
+          const t = alive[alive.length - 1];
+          t.hp = 0; score += 10;
+          if (SFX.enabled) SFX.shoot();
+        }
+      }
+      // 过关
+      if (bricks.every((b) => b.hp <= 0)) {
+        level++;
+        if (level > 3) { running = false; if (SFX.enabled) SFX.win(); draw(); render(); return; }
+        buildLevel(level);
+        balls = [{ x: W / 2, y: H - 40, vx: 2.6, vy: -3.4, r: 6 }];
+        if (SFX.enabled) SFX.win();
+      }
+      draw(); render();
+      raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("arkanoidCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        for (const br of bricks) {
+          if (br.hp <= 0) continue;
+          ctx.fillStyle = br.color;
+          ctx.fillRect(br.x, br.y, br.w, br.h);
+          if (br.hp > 1) { ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fillRect(br.x, br.y, br.w, 5); }
+        }
+        const pw = longT > 0 ? 120 : 80;
+        ctx.fillStyle = "#4f7cff";
+        ctx.beginPath(); ctx.roundRect(paddle.x, H - 24, pw, 12, 6); ctx.fill();
+        for (const b of balls) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }
+        for (const it of items) {
+          ctx.fillStyle = it.kind === "multi" ? "#4caf50" : it.kind === "long" ? "#f5c542" : "#e5484d";
+          ctx.beginPath(); ctx.arc(it.x, it.y, 8, 0, 7); ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(it.kind === "multi" ? "×" : it.kind === "long" ? "—" : "!", it.x, it.y + 3);
+        }
+        if (!running) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(level > 3 ? "🏆 通关！" : "💀 游戏结束", W / 2, H / 2);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      $("arkanoidScore").textContent = level > 3 ? "🏆 3 关全通！总分 " + score : "第 " + level + " 关 · 分 " + score + " · 命 " + lives;
+    }
+    const cv = $("arkanoidCanvas");
+    if (cv) {
+      const move = (e) => {
+        const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 320 };
+        const x = (e.clientX - rect.left) * 320 / (rect.width || 320);
+        const pw = longT > 0 ? 120 : 80;
+        paddle.x = Math.max(0, Math.min(W - pw, x - pw / 2));
+      };
+      cv.addEventListener("pointermove", move);
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function arkanoidKeys(e) {
+      if ($("toy-arkanoid") && $("toy-arkanoid").classList.contains("hidden")) return;
+      const pw = longT > 0 ? 120 : 80;
+      if (e.key === "ArrowLeft") paddle.x = Math.max(0, paddle.x - 18);
+      if (e.key === "ArrowRight") paddle.x = Math.min(W - pw, paddle.x + 18);
+    });
+    $("arkanoidResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.arkanoid = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get arkanoid() { return { level, score, lives, bricks: bricks.filter((b) => b.hp > 0).length, running }; },
+      arkanoidStart() { if (!running && lives > 0 && level <= 3) { running = true; raf = requestAnimationFrame(step); } },
+    }));
+  };
+
+  /* ---- 5. mines2 大扫雷 ---- */
+  toyInitFns["mines2"] = function () {
+    const N = 16, MINES = 40;
+    const KEY = "dorm-toybox-mines2-best-v1";
+    let board = [], revealed = 0, flags = 0, over = false, win = false, flagMode = false, startTime = 0;
+    let best = lsGet(KEY, "");
+    function reset() {
+      board = [];
+      for (let i = 0; i < N * N; i++) board.push({ mine: false, open: false, flag: false, num: 0 });
+      // 布雷
+      let placed = 0;
+      while (placed < MINES) {
+        const i = Math.floor(Math.random() * N * N);
+        if (!board[i].mine) { board[i].mine = true; placed++; }
+      }
+      // 数字
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (board[y * N + x].mine) continue;
+        let c = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < N && ny >= 0 && ny < N && board[ny * N + nx].mine) c++;
+        }
+        board[y * N + x].num = c;
+      }
+      revealed = 0; flags = 0; over = false; win = false; firstOpen = true;
+      startTime = Date.now();
+      draw();
+    }
+    let firstOpen = true;
+    function open(x, y) {
+      if (over || win) return;
+      const i = y * N + x;
+      const c = board[i];
+      if (c.open || c.flag) return;
+      // 首点保护：第一次点到雷就把雷挪走，保证开局不死
+      if (firstOpen && c.mine) {
+        c.mine = false;
+        // 在别处补一颗雷
+        for (let t = 0; t < 500; t++) {
+          const j = Math.floor(Math.random() * N * N);
+          if (!board[j].mine && j !== i) { board[j].mine = true; break; }
+        }
+        // 重算数字
+        for (let yy = 0; yy < N; yy++) for (let xx = 0; xx < N; xx++) {
+          if (board[yy * N + xx].mine) continue;
+          let cc = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const nx = xx + dx, ny = yy + dy;
+            if (nx >= 0 && nx < N && ny >= 0 && ny < N && board[ny * N + nx].mine) cc++;
+          }
+          board[yy * N + xx].num = cc;
+        }
+      }
+      firstOpen = false;
+      if (c.mine) {
+        over = true; c.open = true;
+        if (SFX.enabled) SFX.lose();
+        draw(); render(); return;
+      }
+      //  flood fill
+      const stack = [[x, y]];
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        const ci = cy * N + cx;
+        const cell = board[ci];
+        if (cell.open || cell.flag || cell.mine) continue;
+        cell.open = true; revealed++;
+        if (SFX.enabled && revealed % 5 === 0) SFX.click();
+        if (cell.num === 0) {
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx >= 0 && nx < N && ny >= 0 && ny < N && !board[ny * N + nx].open) stack.push([nx, ny]);
+          }
+        }
+      }
+      if (revealed === N * N - MINES) {
+        win = true;
+        const secs = Math.floor((Date.now() - startTime) / 1000);
+        if (!best || secs < parseInt(best, 10)) { best = String(secs); lsSet(KEY, best); }
+        if (SFX.enabled) SFX.win();
+      }
+      draw(); render();
+    }
+    function toggleFlag(x, y) {
+      if (over || win) return;
+      const c = board[y * N + x];
+      if (c.open) return;
+      c.flag = !c.flag;
+      flags += c.flag ? 1 : -1;
+      if (SFX.enabled) SFX.click();
+      draw(); render();
+    }
+    function draw() {
+      const bd = $("mines2Board");
+      if (!bd) return;
+      bd.innerHTML = "";
+      bd.style.cssText = "display:grid;grid-template-columns:repeat(16,1fr);gap:1px;max-width:340px;margin:0 auto;";
+      board.forEach((c, i) => {
+        const d = document.createElement("div");
+        const x = i % N, y = Math.floor(i / N);
+        d.style.cssText = "aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;border-radius:2px;" +
+          (c.open ? (c.mine ? "background:#e5484d;color:#fff;" : "background:#2a2f42;color:#fff;") : "background:#1e2230;");
+        if (c.open) d.textContent = c.mine ? "💣" : (c.num > 0 ? c.num : "");
+        else if (c.flag) d.textContent = "🚩";
+        d.addEventListener("click", () => { SFX.unlock(); flagMode ? toggleFlag(x, y) : open(x, y); });
+        d.addEventListener("contextmenu", (e) => { e.preventDefault(); toggleFlag(x, y); });
+        let pressT = null;
+        d.addEventListener("pointerdown", () => { pressT = setTimeout(() => { toggleFlag(x, y); pressT = null; }, 450); });
+        d.addEventListener("pointerup", () => { if (pressT) clearTimeout(pressT); });
+        bd.appendChild(d);
+      });
+      if (over || win) {
+        board.forEach((c, i) => {
+          if (c.mine && !c.open) {
+            const d = bd.children[i];
+            if (d && !c.flag) d.textContent = "💣";
+          }
+        });
+      }
+    }
+    function render() {
+      const secs = Math.floor((Date.now() - startTime) / 1000);
+      $("mines2Score").textContent = win ? "🏆 赢了！用时 " + secs + "s · 最好 " + (best ? best + "s" : "--")
+        : over ? "💥 踩雷了！点重开再来"
+        : "🚩 剩 " + (MINES - flags) + " · 已开 " + revealed + "/" + (N * N - MINES) + " · 最好 " + (best ? best + "s" : "--");
+      $("mines2FlagBtn").textContent = "🚩 插旗模式：" + (flagMode ? "开" : "关");
+    }
+    $("mines2FlagBtn").addEventListener("click", () => { flagMode = !flagMode; render(); });
+    $("mines2ResetBtn").addEventListener("click", reset);
+    reset(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get mines2() { return { revealed, flags, over, win, mines: MINES, n: N, best }; },
+      mines2Open(x, y) { open(x, y); },
+      mines2Flag(x, y) { toggleFlag(x, y); },
+    }));
+  };
+  /* ---- 6. chess 象棋（简化） ---- */
+  toyInitFns["chess"] = function () {
+    // 9x10 棋盘，简化规则：车/马/炮/兵/将/士/象
+    const W = 320, H = 352, CW = 320 / 9, CH = 320 / 10;
+    let board = [], sel = null, turn = "red", over = false, msg = "";
+    const INIT = [
+      ["bR", "bN", "bB", "bA", "bK", "bA", "bB", "bN", "bR"],
+      [null, null, null, null, null, null, null, null, null],
+      [null, "bC", null, null, null, null, null, "bC", null],
+      ["bP", null, "bP", null, "bP", null, "bP", null, "bP"],
+      [null, null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null],
+      ["rP", null, "rP", null, "rP", null, "rP", null, "rP"],
+      [null, "rC", null, null, null, null, null, "rC", null],
+      [null, null, null, null, null, null, null, null, null],
+      ["rR", "rN", "rB", "rA", "rK", "rA", "rB", "rN", "rR"],
+    ];
+    const NAMES = { K: "将", A: "士", B: "象", R: "车", N: "马", C: "炮", P: "兵" };
+    function reset() {
+      board = INIT.map((r) => r.slice());
+      sel = null; turn = "red"; over = false; msg = "轮到你走（红）";
+      draw(); render();
+    }
+    function inPalace(x, y, red) {
+      return x >= 3 && x <= 5 && (red ? y >= 7 : y <= 2);
+    }
+    function moves(x, y) {
+      const p = board[y][x];
+      if (!p) return [];
+      const red = p[0] === "r", t = p[1], out = [];
+      const add = (nx, ny) => {
+        if (nx < 0 || nx > 8 || ny < 0 || ny > 9) return;
+        const q = board[ny][nx];
+        if (!q || (q[0] === "r") !== red) out.push([nx, ny]);
+      };
+      const addEmpty = (nx, ny) => {
+        if (nx < 0 || nx > 8 || ny < 0 || ny > 9) return false;
+        if (!board[ny][nx]) { out.push([nx, ny]); return true; }
+        return false;
+      };
+      if (t === "R") {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          let nx = x + dx, ny = y + dy;
+          while (nx >= 0 && nx <= 8 && ny >= 0 && ny <= 9) {
+            const q = board[ny][nx];
+            if (!q) out.push([nx, ny]);
+            else { if ((q[0] === "r") !== red) out.push([nx, ny]); break; }
+            nx += dx; ny += dy;
+          }
+        }
+      } else if (t === "N") {
+        for (const [dx, dy, lx, ly] of [[1, 2, 0, 1], [-1, 2, 0, 1], [1, -2, 0, -1], [-1, -2, 0, -1], [2, 1, 1, 0], [2, -1, 1, 0], [-2, 1, -1, 0], [-2, -1, -1, 0]]) {
+          if (board[y + ly] && board[y + ly][x + lx]) continue; // 蹩腿
+          add(x + dx, y + dy);
+        }
+      } else if (t === "B") {
+        for (const [dx, dy] of [[2, 2], [-2, 2], [2, -2], [-2, -2]]) {
+          const mx = x + dx / 2, my = y + dy / 2;
+          if (board[my] && board[my][mx]) continue; // 塞象眼
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx > 8 || ny < 0 || ny > 9) continue;
+          if (red && ny < 5) continue; if (!red && ny > 4) continue; // 不过河
+          add(nx, ny);
+        }
+      } else if (t === "A") {
+        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (inPalace(nx, ny, red)) add(nx, ny);
+        }
+      } else if (t === "K") {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (inPalace(nx, ny, red)) add(nx, ny);
+        }
+      } else if (t === "P") {
+        const fwd = red ? -1 : 1;
+        addEmpty(x, y + fwd);
+        const crossed = red ? y <= 4 : y >= 5;
+        if (crossed) { addEmpty(x + 1, y); addEmpty(x - 1, y); }
+        // 吃子
+        for (const [dx, dy] of [[0, fwd], [1, 0], [-1, 0]]) {
+          if (dy === 0 && !crossed) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx > 8 || ny < 0 || ny > 9) continue;
+          const q = board[ny][nx];
+          if (q && (q[0] === "r") !== red) out.push([nx, ny]);
+        }
+      } else if (t === "C") {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          let nx = x + dx, ny = y + dy, jumped = false;
+          while (nx >= 0 && nx <= 8 && ny >= 0 && ny <= 9) {
+            const q = board[ny][nx];
+            if (!jumped) {
+              if (!q) out.push([nx, ny]);
+              else jumped = true;
+            } else {
+              if (q) { if ((q[0] === "r") !== red) out.push([nx, ny]); break; }
+            }
+            nx += dx; ny += dy;
+          }
+        }
+      }
+      return out;
+    }
+    function kingsFace() {
+      // 将帅不能照面：同一列且中间无子
+      let rk = null, bk = null;
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+        const p = board[y][x];
+        if (p === "rK") rk = [x, y];
+        if (p === "bK") bk = [x, y];
+      }
+      if (!rk || !bk || rk[0] !== bk[0]) return false;
+      const x = rk[0], y1 = Math.min(rk[1], bk[1]), y2 = Math.max(rk[1], bk[1]);
+      for (let y = y1 + 1; y < y2; y++) if (board[y][x]) return false;
+      return true;
+    }
+    function doMove(fx, fy, tx, ty) {
+      const p = board[fy][fx];
+      const target = board[ty][tx];
+      // 试走：检查是否导致将帅照面
+      board[ty][tx] = p; board[fy][fx] = null;
+      if (kingsFace()) {
+        board[fy][fx] = p; board[ty][tx] = target; // 撤销
+        return "illegal";
+      }
+      if (SFX.enabled) SFX.click();
+      if (target && target[1] === "K") {
+        over = true;
+        msg = target[0] === "b" ? "🎉 你赢了！" : "😅 AI 赢了";
+        if (SFX.enabled) { if (target[0] === "b") SFX.win(); else SFX.lose(); }
+      }
+      return target;
+    }
+    function aiMove() {
+      if (over || turn !== "black") return;
+      const all = [];
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+        const p = board[y][x];
+        if (p && p[0] === "b") {
+          for (const [tx, ty] of moves(x, y)) {
+            const t = board[ty][tx];
+            all.push({ fx: x, fy: y, tx, ty, cap: t ? 1 : 0, val: t ? { K: 99, R: 9, N: 4, C: 4, B: 2, A: 2, P: 1 }[t[1]] : 0 });
+          }
+        }
+      }
+      if (!all.length) { over = true; msg = "🎉 你赢了！AI 无棋可走"; return; }
+      // 吃子优先；无吃子时偏好向前走（黑方 y 增大为前进），带小随机
+      for (const m of all) m.score = m.val * 10 + Math.max(-2, Math.min(2, m.ty - m.fy)) + Math.random() * 2;
+      all.sort((a, b) => b.score - a.score);
+      const pick = all[0];
+      const r = doMove(pick.fx, pick.fy, pick.tx, pick.ty);
+      if (r === "illegal") {
+        // AI 误走照面，换个走法
+        const alt = all.find((m) => { const t = board[m.ty][m.tx]; board[m.ty][m.tx] = board[m.fy][m.fx]; board[m.fy][m.fx] = null; const bad = kingsFace(); board[m.fy][m.fx] = board[m.ty][m.tx]; board[m.ty][m.tx] = t; return !bad; });
+        if (alt) doMove(alt.fx, alt.fy, alt.tx, alt.ty);
+      }
+      turn = "red";
+      if (!over) msg = "轮到你走（红）";
+      draw(); render();
+    }
+    function onTap(x, y) {
+      if (over || turn !== "red") return;
+      SFX.unlock();
+      if (sel) {
+        const ms = moves(sel.x, sel.y);
+        if (ms.some(([mx, my]) => mx === x && my === y)) {
+          const r = doMove(sel.x, sel.y, x, y);
+          if (r === "illegal") { msg = "⚠️ 将帅不能照面！"; draw(); render(); return; }
+          sel = null;
+          if (!over) { turn = "black"; msg = "AI 思考中…"; draw(); render(); setTimeout(aiMove, 500); return; }
+          draw(); render(); return;
+        }
+      }
+      const p = board[y] && board[y][x];
+      if (p && p[0] === "r") { sel = { x, y }; if (SFX.enabled) SFX.click(); }
+      else sel = null;
+      draw(); render();
+    }
+    function draw() {
+      const cv = $("chessCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#e8c98a"; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = "#8b5a2b"; ctx.lineWidth = 1;
+        for (let i = 0; i < 10; i++) {
+          ctx.beginPath(); ctx.moveTo(CW / 2, i * CH + CH / 2); ctx.lineTo(W - CW / 2, i * CH + CH / 2); ctx.stroke();
+        }
+        for (let i = 0; i < 9; i++) {
+          ctx.beginPath(); ctx.moveTo(i * CW + CW / 2, CH / 2);
+          ctx.lineTo(i * CW + CW / 2, 4 * CH + CH / 2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(i * CW + CW / 2, 5 * CH + CH / 2);
+          ctx.lineTo(i * CW + CW / 2, 9 * CH + CH / 2); ctx.stroke();
+        }
+        // 楚河汉界
+        ctx.fillStyle = "#8b5a2b"; ctx.font = "14px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("楚 河            汉 界", W / 2, 5 * CH - 4);
+        // 九宫斜线
+        for (const [y0, y1] of [[0, 2], [7, 9]]) {
+          for (const [x0, x1] of [[3, 5]]) {
+            ctx.beginPath(); ctx.moveTo(x0 * CW + CW / 2, y0 * CH + CH / 2); ctx.lineTo(x1 * CW + CW / 2, y1 * CH + CH / 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x1 * CW + CW / 2, y0 * CH + CH / 2); ctx.lineTo(x0 * CW + CW / 2, y1 * CH + CH / 2); ctx.stroke();
+          }
+        }
+        const ms = sel ? moves(sel.x, sel.y) : [];
+        for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+          const p = board[y][x];
+          const cx = x * CW + CW / 2, cy = y * CH + CH / 2;
+          if (ms.some(([mx, my]) => mx === x && my === y)) {
+            ctx.fillStyle = "rgba(79,124,255,0.35)";
+            ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.fill();
+          }
+          if (!p) continue;
+          const red = p[0] === "r";
+          if (sel && sel.x === x && sel.y === y) {
+            ctx.fillStyle = "rgba(79,124,255,0.5)";
+            ctx.beginPath(); ctx.arc(cx, cy, 15, 0, 7); ctx.fill();
+          }
+          ctx.fillStyle = "#f5e6c8";
+          ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill();
+          ctx.strokeStyle = red ? "#c0392b" : "#222"; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = red ? "#c0392b" : "#222";
+          ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(NAMES[p[1]], cx, cy + 1);
+        }
+        ctx.textBaseline = "alphabetic";
+      } catch (e) {}
+    }
+    function render() { $("chessMsg").textContent = msg; }
+    const cv = $("chessCanvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 352 };
+      const x = Math.floor((e.clientX - rect.left) * 9 / (rect.width || 320));
+      const y = Math.floor((e.clientY - rect.top) * 10 / (rect.height || 352));
+      if (x >= 0 && x < 9 && y >= 0 && y < 10) onTap(x, y);
+    });
+    $("chessResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get chess() { return { turn, over, msg }; },
+      chessMove(fx, fy, tx, ty) {
+        const ms = moves(fx, fy);
+        if (ms.some(([mx, my]) => mx === tx && my === ty)) { doMove(fx, fy, tx, ty); turn = "black"; draw(); render(); return true; }
+        return false;
+      },
+      chessAi() { aiMove(); },
+    }));
+  };
+
+  /* ---- 7. go 围棋9路 ---- */
+  toyInitFns["go"] = function () {
+    const N = 9, W = 320, CELL = 320 / 9;
+    let board = [], turn = "black", over = false, passes = 0, capB = 0, capW = 0;
+    function reset() {
+      board = Array.from({ length: N }, () => Array(N).fill(null));
+      turn = "black"; over = false; passes = 0; capB = 0; capW = 0;
+      draw(); render();
+    }
+    function neighbors(x, y) {
+      const out = [];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < N && ny >= 0 && ny < N) out.push([nx, ny]);
+      }
+      return out;
+    }
+    function group(x, y, color, seen) {
+      seen = seen || new Set();
+      const key = x + "," + y;
+      if (seen.has(key) || board[y][x] !== color) return { stones: [], libs: 0 };
+      seen.add(key);
+      let stones = [[x, y]], libs = 0;
+      const libSet = new Set();
+      const stack = [[x, y]];
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        for (const [nx, ny] of neighbors(cx, cy)) {
+          const nk = nx + "," + ny;
+          if (board[ny][nx] === null) libSet.add(nk);
+          else if (board[ny][nx] === color && !seen.has(nk)) { seen.add(nk); stones.push([nx, ny]); stack.push([nx, ny]); }
+        }
+      }
+      return { stones, libs: libSet.size };
+    }
+    function play(x, y, color) {
+      if (over || board[y][x]) return false;
+      board[y][x] = color;
+      const opp = color === "black" ? "white" : "black";
+      let captured = 0;
+      for (const [nx, ny] of neighbors(x, y)) {
+        if (board[ny][nx] === opp) {
+          const g = group(nx, ny, opp);
+          if (g.libs === 0) {
+            for (const [sx, sy] of g.stones) board[sy][sx] = null;
+            captured += g.stones.length;
+          }
+        }
+      }
+      // 自杀手不允许
+      const self = group(x, y, color);
+      if (self.libs === 0 && captured === 0) { board[y][x] = null; return false; }
+      if (color === "black") capB += captured; else capW += captured;
+      if (SFX.enabled) SFX.click();
+      return true;
+    }
+    function aiMove() {
+      if (over) return;
+      // 简单 AI：找有气的空点，优先靠近已有棋子
+      const cands = [];
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (board[y][x]) continue;
+        let near = 0;
+        for (const [nx, ny] of neighbors(x, y)) if (board[ny][nx]) near++;
+        // 试下
+        board[y][x] = "white";
+        const opp = "black";
+        let ok = true, cap = 0;
+        for (const [nx, ny] of neighbors(x, y)) {
+          if (board[ny][nx] === opp) {
+            const g = group(nx, ny, opp);
+            if (g.libs === 0) cap += g.stones.length;
+          }
+        }
+        const self = group(x, y, "white");
+        if (self.libs === 0 && cap === 0) ok = false;
+        board[y][x] = null;
+        if (ok) cands.push({ x, y, score: near * 2 + Math.random() });
+      }
+      if (!cands.length) { doPass(); return; }
+      cands.sort((a, b) => b.score - a.score);
+      const p = cands[0];
+      play(p.x, p.y, "white");
+      passes = 0; turn = "black";
+      draw(); render();
+    }
+    function doPass() {
+      passes++;
+      if (SFX.enabled) SFX.click();
+      if (passes >= 2) { finish(); return; }
+      turn = turn === "black" ? "white" : "black";
+      if (turn === "white") setTimeout(() => { if (!over) aiMove(); }, 400);
+      render();
+    }
+    function finish() {
+      over = true;
+      // 中国规则数子：子（棋盘上活子）+ 空（围住的空）+ 贴目 3.75
+      let b = 0, w = 3.75;
+      const seen = new Set();
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const v = board[y][x];
+        if (v === "black") b++;
+        else if (v === "white") w++;
+        else if (!seen.has(x + "," + y)) {
+          const stack = [[x, y]], cells = [];
+          const borders = new Set();
+          seen.add(x + "," + y);
+          while (stack.length) {
+            const [cx, cy] = stack.pop();
+            cells.push([cx, cy]);
+            for (const [nx, ny] of neighbors(cx, cy)) {
+              const nv = board[ny][nx];
+              if (nv === null) { const k = nx + "," + ny; if (!seen.has(k)) { seen.add(k); stack.push([nx, ny]); } }
+              else borders.add(nv);
+            }
+          }
+          if (borders.size === 1) { // 单色包围才是领地
+            if (borders.has("black")) b += cells.length;
+            else w += cells.length;
+          }
+        }
+      }
+      const msg = b > w ? "🎉 黑胜 " + b.toFixed(1) + " : " + w.toFixed(1) : "😅 白胜 " + w.toFixed(1) + " : " + b.toFixed(1);
+      $("goScore").textContent = msg;
+      if (SFX.enabled) { if (b > w) SFX.win(); else SFX.lose(); }
+    }
+    function onTap(x, y) {
+      if (over || turn !== "black") return;
+      SFX.unlock();
+      if (play(x, y, "black")) {
+        passes = 0; turn = "white";
+        draw(); render();
+        setTimeout(() => { if (!over) aiMove(); }, 400);
+      }
+    }
+    function draw() {
+      const cv = $("goCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#e8c98a"; ctx.fillRect(0, 0, W, W);
+        ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 1;
+        for (let i = 0; i < N; i++) {
+          const p = CELL / 2 + i * CELL;
+          ctx.beginPath(); ctx.moveTo(CELL / 2, p); ctx.lineTo(W - CELL / 2, p); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(p, CELL / 2); ctx.lineTo(p, W - CELL / 2); ctx.stroke();
+        }
+        // 星位
+        for (const [sx, sy] of [[2, 2], [6, 2], [2, 6], [6, 6], [4, 4]]) {
+          ctx.fillStyle = "#5a3a1a";
+          ctx.beginPath(); ctx.arc(CELL / 2 + sx * CELL, CELL / 2 + sy * CELL, 3, 0, 7); ctx.fill();
+        }
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          const s = board[y][x];
+          if (!s) continue;
+          const cx = CELL / 2 + x * CELL, cy = CELL / 2 + y * CELL;
+          const g = ctx.createRadialGradient ? ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 13) : null;
+          if (g && s === "black") { g.addColorStop(0, "#666"); g.addColorStop(1, "#111"); ctx.fillStyle = g; }
+          else if (g) { g.addColorStop(0, "#fff"); g.addColorStop(1, "#ccc"); ctx.fillStyle = g; }
+          else ctx.fillStyle = s === "black" ? "#111" : "#fff";
+          ctx.beginPath(); ctx.arc(cx, cy, 13, 0, 7); ctx.fill();
+          ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.stroke();
+        }
+      } catch (e) {}
+    }
+    function render() {
+      if (!over) $("goScore").textContent = "轮到" + (turn === "black" ? "黑（你）" : "白（AI）") + " · 提子 黑" + capB + " 白" + capW;
+    }
+    const cv = $("goCanvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 320 };
+      const x = Math.round((e.clientX - rect.left) * 9 / (rect.width || 320) - 0.5);
+      const y = Math.round((e.clientY - rect.top) * 9 / (rect.height || 320) - 0.5);
+      if (x >= 0 && x < N && y >= 0 && y < N) onTap(x, y);
+    });
+    $("goPassBtn").addEventListener("click", doPass);
+    $("goResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get go() { return { turn, over, capB, capW }; },
+      goPlay(x, y) { return play(x, y, "black"); },
+    }));
+  };
+
+  /* ---- 8. uno ---- */
+  toyInitFns["uno"] = function () {
+    const COLORS = ["red", "yellow", "green", "blue"];
+    const CNAMES = { red: "红", yellow: "黄", green: "绿", blue: "蓝" };
+    let deck = [], pHand = [], aiHand = [], top = null, turn = "p", over = false, drawCount = 0;
+    let pile = [], pendingWild = null;
+    // 摸牌：牌堆空了就重洗弃牌堆；都没了就给一张变色（保底不崩）
+    function drawCard() {
+      if (deck.length === 0 && pile.length > 0) deck = shuffle(pile.splice(0));
+      return deck.pop() || { c: "wild", n: "wild" };
+    }
+    function recycleTop() {
+      if (!top) return;
+      if (top.n === "wild" || top.n === "+4") top.c = "wild"; // 变色牌恢复原样再进弃牌堆
+      pile.push(top);
+    }
+    function buildDeck() {
+      const d = [];
+      for (const c of COLORS) {
+        d.push({ c, n: "0" });
+        for (let n = 1; n <= 9; n++) { d.push({ c, n: String(n) }); d.push({ c, n: String(n) }); }
+        for (const s of ["+2", "skip", "rev"]) { d.push({ c, n: s }); d.push({ c, n: s }); }
+      }
+      for (let i = 0; i < 4; i++) { d.push({ c: "wild", n: "wild" }); d.push({ c: "wild", n: "+4" }); }
+      return shuffle(d);
+    }
+    function reset() {
+      deck = buildDeck(); pile = []; pendingWild = null;
+      pHand = []; aiHand = [];
+      for (let i = 0; i < 7; i++) { pHand.push(drawCard()); aiHand.push(drawCard()); }
+      let guard = 0;
+      do { top = drawCard(); guard++; } while (top.c === "wild" && guard < 50);
+      turn = "p"; over = false; drawCount = 0;
+      draw(); render("轮到你出牌");
+    }
+    function canPlay(card) {
+      if (card.c === "wild") return true;
+      return card.c === top.c || card.n === top.n;
+    }
+    function applyEffect(card, byAI, color) {
+      if (card.n === "+2") {
+        const t = byAI ? pHand : aiHand;
+        t.push(drawCard()); t.push(drawCard());
+        return true; // 跳过对方
+      }
+      if (card.n === "+4") {
+        const t = byAI ? pHand : aiHand;
+        for (let i = 0; i < 4; i++) t.push(drawCard());
+        card.c = byAI ? pickAiColor() : (color || "red");
+        return true;
+      }
+      if (card.c === "wild") { card.c = byAI ? pickAiColor() : (color || "red"); return false; }
+      if (card.n === "skip" || card.n === "rev") return true;
+      return false;
+    }
+    function pickAiColor() {
+      const cnt = {};
+      for (const c of aiHand) if (c.c !== "wild") cnt[c.c] = (cnt[c.c] || 0) + 1;
+      let best = "red", bn = -1;
+      for (const c of COLORS) if ((cnt[c] || 0) > bn) { bn = cnt[c] || 0; best = c; }
+      return best;
+    }
+    function promptColor() {
+      // 简化：选手牌最多的颜色
+      const cnt = {};
+      for (const c of pHand) if (c.c !== "wild") cnt[c.c] = (cnt[c.c] || 0) + 1;
+      let best = "red", bn = -1;
+      for (const c of COLORS) if ((cnt[c] || 0) > bn) { bn = cnt[c] || 0; best = c; }
+      return best;
+    }
+    function pPlay(i, auto) {
+      if (over || turn !== "p") return;
+      SFX.unlock();
+      const card = pHand[i];
+      if (!card || !canPlay(card)) { render("这张不能出！颜色或数字要一样"); return; }
+      if (card.c === "wild" && !auto) { pendingWild = { card, i }; showColorPicker(); return; }
+      doPPlay(i, card, auto ? promptColor() : null);
+    }
+    function showColorPicker() {
+      const t = $("unoTop");
+      if (t) {
+        t.innerHTML = "";
+        const label = document.createElement("div");
+        label.textContent = "变色牌！选一个颜色：";
+        label.style.cssText = "text-align:center;color:#fff;margin-bottom:6px;font-size:14px;";
+        t.appendChild(label);
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "display:flex;gap:8px;justify-content:center;";
+        const bgs = { red: "#e5484d", yellow: "#f5c542", green: "#4caf50", blue: "#4f7cff" };
+        ["red", "yellow", "green", "blue"].forEach((c) => {
+          const b = document.createElement("button");
+          b.className = "btn small";
+          b.textContent = CNAMES[c];
+          try { b.style.cssText = "background:" + bgs[c] + ";color:#fff;min-width:60px;"; } catch (e) {}
+          b.addEventListener("click", () => unoPickColor(c));
+          wrap.appendChild(b);
+        });
+        t.appendChild(wrap);
+      }
+      render("打出变色牌，选颜色！");
+    }
+    function unoPickColor(c) {
+      const pw = pendingWild; pendingWild = null;
+      if (pw && !over && turn === "p") doPPlay(pw.i, pw.card, c);
+    }
+    function doPPlay(i, card, color) {
+      pHand.splice(i, 1);
+      recycleTop();
+      top = card;
+      if (SFX.enabled) SFX.pop(0.6);
+      if (pHand.length === 0) { gameOver("p"); return; }
+      const skip = applyEffect(card, false, color);
+      draw(); render(skip ? "AI 被跳过，继续你出！" : "AI 出牌中…");
+      if (!skip) { turn = "ai"; setTimeout(aiPlay, 700); }
+      else draw();
+    }
+    function aiPlay() {
+      if (over) return;
+      // 策略：优先出普通牌，留 wild/+4 等关键时刻；对手剩牌少时优先出 +2/+4
+      let idx = -1, bestScore = -1e9;
+      for (let i = 0; i < aiHand.length; i++) {
+        if (!canPlay(aiHand[i])) continue;
+        const c = aiHand[i];
+        let sc = Math.random() * 2;
+        if (c.c !== "wild") sc += 10; // 先出普通牌
+        if ((c.n === "+2" || c.n === "+4") && pHand.length <= 3) sc += 15; // 对手牌少时砸功能牌
+        if (c.n === "skip" || c.n === "rev") sc += 5;
+        if (aiHand.length <= 2 && c.c === "wild") sc += 20; // 只剩两张时用 wild 终结
+        if (sc > bestScore) { bestScore = sc; idx = i; }
+      }
+      if (idx === -1) {
+        aiHand.push(drawCard());
+        idx = aiHand.findIndex(canPlay);
+        if (idx === -1) { turn = "p"; draw(); render("AI 摸了牌没出，轮到你"); return; }
+      }
+      const card = aiHand.splice(idx, 1)[0];
+      recycleTop();
+      top = card;
+      if (SFX.enabled) SFX.click();
+      if (aiHand.length === 0) { gameOver("ai"); return; }
+      if (aiHand.length === 1) render("⚠️ AI 只剩 1 张了！");
+      const skip = applyEffect(card, true);
+      draw();
+      if (skip) { render("你被跳过了，AI 继续！"); setTimeout(aiPlay, 700); }
+      else { turn = "p"; render("轮到你出牌"); }
+    }
+    function gameOver(winner) {
+      over = true;
+      if (SFX.enabled) { if (winner === "p") SFX.win(); else SFX.lose(); }
+      draw(); render(winner === "p" ? "🎉 你赢了！" : "😅 AI 赢了");
+    }
+    function cardHTML(card, i, clickable) {
+      const bg = card.c === "wild" ? "linear-gradient(135deg,#e5484d,#f5c542,#4caf50,#4f7cff)"
+        : { red: "#e5484d", yellow: "#f5c542", green: "#4caf50", blue: "#4f7cff" }[card.c];
+      const label = card.n === "wild" ? "变色" : card.n === "+4" ? "+4" : card.n === "+2" ? "+2" : card.n === "skip" ? "禁" : card.n === "rev" ? "反" : card.n;
+      return '<div class="uno-card" data-i="' + i + '" style="background:' + bg + ';' + (clickable ? "cursor:pointer;" : "") + '">' + label + "</div>";
+    }
+    function draw() {
+      const t = $("unoTop");
+      if (t) {
+        t.innerHTML = '<div class="uno-row"><span>顶牌：</span>' + cardHTML(top, -1, false) + '<span class="uno-count">AI ' + aiHand.length + " 张 · 牌堆 " + deck.length + " 张</span></div>";
+      }
+      const h = $("unoHand");
+      if (h) {
+        h.innerHTML = "";
+        pHand.forEach((c, i) => {
+          const el = document.createElement("div");
+          const bg = c.c === "wild" ? "linear-gradient(135deg,#e5484d,#f5c542,#4caf50,#4f7cff)"
+            : { red: "#e5484d", yellow: "#f5c542", green: "#4caf50", blue: "#4f7cff" }[c.c];
+          const label = c.n === "wild" ? "变色" : c.n === "+4" ? "+4" : c.n === "+2" ? "+2" : c.n === "skip" ? "禁" : c.n === "rev" ? "反" : c.n;
+          el.className = "uno-card";
+          el.textContent = label;
+          try {
+            el.style.cssText = "background:" + bg + ";width:44px;height:64px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:16px;" + (turn === "p" && !over ? "cursor:pointer;" : "opacity:0.7;");
+          } catch (e) {}
+          if (turn === "p" && !over) el.addEventListener("click", () => pPlay(i));
+          h.appendChild(el);
+        });
+      }
+    }
+    function render(m) { $("unoMsg").textContent = m + "（你 " + pHand.length + " 张）"; }
+    $("unoDrawBtn").addEventListener("click", () => {
+      if (over || turn !== "p") return;
+      SFX.unlock();
+      pendingWild = null;
+      pHand.push(drawCard());
+      if (SFX.enabled) SFX.click();
+      draw(); render("摸了牌，轮到 AI");
+      turn = "ai"; setTimeout(aiPlay, 700);
+    });
+    $("unoResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get uno() { return { p: pHand.length, ai: aiHand.length, turn, over, top: top.n }; },
+      unoPlay(i) { pPlay(i, true); },
+      unoPickColor(c) { unoPickColor(c); },
+      unoHand() { return pHand.map((c) => c.c + ":" + c.n); },
+      unoPending() { return !!pendingWild; },
+    }));
+  };
+
+  /* ---- 9. mahjong 简化麻将 ---- */
+  toyInitFns["mahjong"] = function () {
+    // 筒=0-8, 条=9-17, 万=18-26
+    const SUITS = ["筒", "条", "万"];
+    let wall = [], hand = [], over = false, msg = "";
+    function tileName(t) { return SUITS[Math.floor(t / 9)] + ((t % 9) + 1); }
+    function reset() {
+      wall = [];
+      for (let t = 0; t < 27; t++) for (let k = 0; k < 4; k++) wall.push(t);
+      shuffle(wall);
+      hand = [];
+      for (let i = 0; i < 13; i++) hand.push(wall.pop());
+      sortHand();
+      over = false;
+      // 开局摸一张
+      hand.push(wall.pop()); sortHand();
+      msg = checkWin() ? "🎉 天胡！" : "轮到你打牌（点一张打出）";
+      if (checkWin()) { over = true; if (SFX.enabled) SFX.win(); }
+      draw(); render();
+    }
+    function sortHand() { hand.sort((a, b) => a - b); }
+    function checkWin() {
+      // 4 副 + 1 对
+      const c = {};
+      for (const t of hand) c[t] = (c[t] || 0) + 1;
+      for (let pair = 0; pair < 27; pair++) {
+        if ((c[pair] || 0) < 2) continue;
+        const rc = Object.assign({}, c);
+        rc[pair] -= 2;
+        if (canMeld(rc)) return true;
+      }
+      return false;
+    }
+    function canMeld(c) {
+      for (let t = 0; t < 27; t++) {
+        while ((c[t] || 0) > 0) {
+          // 刻子
+          if (c[t] >= 3) { c[t] -= 3; continue; }
+          // 顺子
+          const s = t % 9;
+          if (s <= 6 && (c[t + 1] || 0) > 0 && (c[t + 2] || 0) > 0) { c[t]--; c[t + 1]--; c[t + 2]--; continue; }
+          return false;
+        }
+      }
+      return true;
+    }
+    function discard(i) {
+      if (over) return;
+      SFX.unlock();
+      hand.splice(i, 1);
+      if (SFX.enabled) SFX.click();
+      // AI 回合：简化，AI 直接摸打
+      if (wall.length === 0) { over = true; msg = "😅 牌墙空了，流局"; draw(); render(); return; }
+      // 玩家摸牌
+      hand.push(wall.pop()); sortHand();
+      if (checkWin()) {
+        over = true; msg = "🎉 胡了！" + hand.map(tileName).join(" ");
+        if (SFX.enabled) SFX.win();
+      } else {
+        msg = "轮到你打牌（剩 " + wall.length + " 张）";
+      }
+      draw(); render();
+    }
+    function draw() {
+      const h = $("mjHand");
+      if (!h) return;
+      h.innerHTML = "";
+      h.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:340px;margin:0 auto;";
+      hand.forEach((t, i) => {
+        const d = document.createElement("div");
+        d.textContent = tileName(t);
+        d.style.cssText = "width:38px;height:52px;background:#fff;border:1px solid #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;" + (over ? "" : "");
+        if (!over) d.addEventListener("click", () => discard(i));
+        h.appendChild(d);
+      });
+    }
+    function render() { $("mjMsg").textContent = msg; }
+    $("mjResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get mahjong() { return { count: hand.length, over, win: checkWin() }; },
+      mahjongDiscard(i) { discard(i); },
+    }));
+  };
+
+  /* ---- 10. poker 德州扑克 ---- */
+  toyInitFns["poker"] = function () {
+    const SUITS = ["♠", "♥", "♦", "♣"];
+    const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+    let deck = [], pHole = [], aHole = [], comm = [], pChips = 100, aChips = 100, pot = 0, over = false, stage = 0;
+    function newDeck() {
+      const d = [];
+      for (const s of SUITS) for (let r = 0; r < 13; r++) d.push({ s, r });
+      return shuffle(d);
+    }
+    function reset() {
+      if (pChips <= 0) pChips = 100;
+      if (aChips <= 0) aChips = 100;
+      deck = newDeck();
+      pHole = [deck.pop(), deck.pop()];
+      aHole = [deck.pop(), deck.pop()];
+      comm = []; pot = 0; over = false; stage = 0;
+      // 盲注（筹码不足时按小的收，不透支）
+      const bb = Math.min(5, pChips, aChips);
+      pChips -= bb; aChips -= bb; pot = bb * 2;
+      draw(); render("你的回合：跟注 " + bb + " 或弃牌");
+    }
+    // 牌型评估：返回 [rank, tiebreak...]
+    function eval7(cards) {
+      // 简化：7 选 5 最优
+      let best = null;
+      const combos = [];
+      const idx = [0, 1, 2, 3, 4, 5, 6];
+      for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) for (let c = b + 1; c < 5; c++)
+        for (let d = c + 1; d < 6; d++) for (let e = d + 1; e < 7; e++)
+          combos.push([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+      for (const h of combos) {
+        const v = eval5(h);
+        if (!best || cmpHands(v, best) > 0) best = v;
+      }
+      return best;
+    }
+    function eval5(h) {
+      const rs = h.map((c) => c.r).sort((a, b) => b - a);
+      const flush = h.every((c) => c.s === h[0].s);
+      let straight = true;
+      for (let i = 1; i < 5; i++) if (rs[i] !== rs[0] - i) straight = false;
+      // A-5 顺子
+      if (!straight && rs.join() === "12,3,2,1,0") { straight = true; rs.push(rs.shift()); }
+      const cnt = {};
+      for (const r of rs) cnt[r] = (cnt[r] || 0) + 1;
+      const groups = Object.entries(cnt).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+      if (flush && straight) return [8, rs[0]];
+      if (groups[0][1] === 4) return [7, +groups[0][0], +groups[1][0]];
+      if (groups[0][1] === 3 && groups[1][1] === 2) return [6, +groups[0][0], +groups[1][0]];
+      if (flush) return [5, ...rs];
+      if (straight) return [4, rs[0]];
+      if (groups[0][1] === 3) return [3, +groups[0][0], ...groups.slice(1).map((g) => +g[0])];
+      if (groups[0][1] === 2 && groups[1][1] === 2) return [2, +groups[0][0], +groups[1][0], +groups[2][0]];
+      if (groups[0][1] === 2) return [1, +groups[0][0], ...groups.slice(1).map((g) => +g[0])];
+      return [0, ...rs];
+    }
+    function cmpHands(a, b) {
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] || 0, y = b[i] || 0;
+        if (x !== y) return x - y;
+      }
+      return 0;
+    }
+    const HNAMES = ["高牌", "一对", "两对", "三条", "顺子", "同花", "葫芦", "四条", "同花顺"];
+    // AI 手牌强度 0..1（用于弃牌决策）
+    function bestOf(cards) {
+      let best = null;
+      const n = cards.length, idx = [];
+      (function rec(start, depth) {
+        if (depth === 5) {
+          const v = eval5(idx.map((i) => cards[i]));
+          if (!best || cmpHands(v, best) > 0) best = v;
+          return;
+        }
+        for (let i = start; i < n; i++) { idx.push(i); rec(i + 1, depth + 1); idx.pop(); }
+      })(0, 0);
+      return best;
+    }
+    function aiStrength() {
+      if (comm.length === 0) {
+        const r0 = aHole[0].r, r1 = aHole[1].r;
+        if (r0 === r1) return 0.55 + r0 / 30;
+        const hi = Math.max(r0, r1) / 12;
+        const suited = aHole[0].s === aHole[1].s ? 0.06 : 0;
+        const conn = Math.abs(r0 - r1) <= 2 ? 0.05 : 0;
+        return Math.min(0.95, hi * 0.55 + suited + conn);
+      }
+      const v = bestOf(aHole.concat(comm));
+      return Math.min(0.98, 0.12 + v[0] * 0.11);
+    }
+    function showdown() {
+      over = true;
+      while (comm.length < 5) comm.push(deck.pop());
+      const pv = eval7(pHole.concat(comm));
+      const av = eval7(aHole.concat(comm));
+      const cmp = cmpHands(pv, av);
+      let m;
+      if (cmp > 0) { pChips += pot; m = "🎉 你赢！" + HNAMES[pv[0]] + " 大过 " + HNAMES[av[0]] + "，+" + pot; if (SFX.enabled) SFX.win(); }
+      else if (cmp < 0) { aChips += pot; m = "😅 AI 赢，" + HNAMES[av[0]] + " 大过 " + HNAMES[pv[0]]; if (SFX.enabled) SFX.lose(); }
+      else { pChips += pot / 2; aChips += pot / 2; m = "🤝 平局，" + HNAMES[pv[0]]; }
+      pot = 0;
+      draw(); render(m + "（AI 底牌 " + aHole.map(cardStr).join(" ") + "）");
+    }
+    function cardStr(c) { return c.s + RANKS[c.r]; }
+    function pCall() {
+      if (over) return;
+      SFX.unlock();
+      const bet = Math.min(5, pChips, aChips);
+      if (bet <= 0) { showdown(); return; }
+      pChips -= bet; aChips -= bet; pot += bet * 2;
+      if (SFX.enabled) SFX.coin();
+      stage++;
+      if (stage === 1) { comm.push(deck.pop(), deck.pop(), deck.pop()); }
+      else if (stage <= 3) { comm.push(deck.pop()); }
+      if (stage >= 4 || aChips <= 0 || pChips <= 0) { showdown(); return; }
+      // AI 策略：按手牌强度决定弃牌（强牌几乎不弃，弱牌常弃）
+      const foldP = Math.max(0.02, 0.30 - aiStrength() * 0.5);
+      if (Math.random() < foldP) {
+        over = true;
+        const won = pot;
+        pChips += pot; pot = 0;
+        if (SFX.enabled) SFX.win();
+        draw(); render("🎉 AI 弃牌，你赢 +" + won);
+        return;
+      }
+      draw(); render("第 " + (stage + 1) + " 轮：跟注或弃牌（底池 " + pot + "）");
+    }
+    function pFold() {
+      if (over) return;
+      over = true;
+      aChips += pot; pot = 0;
+      if (SFX.enabled) SFX.lose();
+      draw(); render("你弃牌了，AI 赢走底池");
+    }
+    function draw() {
+      const t = $("pokerTable");
+      if (!t) return;
+      t.innerHTML = "";
+      t.style.cssText = "background:#0d5c2e;border-radius:12px;padding:12px;max-width:340px;margin:0 auto;text-align:center;";
+      const mk = (cards, label) => {
+        const d = document.createElement("div");
+        d.style.cssText = "margin:6px 0;color:#fff;font-size:14px;";
+        d.innerHTML = label + " " + cards.map((c) =>
+          '<span style="display:inline-block;background:#fff;color:' + (c.s === "♥" || c.s === "♦" ? "#c0392b" : "#222") +
+          ';border-radius:4px;padding:2px 6px;margin:0 2px;font-weight:bold;">' + cardStr(c) + "</span>").join("");
+        return d;
+      };
+      t.appendChild(mk([], "AI（" + aChips + "):"));
+      // AI 显示背面
+      t.children[0].innerHTML = "AI（" + aChips + '): <span style="display:inline-block;background:#1a1e2e;color:#888;border-radius:4px;padding:2px 6px;margin:0 2px;">??</span> <span style="display:inline-block;background:#1a1e2e;color:#888;border-radius:4px;padding:2px 6px;margin:0 2px;">??</span>';
+      t.appendChild(mk(comm, "公共牌："));
+      t.appendChild(mk(pHole, "你（" + pChips + "):"));
+      const potD = document.createElement("div");
+      potD.style.cssText = "color:#f5c542;font-weight:bold;margin-top:6px;";
+      potD.textContent = "底池 " + pot;
+      t.appendChild(potD);
+    }
+    function render(m) { $("pokerMsg").textContent = m; }
+    $("pokerCallBtn").addEventListener("click", pCall);
+    $("pokerFoldBtn").addEventListener("click", pFold);
+    $("pokerResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get poker() { return { pChips, aChips, pot, over, stage, comm: comm.length }; },
+      pokerCall() { pCall(); },
+      pokerEval(cards) { return eval5(cards); },
+    }));
+  };
+  /* ---- 11. rhythm 音游 ---- */
+  toyInitFns["rhythm"] = function () {
+    const KEY = "dorm-toybox-rhythm-best-v1";
+    const W = 320, H = 420, LANES = 4, LW = W / LANES;
+    const JUDGE_Y = H - 80, SPEED = 3.2;
+    let best = loadBest(KEY);
+    let notes = [], score = 0, combo = 0, maxCombo = 0, running = false, raf = null, frame = 0, counts = { p: 0, g: 0, m: 0 };
+    let startT = 0, lastT = 0, nextSpawn = 0, nextChord = 0, rank = "", isNewBest = false;
+    const KEYS = ["d", "f", "j", "k"];
+    const NOTE_TRAVEL_MS = 1875; // 音符从顶部到判定线的时长（ms），与帧率无关
+    const SONG_LEN_MS = 60000;
+    function reset() {
+      notes = []; score = 0; combo = 0; maxCombo = 0; counts = { p: 0, g: 0, m: 0 };
+      running = true; frame = 0; startT = 0; lastT = 0; nextSpawn = 0; nextChord = 0; rank = ""; isNewBest = false;
+      render();
+    }
+    function spawn(now) {
+      // 谱面：按真实时间生成，不随帧率变化
+      if (now >= nextSpawn && Math.random() < 0.75) {
+        notes.push({ lane: Math.floor(Math.random() * LANES), y: -20, hit: false });
+        nextSpawn = now + 467; // 约 28 帧 @60fps
+      } else if (now >= nextSpawn) {
+        nextSpawn = now + 467;
+      }
+      if (now >= nextChord) { // 和弦
+        const l = Math.floor(Math.random() * LANES);
+        notes.push({ lane: (l + 2) % LANES, y: -20, hit: false });
+        nextChord = now + 1867; // 约 112 帧 @60fps
+      }
+    }
+    function hit(lane) {
+      if (!running) return;
+      SFX.unlock();
+      // 找最近的未击中音符
+      let bestN = null, bestD = 1e9;
+      for (const n of notes) {
+        if (n.lane !== lane || n.hit) continue;
+        const d = Math.abs(n.y - JUDGE_Y);
+        if (d < bestD) { bestD = d; bestN = n; }
+      }
+      if (!bestN || bestD > 70) { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); render(); return; }
+      bestN.hit = true;
+      combo++; maxCombo = Math.max(maxCombo, combo);
+      if (bestD < 22) { score += 300; counts.p++; if (SFX.enabled) SFX.pop(0.9); }
+      else if (bestD < 48) { score += 100; counts.g++; if (SFX.enabled) SFX.pop(0.5); }
+      else { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); }
+      render();
+    }
+    function step(now) {
+      if (!running) return;
+      if (!startT) { startT = now; lastT = now; nextSpawn = now; nextChord = now; }
+      const dt = Math.min(100, now - lastT); // ms，防切后台跳变
+      lastT = now;
+      const elapsed = now - startT;
+      spawn(now);
+      const pxPerMs = (JUDGE_Y + 20) / NOTE_TRAVEL_MS; // 与帧率无关的下落速度
+      for (const n of notes) n.y += pxPerMs * dt;
+      // miss
+      for (const n of notes) {
+        if (!n.hit && n.y > JUDGE_Y + 70) { n.hit = true; n.missed = true; combo = 0; counts.m++; }
+      }
+      notes = notes.filter((n) => n.y < H + 20 && !(n.hit && n.y > JUDGE_Y + 40));
+      if (elapsed > SONG_LEN_MS) { // 60 秒结束（真实时间）
+        running = false;
+        const total = counts.p + counts.g + counts.m;
+        const acc = total ? (counts.p + counts.g * 0.5) / total : 0;
+        // 评级：SSS≥95% / S≥90% / A≥80% / B≥65% / C<65%
+        rank = acc >= 0.95 ? "SSS" : acc >= 0.9 ? "S" : acc >= 0.8 ? "A" : acc >= 0.65 ? "B" : "C";
+        isNewBest = score > best && score > 0;
+        if (isNewBest) { best = score; saveBest(KEY, best); }
+        if (SFX.enabled) { if (rank === "SSS" || rank === "S" || isNewBest) SFX.win(); else if (rank === "C") SFX.lose(); else SFX.pop(0.6); }
+      }
+      draw(); render();
+      if (running) raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("rhythmCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        for (let i = 0; i < LANES; i++) {
+          ctx.fillStyle = i % 2 ? "#1a1e2e" : "#161a28";
+          ctx.fillRect(i * LW, 0, LW, H);
+          ctx.strokeStyle = "rgba(255,255,255,0.08)";
+          ctx.beginPath(); ctx.moveTo(i * LW, 0); ctx.lineTo(i * LW, H); ctx.stroke();
+          ctx.fillStyle = "rgba(255,255,255,0.15)";
+          ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(KEYS[i].toUpperCase(), i * LW + LW / 2, H - 12);
+        }
+        // 判定线
+        ctx.fillStyle = "#4f7cff"; ctx.fillRect(0, JUDGE_Y - 2, W, 4);
+        for (const n of notes) {
+          if (n.hit && !n.missed) continue;
+          const x = n.lane * LW + LW / 2;
+          ctx.fillStyle = n.missed ? "#555" : "#f5c542";
+          ctx.beginPath(); ctx.arc(x, n.y, 14, 0, 7); ctx.fill();
+          ctx.fillStyle = "#12141c";
+          ctx.beginPath(); ctx.arc(x, n.y, 8, 0, 7); ctx.fill();
+        }
+        // 连击
+        if (combo > 1) {
+          ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(combo + " 连击", W / 2, 60);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      $("rhythmScore").textContent = running
+        ? "分 " + score + " · 连击 " + combo + " · P" + counts.p + "/G" + counts.g + "/M" + counts.m + " · 最好 " + best
+        : "评级 " + rank + (isNewBest ? " 🎉新纪录！" : "") + " · 分 " + score + " · 最大连击 " + maxCombo + " · P" + counts.p + "/G" + counts.g + "/M" + counts.m + " · 最好 " + best;
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function rhythmKeys(e) {
+      if ($("toy-rhythm") && $("toy-rhythm").classList.contains("hidden")) return;
+      const k = e.key.toLowerCase();
+      const i = KEYS.indexOf(k);
+      if (i >= 0) { hit(i); e.preventDefault(); }
+    });
+    const cv = $("rhythmCanvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 320 };
+      const x = (e.clientX - rect.left) * 320 / (rect.width || 320);
+      hit(Math.floor(x / LW));
+    });
+    $("rhythmResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.rhythm = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get rhythm() { return { score, combo, best, running, counts }; },
+      rhythmHit(lane) { hit(lane); },
+      rhythmStart() { if (!running) { reset(); raf = requestAnimationFrame(step); } },
+      rhythmNotes() { const n = notes.find((x) => !x.hit); return n ? { y: Math.round(n.y * 10) / 10, count: notes.length } : { y: -999, count: notes.length }; },
+    }));
+  };
+
+  /* ---- 12. tower 叠塔 ---- */
+  toyInitFns["tower"] = function () {
+    const KEY = "dorm-toybox-tower-best-v1";
+    const W = 320, H = 420, BH = 22;
+    let best = loadBest(KEY);
+    let blocks = [], cur = null, dir = 1, height = 0, running = false, raf = null, over = false;
+    let lastT = 0;
+    function reset() {
+      blocks = [{ x: 60, w: 200, y: H - BH }];
+      cur = { x: 0, w: 200, y: H - BH * 2, vx: 2.4 };
+      dir = 1; height = 0; over = false; running = true; lastT = 0;
+      render();
+    }
+    function drop() {
+      if (!running || over) return;
+      SFX.unlock();
+      const prev = blocks[blocks.length - 1];
+      const left = Math.max(cur.x, prev.x);
+      const right = Math.min(cur.x + cur.w, prev.x + prev.w);
+      const overlap = right - left;
+      if (overlap <= 8) {
+        over = true; running = false;
+        if (SFX.enabled) SFX.lose();
+        draw(); render(); return;
+      }
+      // 切掉悬空部分
+      blocks.push({ x: left, w: overlap, y: cur.y });
+      height++;
+      if (SFX.enabled) SFX.pop(0.4 + Math.min(0.5, height * 0.03));
+      if (height > best) { best = height; saveBest(KEY, best); }
+      // 下一块：宽度继承，速度加快
+      const nw = overlap;
+      cur = { x: Math.random() < 0.5 ? 0 : W - nw, w: nw, y: cur.y - BH, vx: (2.4 + height * 0.08) * (Math.random() < 0.5 ? 1 : -1) };
+      // 视角跟随
+      if (blocks.length * BH > H - 100) {
+        const dy = BH;
+        blocks.forEach((b) => b.y += dy);
+        cur.y += dy;
+      }
+      draw(); render();
+    }
+    function step(now) {
+      if (!running || over) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(50, now - lastT);
+      lastT = now;
+      const k = dt / 16.7;
+      cur.x += cur.vx * k;
+      if (cur.x <= 0) { cur.x = 0; cur.vx *= -1; }
+      if (cur.x + cur.w >= W) { cur.x = W - cur.w; cur.vx *= -1; }
+      draw();
+      raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("towerCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        const g = ctx.createLinearGradient ? ctx.createLinearGradient(0, 0, 0, H) : null;
+        if (g) { g.addColorStop(0, "#1a1e3a"); g.addColorStop(1, "#12141c"); ctx.fillStyle = g; }
+        else ctx.fillStyle = "#12141c";
+        ctx.fillRect(0, 0, W, H);
+        blocks.forEach((b, i) => {
+          const hue = 210 - Math.min(60, i * 3);
+          ctx.fillStyle = "hsl(" + hue + ",60%," + (45 + (i % 3) * 5) + "%)";
+          ctx.fillRect(b.x, b.y, b.w, BH - 2);
+          ctx.fillStyle = "rgba(255,255,255,0.2)";
+          ctx.fillRect(b.x, b.y, b.w, 4);
+        });
+        if (!over && cur) {
+          ctx.fillStyle = "hsl(210,70%,55%)";
+          ctx.fillRect(cur.x, cur.y, cur.w, BH - 2);
+          ctx.fillStyle = "rgba(255,255,255,0.3)";
+          ctx.fillRect(cur.x, cur.y, cur.w, 4);
+        }
+        if (over) {
+          ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("🏗️ 塔倒了！", W / 2, H / 2 - 10);
+          ctx.font = "18px sans-serif";
+          ctx.fillText("高度 " + height + " · 最好 " + best, W / 2, H / 2 + 24);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      $("towerScore").textContent = "高度 " + height + " · 最好 " + best + (over ? " · 结束" : "");
+    }
+    const cv = $("towerCanvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => { e.preventDefault(); drop(); });
+    $("towerResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.tower = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    // 自动开始移动（展示用）
+    raf = requestAnimationFrame(step); running = true;
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get tower() { return { height, best, over }; },
+      towerDrop() { drop(); },
+    }));
+  };
+
+  /* ---- 13. dodge 弹幕躲避 ---- */
+  toyInitFns["dodge"] = function () {
+    const KEY = "dorm-toybox-dodge-best-v1";
+    const W = 320, H = 420;
+    let best = loadBest(KEY);
+    let px = W / 2, py = H - 60, bullets = [], score = 0, lives = 3, running = false, raf = null, frame = 0, grazed = new Set(), invuln = 0;
+    let lastT = 0, spawnAcc = 0, fanAcc = 0;
+    function reset() {
+      px = W / 2; py = H - 60; bullets = []; score = 0; lives = 3; running = true; frame = 0; invuln = 0; grazed = new Set(); lastT = 0; spawnAcc = 0; fanAcc = 0; elapsedMs = 0;
+      render();
+    }
+    let elapsedMs = 0;
+    function spawn(dt) {
+      // 弹幕模式：随机 + 扇形（按真实时间，与刷新率无关）
+      elapsedMs += dt;
+      spawnAcc += dt;
+      fanAcc += dt;
+      if (spawnAcc >= 24 * 16.7) {
+        spawnAcc = 0;
+        const n = 3 + Math.floor(elapsedMs / (600 * 16.7));
+        for (let i = 0; i < Math.min(n, 8); i++) {
+          bullets.push({ x: Math.random() * W, y: -10, vx: (Math.random() - 0.5) * 1.2, vy: 2 + Math.random() * 1.5 + elapsedMs / (3000 * 16.7), r: 5, id: Math.floor(elapsedMs) * 100 + i });
+        }
+      }
+      if (fanAcc >= 180 * 16.7) {
+        fanAcc = 0;
+        // 扇形弹
+        const cx = W / 2;
+        for (let i = -3; i <= 3; i++) {
+          bullets.push({ x: cx, y: -10, vx: i * 0.7, vy: 2.5, r: 5, id: Math.floor(elapsedMs) * 100 + 50 + i });
+        }
+      }
+    }
+    function step(now) {
+      if (!running) return;
+      if (!lastT) lastT = now;
+      const dt = Math.min(50, now - lastT);
+      lastT = now;
+      const k = dt / 16.7;
+      frame++;
+      spawn(dt);
+      score += k;
+      if (invuln > 0) invuln -= k;
+      for (const b of bullets) { b.x += b.vx * k; b.y += b.vy * k; }
+      bullets = bullets.filter((b) => b.y < H + 20 && b.x > -20 && b.x < W + 20);
+      // 碰撞 + 擦弹
+      for (const b of bullets) {
+        const d = Math.hypot(b.x - px, b.y - py);
+        if (d < b.r + 8) {
+          if (invuln <= 0) {
+            lives--;
+            invuln = 1500;
+            if (SFX.enabled) SFX.hit();
+            if (lives <= 0) {
+              running = false;
+              if (score > best) { best = score; saveBest(KEY, best); }
+              if (SFX.enabled) SFX.lose();
+              draw(); render(); return;
+            }
+          }
+        } else if (d < b.r + 22 && !grazed.has(b.id)) {
+          grazed.add(b.id);
+          score += 10;
+          if (SFX.enabled) SFX.pop(0.8);
+        }
+      }
+      draw(); render();
+      raf = requestAnimationFrame(step);
+    }
+    function draw() {
+      const cv = $("dodgeCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, W, H);
+        // 星空
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        for (let i = 0; i < 30; i++) {
+          const sx = (i * 97) % W, sy = (i * 61 + frame * 2) % H;
+          ctx.fillRect(sx, sy, 2, 2);
+        }
+        for (const b of bullets) {
+          ctx.fillStyle = "#ff5252";
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+          ctx.fillStyle = "#ffb3b3";
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r / 2, 0, 7); ctx.fill();
+        }
+        // 飞机
+        if (invuln <= 0 || Math.floor(frame / 6) % 2 === 0) {
+          ctx.fillStyle = "#4f7cff";
+          ctx.beginPath();
+          ctx.moveTo(px, py - 12); ctx.lineTo(px - 9, py + 8); ctx.lineTo(px, py + 4); ctx.lineTo(px + 9, py + 8);
+          ctx.closePath(); ctx.fill();
+          // 判定点
+          ctx.fillStyle = "#fff";
+          ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill();
+        }
+        if (!running) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("💥 坠毁！", W / 2, H / 2 - 10);
+          ctx.font = "18px sans-serif";
+          ctx.fillText("得分 " + score + " · 最好 " + best, W / 2, H / 2 + 24);
+        }
+      } catch (e) {}
+    }
+    function render() {
+      $("dodgeScore").textContent = "分 " + Math.floor(score) + " · 命 " + "❤️".repeat(Math.max(0, lives)) + " · 最好 " + best + (running ? "" : " · 结束");
+    }
+    const cv = $("dodgeCanvas");
+    if (cv) {
+      const move = (e) => {
+        const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 420 };
+        px = (e.clientX - rect.left) * 320 / (rect.width || 320);
+        py = (e.clientY - rect.top) * 420 / (rect.height || 420);
+        px = Math.max(12, Math.min(W - 12, px));
+        py = Math.max(12, Math.min(H - 12, py));
+      };
+      cv.addEventListener("pointermove", move);
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function dodgeKeys(e) {
+      if ($("toy-dodge") && $("toy-dodge").classList.contains("hidden")) return;
+      const sp = 10;
+      if (e.key === "ArrowLeft") px = Math.max(12, px - sp);
+      if (e.key === "ArrowRight") px = Math.min(W - 12, px + sp);
+      if (e.key === "ArrowUp") py = Math.max(12, py - sp);
+      if (e.key === "ArrowDown") py = Math.min(H - 12, py + sp);
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) e.preventDefault();
+    });
+    $("dodgeResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    toyLeaveCleanup.dodge = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    reset(); running = false; draw(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get dodge() { return { score, lives, best, running }; },
+      dodgeStart() { if (!running && lives > 0) { running = true; raf = requestAnimationFrame(step); } },
+      dodgeMove(x, y) { px = x; py = y; },
+    }));
+  };
+
+  /* ---- 14. maze3d 伪3D迷宫 ---- */
+  toyInitFns["maze3d"] = function () {
+    const W = 320, H = 240, FOV = Math.PI / 3;
+    const MKEY = "dorm-toybox-maze3d-best-v1";
+    let mBest = loadBest(MKEY);
+    // 15x15 迷宫，1=墙 0=路
+    let maze = [], px = 1.5, py = 1.5, pa = 0, over = false, steps = 0;
+    function genMaze() {
+      const N = 15;
+      maze = Array.from({ length: N }, () => Array(N).fill(1));
+      const stack = [[1, 1]];
+      maze[1][1] = 0;
+      while (stack.length) {
+        const [cx, cy] = stack[stack.length - 1];
+        const dirs = shuffle([[2, 0], [-2, 0], [0, 2], [0, -2]]);
+        let moved = false;
+        for (const [dx, dy] of dirs) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx > 0 && nx < N - 1 && ny > 0 && ny < N - 1 && maze[ny][nx] === 1) {
+            maze[ny][nx] = 0;
+            maze[cy + dy / 2][cx + dx / 2] = 0;
+            stack.push([nx, ny]);
+            moved = true;
+            break;
+          }
+        }
+        if (!moved) stack.pop();
+      }
+      maze[N - 2][N - 2] = 2; // 出口
+    }
+    function reset() {
+      genMaze();
+      px = 1.5; py = 1.5; pa = 0; over = false; steps = 0;
+      draw(); render("找绿色出口！");
+    }
+    function castRay(angle) {
+      // DDA
+      const dx = Math.cos(angle), dy = Math.sin(angle);
+      let mx = Math.floor(px), my = Math.floor(py);
+      const ddx = Math.abs(1 / (dx || 1e-9)), ddy = Math.abs(1 / (dy || 1e-9));
+      let sx, sy, sdx, sdy;
+      if (dx < 0) { sx = -1; sdx = (px - mx) * ddx; } else { sx = 1; sdx = (mx + 1 - px) * ddx; }
+      if (dy < 0) { sy = -1; sdy = (py - my) * ddy; } else { sy = 1; sdy = (my + 1 - py) * ddy; }
+      let dist = 0, hit = 0, side = 0;
+      for (let i = 0; i < 64; i++) {
+        if (sdx < sdy) { dist = sdx; sdx += ddx; mx += sx; side = 0; }
+        else { dist = sdy; sdy += ddy; my += sy; side = 1; }
+        if (mx < 0 || mx >= 15 || my < 0 || my >= 15) break;
+        if (maze[my][mx] > 0) { hit = maze[my][mx]; break; }
+      }
+      // 鱼眼校正
+      dist *= Math.cos(angle - pa);
+      return { dist: Math.max(0.05, dist), hit, side };
+    }
+    function move(fwd, strafe) {
+      if (over) return;
+      const sp = 0.12;
+      const nx = px + Math.cos(pa) * fwd * sp + Math.cos(pa + Math.PI / 2) * strafe * sp;
+      const ny = py + Math.sin(pa) * fwd * sp + Math.sin(pa + Math.PI / 2) * strafe * sp;
+      if (maze[Math.floor(ny)] && maze[Math.floor(ny)][Math.floor(nx)] !== 1) { px = nx; py = ny; steps++; }
+      // 到出口？
+      if (maze[Math.floor(py)][Math.floor(px)] === 2) {
+        over = true;
+        if (SFX.enabled) SFX.win();
+        let nb = "";
+        if (!mBest || steps < mBest) { mBest = steps; saveBest(MKEY, mBest); nb = " 🎉新纪录！"; }
+        render("🎉 走出来了！用了 " + steps + " 步" + nb + " · 最好 " + mBest + " 步");
+      } else {
+        render("找绿色出口！已走 " + steps + " 步");
+      }
+      draw();
+      if (SFX.enabled && steps % 4 === 0) SFX.click();
+    }
+    function turn(d) { pa += d; draw(); }
+    function draw() {
+      const cv = $("maze3dCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      try {
+        // 天空/地面
+        ctx.fillStyle = "#1a2340"; ctx.fillRect(0, 0, W, H / 2);
+        ctx.fillStyle = "#2a2418"; ctx.fillRect(0, H / 2, W, H / 2);
+        const rays = 80;
+        for (let i = 0; i < rays; i++) {
+          const a = pa - FOV / 2 + (i / rays) * FOV;
+          const { dist, hit, side } = castRay(a);
+          const wh = Math.min(H, (H / dist) * 0.9);
+          const x = (i / rays) * W;
+          let color;
+          if (hit === 2) color = "#4caf50"; // 出口绿
+          else {
+            const shade = Math.max(30, 200 - dist * 45) | 0;
+            color = side ? "rgb(" + shade + "," + (shade - 20) + "," + (shade - 60) + ")" : "rgb(" + (shade - 20) + "," + (shade - 40) + "," + (shade - 80) + ")";
+          }
+          ctx.fillStyle = color;
+          ctx.fillRect(x, (H - wh) / 2, W / rays + 1, wh);
+        }
+        // 准星
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.fillRect(W / 2 - 1, H / 2 - 6, 2, 12);
+        // 小地图
+        const ms = 4;
+        for (let y = 0; y < 15; y++) for (let x = 0; x < 15; x++) {
+          if (maze[y][x] === 1) { ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fillRect(W - 15 * ms - 6 + x * ms, 6 + y * ms, ms, ms); }
+          else if (maze[y][x] === 2) { ctx.fillStyle = "#4caf50"; ctx.fillRect(W - 15 * ms - 6 + x * ms, 6 + y * ms, ms, ms); }
+        }
+        ctx.fillStyle = "#ff5252";
+        ctx.beginPath(); ctx.arc(W - 15 * ms - 6 + px * ms, 6 + py * ms, 3, 0, 7); ctx.fill();
+      } catch (e) {}
+    }
+    function render(m) { $("maze3dMsg").textContent = m; }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function maze3dKeys(e) {
+      if ($("toy-maze3d") && $("toy-maze3d").classList.contains("hidden")) return;
+      const k = e.key.toLowerCase();
+      if (k === "w" || e.key === "ArrowUp") { move(1, 0); e.preventDefault(); }
+      else if (k === "s" || e.key === "ArrowDown") { move(-1, 0); e.preventDefault(); }
+      else if (k === "a" || e.key === "ArrowLeft") { turn(-0.12); e.preventDefault(); }
+      else if (k === "d" || e.key === "ArrowRight") { turn(0.12); e.preventDefault(); }
+    });
+    const cv = $("maze3dCanvas");
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      SFX.unlock();
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 240 };
+      const x = (e.clientX - rect.left) / (rect.width || 320);
+      const y = (e.clientY - rect.top) / (rect.height || 240);
+      if (y < 0.4) move(1, 0);
+      else if (y > 0.6) move(-1, 0);
+      else if (x < 0.5) turn(-0.15);
+      else turn(0.15);
+    });
+    $("maze3dResetBtn").addEventListener("click", reset);
+    reset();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get maze3d() { return { over, steps, px: Math.round(px * 10) / 10, py: Math.round(py * 10) / 10 }; },
+      maze3dMove(f, s) { move(f, s); },
+      maze3dTurn(d) { turn(d); },
+    }));
+  };
+
+  /* ---- v3.1：剧本杀主持人 ---- */
+  toyInitFns["scriptkill"] = function () {
+    const ROLE_DEFS = {
+      killer: { name: "🔪 凶手", desc: "夜晚睁眼刀人" },
+      detective: { name: "🔍 侦探", desc: "夜晚查验一人" },
+      doctor: { name: "💊 医生", desc: "夜晚救一人" },
+      civilian: { name: "🧑 平民", desc: "白天投票" },
+    };
+    const PHASES = ["🌙 夜晚降临，所有人闭眼", "🔪 凶手请睁眼，刀一个人", "🔍 侦探请睁眼，查验一人身份", "💊 医生请睁眼，救一个人", "☀️ 天亮了，公布昨晚结果", "🗣️ 轮流发言", "🗳️ 投票放逐一人", "📢 公布出局者身份"];
+    let players = [], phase = -1, timerId = null, secs = 0;
+    function comp(n) {
+      const roles = ["killer", "detective"];
+      if (n >= 6) roles.push("doctor");
+      if (n >= 9) roles.push("killer");
+      while (roles.length < n) roles.push("civilian");
+      return roles;
+    }
+    function renderRoles() {
+      const box = $("skRoles"); box.innerHTML = "";
+      players.forEach((p) => {
+        const b = document.createElement("button");
+        b.className = "sk-card" + (p.open ? " open" : "") + (p.alive ? "" : " dead");
+        b.textContent = p.open ? p.no + "号 " + ROLE_DEFS[p.role].name : p.no + "号 ❓";
+        b.setAttribute("aria-label", "玩家" + p.no + (p.open ? ROLE_DEFS[p.role].name : "未翻开"));
+        b.addEventListener("click", () => { p.open = !p.open; if (SFX.enabled) SFX.click(); renderRoles(); });
+        b.addEventListener("dblclick", () => { p.alive = !p.alive; renderRoles(); });
+        box.appendChild(b);
+      });
+    }
+    function deal() {
+      const n = Math.max(4, Math.min(12, parseInt($("skCount").value, 10) || 6));
+      const roles = comp(n);
+      for (let i = roles.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = roles[i]; roles[i] = roles[j]; roles[j] = t;
+      }
+      players = roles.map((r, i) => ({ no: i + 1, role: r, open: false, alive: true }));
+      phase = -1;
+      renderRoles();
+      $("skFlow").classList.remove("hidden");
+      $("skPhase").textContent = "身份已发：依次传手机，每人点自己的牌看身份（双击牌标记出局）";
+      $("skClueList").innerHTML = "";
+      stopTimer();
+      if (SFX.enabled) SFX.pop();
+    }
+    function next() {
+      if (!players.length) return;
+      phase = (phase + 1) % PHASES.length;
+      $("skPhase").textContent = PHASES[phase];
+      stopTimer();
+      if (SFX.enabled) SFX.click();
+    }
+    function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } const l = $("skTimerLine"); if (l) l.textContent = ""; }
+    function startTimer() {
+      stopTimer(); secs = 60;
+      $("skTimerLine").textContent = "⏱ " + secs + "s";
+      timerId = setInterval(() => {
+        secs--;
+        if (secs <= 0) { stopTimer(); $("skTimerLine").textContent = "⏱ 时间到！"; if (SFX.enabled) SFX.lose(); return; }
+        $("skTimerLine").textContent = "⏱ " + secs + "s";
+      }, 1000);
+    }
+    function clue() {
+      const who = $("skClueWho").value.trim(), text = $("skClueText").value.trim();
+      if (!who || !text) return;
+      const li = document.createElement("li");
+      li.textContent = "→ " + who + "号玩家：" + text;
+      $("skClueList").appendChild(li);
+      $("skClueText").value = "";
+      if (SFX.enabled) SFX.pop();
+    }
+    $("skDealBtn").addEventListener("click", deal);
+    $("skNextBtn").addEventListener("click", next);
+    $("skTimerBtn").addEventListener("click", startTimer);
+    $("skClueBtn").addEventListener("click", clue);
+    $("skResetBtn").addEventListener("click", () => { stopTimer(); players = []; phase = -1; $("skRoles").innerHTML = ""; $("skFlow").classList.add("hidden"); $("skClueList").innerHTML = ""; });
+    toyLeaveCleanup.scriptkill = stopTimer;
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get scriptkill() { return { phase: phase, count: players.length }; },
+      scriptkillDeal(n) { if (n) $("skCount").value = n; deal(); },
+      scriptkillNext() { next(); },
+    }));
+  };
+
+  /* ---- v3.1：表情包制作 ---- */
+  toyInitFns["memegen"] = function () {
+    const cv = $("memegenCanvas");
+    let img = null, tpl = 0, top = "", bottom = "", size = 40;
+    function drawTemplate(ctx, i) {
+      try {
+        if (i === 0) {
+          ctx.fillStyle = "#ffd93b"; ctx.fillRect(0, 0, 320, 320);
+          ctx.fillStyle = "#1a1d29";
+          ctx.beginPath(); ctx.arc(120, 130, 14, 0, 7); ctx.fill();
+          ctx.beginPath(); ctx.arc(200, 130, 14, 0, 7); ctx.fill();
+          ctx.strokeStyle = "#1a1d29"; ctx.lineWidth = 8;
+          ctx.beginPath(); ctx.arc(160, 170, 60, 0.3, Math.PI - 0.3); ctx.stroke();
+        } else if (i === 1) {
+          ctx.fillStyle = "#e8e8e8"; ctx.fillRect(0, 0, 320, 320);
+          ctx.fillStyle = "#1a1d29"; ctx.font = "bold 200px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("?", 160, 250);
+        } else {
+          ctx.fillStyle = "#c98f4e"; ctx.fillRect(0, 0, 320, 320);
+          ctx.fillStyle = "#c98f4e";
+          ctx.beginPath(); ctx.arc(160, 170, 95, 0, 7); ctx.fill();
+          ctx.fillStyle = "#a06a2e";
+          ctx.beginPath(); ctx.ellipse(85, 85, 28, 48, -0.4, 0, 7); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(235, 85, 28, 48, 0.4, 0, 7); ctx.fill();
+          ctx.fillStyle = "#1a1d29";
+          ctx.beginPath(); ctx.arc(128, 155, 12, 0, 7); ctx.fill();
+          ctx.beginPath(); ctx.arc(192, 155, 12, 0, 7); ctx.fill();
+          ctx.fillStyle = "#5b3a1a";
+          ctx.beginPath(); ctx.arc(160, 200, 18, 0, 7); ctx.fill();
+        }
+      } catch (e) {}
+    }
+    function render() {
+      if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d");
+      if (!ctx || !ctx.fillRect) return;
+      try {
+        if (img) { try { ctx.drawImage(img, 0, 0, 320, 320); } catch (e) { drawTemplate(ctx, tpl); } }
+        else drawTemplate(ctx, tpl);
+        ctx.font = "bold " + size + "px sans-serif";
+        ctx.textAlign = "center";
+        ctx.lineWidth = Math.max(3, Math.floor(size / 8));
+        ctx.strokeStyle = "#000"; ctx.fillStyle = "#fff";
+        if (top) { ctx.strokeText(top, 160, size + 14); ctx.fillText(top, 160, size + 14); }
+        if (bottom) { ctx.strokeText(bottom, 160, 308); ctx.fillText(bottom, 160, 308); }
+      } catch (e) {}
+    }
+    $("memegenTpl0").addEventListener("click", () => { tpl = 0; img = null; if (SFX.enabled) SFX.click(); render(); });
+    $("memegenTpl1").addEventListener("click", () => { tpl = 1; img = null; if (SFX.enabled) SFX.click(); render(); });
+    $("memegenTpl2").addEventListener("click", () => { tpl = 2; img = null; if (SFX.enabled) SFX.click(); render(); });
+    const file = $("memegenFile");
+    if (file) file.addEventListener("change", () => {
+      try {
+        const f = file.files && file.files[0];
+        if (!f || typeof URL === "undefined" || !URL.createObjectURL) return;
+        const url = URL.createObjectURL(f);
+        const im = new Image();
+        im.onload = () => { img = im; render(); try { URL.revokeObjectURL(url); } catch (e) {} };
+        im.src = url;
+      } catch (e) {}
+    });
+    $("memegenTop").addEventListener("input", (e) => { top = e.target.value; render(); });
+    $("memegenBottom").addEventListener("input", (e) => { bottom = e.target.value; render(); });
+    $("memegenSize").addEventListener("input", (e) => { size = parseInt(e.target.value, 10) || 40; render(); });
+    $("memegenDlBtn").addEventListener("click", () => {
+      try {
+        const a = document.createElement("a");
+        a.download = "meme.png";
+        a.href = cv.toDataURL("image/png");
+        if (typeof a.click === "function") a.click();
+        $("memegenMsg").textContent = "已开始下载 ✅";
+        if (SFX.enabled) SFX.win();
+      } catch (e) { $("memegenMsg").textContent = "下载失败，换个浏览器试试"; }
+    });
+    render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get memegen() { return { top: top, bottom: bottom, tpl: tpl }; },
+      memegenSetText(t, b) {
+        top = t || ""; bottom = b || "";
+        const te = $("memegenTop"); if (te) te.value = top;
+        const be = $("memegenBottom"); if (be) be.value = bottom;
+        render();
+      },
+      memegenTemplate(i) { tpl = i; img = null; render(); },
+    }));
+  };
+
+  /* ---- v3.1：简历制作 ---- */
+  toyInitFns["resume"] = function () {
+    const KEY = "dorm-toybox-resume-v1";
+    const FIELDS = ["rsName", "rsPhone", "rsMail", "rsTarget", "rsEdu", "rsIntern", "rsProj", "rsSkill"];
+    let tpl = 0, saveT = null, lastHtml = "";
+    function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function lines(id) { const el = $(id); const v = el ? el.value.trim() : ""; return v ? v.split("\n").map((x) => x.trim()).filter(Boolean) : []; }
+    function render() {
+      const p = $("resumePreview"); if (!p) return;
+      const name = ($("rsName") && $("rsName").value.trim()) || "姓名";
+      const contact = [($("rsPhone") || {}).value, ($("rsMail") || {}).value].map((x) => (x || "").trim()).filter(Boolean).join(" · ");
+      const secs = [
+        ["求职意向", [($("rsTarget") || {}).value].map((x) => (x || "").trim()).filter(Boolean)],
+        ["教育经历", lines("rsEdu")],
+        ["实习经历", lines("rsIntern")],
+        ["项目经历", lines("rsProj")],
+        ["技能", lines("rsSkill")],
+      ];
+      let h = '<div class="rs-head"><h3>' + esc(name) + "</h3><p>" + esc(contact) + "</p></div>";
+      secs.forEach((s) => {
+        if (!s[1].length) return;
+        h += '<div class="rs-sec"><h4>' + s[0] + "</h4><ul>" + s[1].map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul></div>";
+      });
+      p.innerHTML = h;
+      lastHtml = h;
+      p.className = "resume-preview " + (tpl === 0 ? "tpl-blue" : "tpl-gray");
+    }
+    function save() {
+      try {
+        const d = { tpl: tpl };
+        FIELDS.forEach((f) => { const el = $(f); d[f] = el ? el.value : ""; });
+        localStorage.setItem(KEY, JSON.stringify(d));
+      } catch (e) {}
+    }
+    function load() {
+      try {
+        const d = JSON.parse(localStorage.getItem(KEY) || "null");
+        if (!d) return;
+        FIELDS.forEach((f) => { const el = $(f); if (el && typeof d[f] === "string") el.value = d[f]; });
+        if (typeof d.tpl === "number") tpl = d.tpl;
+      } catch (e) {}
+    }
+    FIELDS.forEach((f) => {
+      const el = $(f);
+      if (el) el.addEventListener("input", () => {
+        render();
+        if (saveT) clearTimeout(saveT);
+        saveT = setTimeout(save, 500);
+      });
+    });
+    toyLeaveCleanup.resume = () => { if (saveT) { clearTimeout(saveT); saveT = null; } };
+    $("resumeTpl0").addEventListener("click", () => { tpl = 0; render(); save(); if (SFX.enabled) SFX.click(); });
+    $("resumeTpl1").addEventListener("click", () => { tpl = 1; render(); save(); if (SFX.enabled) SFX.click(); });
+    $("resumePrintBtn").addEventListener("click", () => { try { if (typeof window.print === "function") window.print(); } catch (e) {} });
+    $("resumeDlBtn").addEventListener("click", () => {
+      try {
+        if (typeof Blob === "undefined" || typeof URL === "undefined" || !URL.createObjectURL) return;
+        const doc = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>简历-" + esc($("rsName").value.trim() || "未命名") + "</title></head><body>" + $("resumePreview").innerHTML + "</body></html>";
+        const blob = new Blob([doc], { type: "text/html" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "resume.html";
+        if (typeof a.click === "function") a.click();
+        if (SFX.enabled) SFX.win();
+      } catch (e) {}
+    });
+    $("resumeClearBtn").addEventListener("click", () => {
+      FIELDS.forEach((f) => { const el = $(f); if (el) el.value = ""; });
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      render();
+      if (SFX.enabled) SFX.click();
+    });
+    load(); render();
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      get resume() { const el = $("rsName"); return { name: el ? el.value : "", tpl: tpl }; },
+      resumeHtml() { return lastHtml; },
+      resumeSet(f, v) { const el = $(f); if (el) { el.value = v; render(); save(); } },
+      resumeTemplate(i) { tpl = i; render(); },
+    }));
+  };
   // v1.30：深链调用必须在所有 toyInitFns 注册之后，否则 ensureToyInit 会空跑
   // 深链：打开 #guess 就直接进数字炸弹，分享给宿舍不用再教怎么点；没 hash 就进主页（置顶 + 全部游戏）
   if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
@@ -8846,6 +11340,53 @@
     matchPick: "match3",
     archery: "archery",
     archeryShoot: "archery",
+    flappy: "flappy",
+    flappyFlap: "flappy",
+    flappyForceDead: "flappy",
+    snake2: "snake2",
+    snake2SetDir: "snake2",
+    snake2Step: "snake2",
+    pong: "pong",
+    pongSetDiff: "pong",
+    pongStart: "pong",
+    arkanoid: "arkanoid",
+    arkanoidStart: "arkanoid",
+    mines2: "mines2",
+    mines2Open: "mines2",
+    mines2Flag: "mines2",
+    chess: "chess",
+    chessMove: "chess",
+    chessAi: "chess",
+    go: "go",
+    goPlay: "go",
+    uno: "uno",
+    unoPlay: "uno",
+    mahjong: "mahjong",
+    mahjongDiscard: "mahjong",
+    poker: "poker",
+    pokerCall: "poker",
+    pokerEval: "poker",
+    rhythm: "rhythm",
+    rhythmHit: "rhythm",
+    rhythmStart: "rhythm",
+    tower: "tower",
+    towerDrop: "tower",
+    dodge: "dodge",
+    dodgeStart: "dodge",
+    dodgeMove: "dodge",
+    maze3d: "maze3d",
+    maze3dMove: "maze3d",
+    maze3dTurn: "maze3d",
+    scriptkill: "scriptkill",
+    scriptkillDeal: "scriptkill",
+    scriptkillNext: "scriptkill",
+    memegen: "memegen",
+    memegenSetText: "memegen",
+    memegenTemplate: "memegen",
+    resume: "resume",
+    resumeHtml: "resume",
+    resumeSet: "resume",
+    resumeTemplate: "resume",
   };
   window.__toybox = new Proxy(__toyboxHandle, {
     get(t, k, r) {

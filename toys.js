@@ -9321,7 +9321,7 @@
   /* ---- 4. arkanoid 打砖块2 ---- */
   toyInitFns["arkanoid"] = function () {
     const W = 320, H = 400;
-    let paddle = null, balls = [], bricks = [], items = [], lasers = [], level = 1, score = 0, lives = 3, running = false, raf = null, longT = 0;
+    let paddle = null, balls = [], bricks = [], items = [], lasers = [], level = 1, score = 0, lives = 3, running = false, raf = null, longT = 0, started = false;
     let lastT = 0;
     const LEVELS = [
       ["rrrrr", "oooyo", "bbbbb", "ggggg"],
@@ -9456,10 +9456,14 @@
           ctx.fillStyle = "#fff"; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
           ctx.fillText(it.kind === "multi" ? "×" : it.kind === "long" ? "—" : "!", it.x, it.y + 3);
         }
-        if (!running) {
+        if (!running && started) {
           ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
           ctx.fillText(level > 3 ? "🏆 通关！" : "💀 游戏结束", W / 2, H / 2);
+        } else if (!running && !started) {
+          ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("👆 点一下开始", W / 2, H / 2);
         }
       } catch (e) {}
     }
@@ -9485,12 +9489,12 @@
       if (e.key === "ArrowLeft") paddle.x = Math.max(0, paddle.x - 18);
       if (e.key === "ArrowRight") paddle.x = Math.min(W - pw, paddle.x + 18);
     });
-    $("arkanoidResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    $("arkanoidResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); started = true; raf = requestAnimationFrame(step); });
     toyLeaveCleanup.arkanoid = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get arkanoid() { return { level, score, lives, bricks: bricks.filter((b) => b.hp > 0).length, running }; },
-      arkanoidStart() { if (!running && lives > 0 && level <= 3) { running = true; raf = requestAnimationFrame(step); } },
+      arkanoidStart() { if (!running && lives > 0 && level <= 3) { running = true; started = true; raf = requestAnimationFrame(step); } },
     }));
   };
 
@@ -10756,7 +10760,7 @@
     const KEY = "dorm-toybox-dodge-best-v1";
     const W = 320, H = 420;
     let best = loadBest(KEY);
-    let px = W / 2, py = H - 60, bullets = [], score = 0, lives = 3, running = false, raf = null, frame = 0, grazed = new Set(), invuln = 0;
+    let px = W / 2, py = H - 60, bullets = [], score = 0, lives = 3, running = false, raf = null, frame = 0, grazed = new Set(), invuln = 0, started = false;
     let lastT = 0, spawnAcc = 0, fanAcc = 0;
     function reset() {
       px = W / 2; py = H - 60; bullets = []; score = 0; lives = 3; running = true; frame = 0; invuln = 0; grazed = new Set(); lastT = 0; spawnAcc = 0; fanAcc = 0; elapsedMs = 0;
@@ -10847,12 +10851,16 @@
           ctx.fillStyle = "#fff";
           ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill();
         }
-        if (!running) {
+        if (!running && started) {
           ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
           ctx.fillText("💥 坠毁！", W / 2, H / 2 - 10);
           ctx.font = "18px sans-serif";
           ctx.fillText("得分 " + score + " · 最好 " + best, W / 2, H / 2 + 24);
+        } else if (!running && !started) {
+          ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("👆 拖动开始躲", W / 2, H / 2);
         }
       } catch (e) {}
     }
@@ -10883,12 +10891,12 @@
       if (e.key === "ArrowDown") py = Math.min(H - 12, py + sp);
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) e.preventDefault();
     });
-    $("dodgeResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    $("dodgeResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); started = true; raf = requestAnimationFrame(step); });
     toyLeaveCleanup.dodge = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get dodge() { return { score, lives, best, running }; },
-      dodgeStart() { if (!running && lives > 0) { running = true; raf = requestAnimationFrame(step); } },
+      dodgeStart() { if (!running && lives > 0) { running = true; started = true; raf = requestAnimationFrame(step); } },
       dodgeMove(x, y) { px = x; py = y; },
     }));
   };
@@ -10925,7 +10933,20 @@
     }
     function reset() {
       genMaze();
-      px = 1.5; py = 1.5; pa = 0; over = false; steps = 0;
+      px = 1.5; py = 1.5; over = false; steps = 0;
+      // 出生朝向：选四个方向里视野最开阔的，避免开局糊墙
+      pa = 0; let bestD = -1;
+      for (let d = 0; d < 4; d++) {
+        const a = d * Math.PI / 2;
+        let dist = 0;
+        const dx = Math.cos(a), dy = Math.sin(a);
+        for (let t = 0.1; t < 10; t += 0.1) {
+          const cx = Math.floor(px + dx * t), cy = Math.floor(py + dy * t);
+          if (!maze[cy] || maze[cy][cx] === undefined || maze[cy][cx] === 1) break;
+          dist = t;
+        }
+        if (dist > bestD) { bestD = dist; pa = a; }
+      }
       draw(); render("找绿色出口！");
     }
     function castRay(angle) {

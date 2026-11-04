@@ -1764,3 +1764,9 @@ input:focus, textarea:focus, select:focus {
 .memory-grid, .mole-grid, .gomoku-board, .linkup-grid, .match3-board,
 .puzzle-grid, .maze-board, .spotdiff-grid, .reaction-board, .drums-grid,
 .life-grid { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* v3.0-r11：UNO 卡片样式（之前顶牌无尺寸被拉成全宽） */
+.uno-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; color: var(--ink); font-size: 14px; }
+.uno-card { width: 44px; height: 64px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 16px; flex: none; }
+.uno-count { margin-left: auto; font-size: 13px; color: var(--muted); }
+.uno-hand { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }

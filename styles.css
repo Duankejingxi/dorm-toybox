@@ -349,7 +349,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 /* 涂鸦板 */
 #doodleCanvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 12px; touch-action: none; display: block; margin-top: 12px; }
 .doodle-colors { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-.doodle-color { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.doodle-color { width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; } /* R14：色点原来 30px */
 .doodle-color.active { border-color: #fff; box-shadow: 0 0 0 2px var(--gold2); }
 
 /* 奶蛙表情包制作 */
@@ -1362,8 +1362,8 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
 .howto-bar span { flex: 1; }
 .howto-close {
   flex: none;
-  width: 28px; height: 28px;
-  min-height: 28px;
+  width: 44px; height: 44px;
+  min-height: 44px; /* R14：原来 28px 点不中 */
   border: none;
   border-radius: 50%;
   background: rgba(212, 169, 78, 0.2);
@@ -1377,8 +1377,8 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px; height: 24px;
-  min-height: 24px;
+  width: 44px; height: 44px;
+  min-height: 44px; /* R14：原来 24px 点不中 */
   margin-left: 8px;
   border: 1px solid rgba(212, 169, 78, 0.5);
   border-radius: 50%;
@@ -1508,7 +1508,7 @@ body {
   background: transparent !important; color: var(--c-text) !important;
   border: 1px solid var(--c-border) !important; box-shadow: none !important;
 }
-.ghost-btn.small, .btn.small { min-height: 36px; font-size: 13px; padding: 0 14px; }
+.ghost-btn.small, .btn.small { min-height: 44px; font-size: 13px; padding: 0 14px; } /* R14：游戏开始/重开等按钮原来 36px，低于 44px 触屏标准 */
 .btn:disabled { opacity: .45; }
 
 /* ---- 7. 玩具方块：系统卡片 ---- */

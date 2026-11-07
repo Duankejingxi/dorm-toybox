@@ -5076,7 +5076,7 @@
     }
     function snakePlaceFood() {
       snakeFoodCount++;
-      if (snakeFoodCount === 1) { snakeFood = { x: 11, y: 8 }; return; } // 第一颗固定在正前方，上手先吃一口
+      if (snakeFoodCount === 1) { snakeFood = { x: 8, y: 8 }; return; } // R14：第一颗固定在正前方，上手先吃一口（出生点改到 x=5，离墙 11 格）
       if (snakeFoodCount === 2) { snakeFood = { x: 8, y: 11 }; return; } // 第二颗固定在正下方，转向后能吃到
       let p;
       do { p = { x: Math.floor(Math.random() * SNAKE_GRID), y: Math.floor(Math.random() * SNAKE_GRID) }; }
@@ -5084,7 +5084,7 @@
       snakeFood = p;
     }
     function snakeReset() {
-      snakeBody = [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }];
+      snakeBody = [{ x: 5, y: 8 }, { x: 4, y: 8 }, { x: 3, y: 8 }]; // R14：出生点左移，零操作撞墙从 1.2 秒放宽到 2.4 秒，新手有时间反应
       snakeDir = { x: 1, y: 0 }; snakeNextDir = null; snakeScore = 0; snakeFoodCount = 0;
       snakePlaceFood();
       snakeUpdateScore();
@@ -5101,8 +5101,8 @@
         SFX.pop(Math.min(1, snakeScore / 30));
         snakeUpdateScore();
         snakePlaceFood();
-        // 吃得越多越快，最快 80ms 一步
-        if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = setInterval(snakeStep, Math.max(80, 150 - snakeScore * 5)); }
+        // R14：吃得越多越快，最快 80ms 一步；起步 220ms（原来 150ms，上手就死太快）
+        if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = setInterval(snakeStep, Math.max(80, 220 - snakeScore * 8)); }
       } else {
         snakeBody.pop();
       }
@@ -5121,7 +5121,7 @@
       if (snakeState === "over" || snakeState === "idle") snakeReset();
       if (snakeTimer) return;
       snakeState = "running";
-      snakeTimer = setInterval(snakeStep, Math.max(80, 150 - snakeScore * 5));
+      snakeTimer = setInterval(snakeStep, Math.max(80, 220 - snakeScore * 8)); // R14：起步 220ms
       $("snakeStatus").textContent = "游戏中，吃红点长一节，别撞墙。";
       $("snakeStartBtn").textContent = "暂停 ⏸";
     }

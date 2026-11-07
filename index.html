@@ -1267,6 +1267,7 @@
     <p class="hint">点两个相邻的格子交换，3 个连成一排就消掉。消 1 个 +10 分，看看能连多少。</p>
     <div class="match3-board" id="match3Board"></div>
     <p class="result-line" id="match3Score">得分 0 · 步数 0 · 最好 0</p>
+    <p class="result-line" id="match3Status"></p>
     <div class="btn-row">
       <button class="btn ghost-btn small" id="match3ResetBtn">重开 ↺</button>
     </div>
@@ -1329,7 +1330,7 @@
   </section>
   <section class="panel toy hidden" id="toy-chess">
     <h2>♟️ 象棋</h2>
-    <p class="hint">你执红先走。点棋子再点目标格。AI 会走，别被将死。</p>
+    <p class="hint">你执红先走。点棋子再点目标格，吃掉黑将就赢（简化规则：没有将军判定）。</p>
     <canvas id="chessCanvas" width="320" height="352" style="width:100%;max-width:320px"></canvas>
     <p class="result-line" id="chessMsg">轮到你走</p>
     <div class="btn-row"><button class="btn ghost-btn small" id="chessResetBtn">重开 ↺</button></div>

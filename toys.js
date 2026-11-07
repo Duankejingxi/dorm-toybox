@@ -98,9 +98,11 @@
   const toyInited = {};   // 玩具 id -> 是否已初始化
   function ensureToyInit(id) {
     if (toyInited[id]) return;
-    toyInited[id] = true;
     const fn = toyInitFns[id];
-    if (typeof fn === "function") fn();
+    if (typeof fn !== "function") return;
+    // R14：先跑初始化、成功后再标记。原来先标记再跑，出错后玩具永久"已初始化"却没监听器，点开是死的。
+    try { fn(); toyInited[id] = true; }
+    catch (e) { try { console.error("[toybox] init failed:", id, e); } catch (_) {} }
   }
   // 上收的公共小工具（原来散在各段落里重复定义）
   function shuffle(arr) {
@@ -5796,9 +5798,10 @@
         btn.addEventListener("click", () => mClick(i, false));
         btn.addEventListener("contextmenu", (e) => { if (e.preventDefault) e.preventDefault(); mClick(i, true); });
         let pressTimer = null;
-        btn.addEventListener("pointerdown", () => { pressTimer = setTimeout(() => { mClick(i, true); pressTimer = null; }, 450); });
+        btn.addEventListener("pointerdown", (e) => { if (e && e.button !== undefined && e.button !== 0) return; pressTimer = setTimeout(() => { mClick(i, true); pressTimer = null; }, 450); }); // 右键不进长按计时，不然按住右键 450ms 会多插一次旗再取消
         btn.addEventListener("pointerup", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
         btn.addEventListener("pointerleave", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+        btn.addEventListener("pointercancel", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }); // 系统手势打断长按也要清计时，不然手指都走了还会插旗
         grid.appendChild(btn);
       });
       $("minesLeft").textContent = "💣 剩 " + (M_MINES - flags) + " 颗雷";
@@ -7205,7 +7208,7 @@
     const JUMP_KEY = "dorm-toybox-jump-best-v1";
     const JUMP_W = 340, JUMP_MAX = 280;
     let jumpBest = loadBest(JUMP_KEY);
-    let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null;
+    let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null, jumpBusy = false;
     let jumpPlatA = { x: 20, w: 60 }, jumpPlatB = { x: 180, w: 56 }, jumpCharX = 34;
     function jumpNewPlatB() {
       const w = 40 + Math.floor(Math.random() * 31);
@@ -7222,14 +7225,15 @@
     }
     function jumpReset() {
       if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
-      jumpScore = 0; jumpPower = 0; jumpOver = false; jumpCharging = false;
+      jumpScore = 0; jumpPower = 0; jumpOver = false; jumpCharging = false; jumpBusy = false;
       jumpPlatA = { x: 20, w: 60 }; jumpPlatB = jumpNewPlatB(); jumpCharX = 34;
       $("jumpChar").classList.remove("charging");
+      $("jumpChar").style.bottom = "56px"; // v3.1：死后重开要把青蛙拉回台面，不然内联 bottom:-40px 会一直藏在舞台下面
       $("jumpStatus").textContent = "按住蓄力，松手起跳。";
       jumpRender();
     }
     function jumpRelease() {
-      if (jumpOver || !jumpCharging && jumpPower === 0) return;
+      if (jumpOver || jumpBusy || !jumpCharging && jumpPower === 0) return;
       if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
       jumpCharging = false;
       const dist = (jumpPower / 100) * JUMP_MAX;
@@ -7243,6 +7247,13 @@
       SFX.jump();
       setTimeout(() => { ch.style.bottom = "56px"; }, 160);
       jumpPower = 0;
+      // v3.1：力气太小、中心还落在脚下这个台子上，就原地蹦一下，不扣分也不死；
+      // 以前这里只认下一个台子，轻点一下就直接掉下去摔死，还能在同一个台子上反复轻跳刷分。
+      if (center >= jumpPlatA.x && center <= jumpPlatA.x + jumpPlatA.w) {
+        $("jumpStatus").textContent = "力气小了点，还在原地，再蓄点力。";
+        jumpRender();
+        return;
+      }
       if (center >= jumpPlatB.x && center <= jumpPlatB.x + jumpPlatB.w) {
         const isCenter = Math.abs(center - (jumpPlatB.x + jumpPlatB.w / 2)) <= 8;
         jumpScore += isCenter ? 2 : 1;
@@ -7255,13 +7266,16 @@
           jumpPerfect(ch); // v1.32：Perfect! 飘字
         } else { SFX.pop(0.4); }
         $("jumpStatus").textContent = isCenter ? "🎯 正中心！+2 分！" : "稳稳落下，+1 分。";
-        // 场景左移：落脚的台子变成起点，再生成下一个
+        // 场景左移：落脚的台子变成起点，再生成下一个；左移完成前不接受新的蓄力，
+        // 不然能在 350ms 的窗口里对着同一个台子再跳一次刷分
+        jumpBusy = true;
         setTimeout(() => {
           if (jumpOver) return;
           jumpPlatA = { x: 20, w: jumpPlatB.w };
           jumpCharX = 20 + Math.floor((jumpPlatA.w - 32) / 2);
           jumpPlatB = jumpNewPlatB();
           jumpRender();
+          jumpBusy = false;
         }, 350);
       } else {
         jumpOver = true;
@@ -7283,7 +7297,7 @@
     }
     const jumpStageEl = $("jumpStage");
     jumpStageEl.addEventListener("pointerdown", (e) => {
-      if (jumpOver) return;
+      if (jumpOver || jumpBusy) return;
       if (e.preventDefault) e.preventDefault();
       jumpCharging = true; jumpPower = 0;
       $("jumpChar").classList.add("charging"); // v1.32：蓄力压缩
@@ -8788,6 +8802,31 @@
       }
       return [...hit];
     }
+    function match3HasMove() {
+      // 有没有一次相邻交换能凑出三连：没有就是死局，再怎么换都只会换回来
+      for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
+        for (const [dr, dc] of [[0, 1], [1, 0]]) {
+          const r2 = r + dr, c2 = c + dc;
+          if (r2 >= MATCH3_N || c2 >= MATCH3_N) continue;
+          if (match3Board[r][c] === match3Board[r2][c2]) continue;
+          const t = match3Board[r][c];
+          match3Board[r][c] = match3Board[r2][c2]; match3Board[r2][c2] = t;
+          const ok = match3Find().length > 0;
+          const t2 = match3Board[r][c];
+          match3Board[r][c] = match3Board[r2][c2]; match3Board[r2][c2] = t2;
+          if (ok) return true;
+        }
+      }
+      return false;
+    }
+    function match3EnsureMoves() {
+      // 死局就换一副新牌（分数保留），返回是否换过牌
+      if (match3HasMove()) return false;
+      let guard = 0;
+      do { match3NewBoard(); } while (!match3HasMove() && guard++ < 50);
+      $("match3Status").textContent = "这副牌走不下去了，换了一副新的，分数保留。";
+      return true;
+    }
     function match3Collapse() {
       // 消掉三连，下落补齐，连锁反应一直消到没有三连
       let total = 0;
@@ -8826,7 +8865,7 @@
       const [pr, pc] = match3Sel;
       match3Sel = null;
       if (pr === r && pc === c) { match3Render(); return; }
-      if (Math.abs(pr - r) + Math.abs(pc - c) !== 1) { match3Render(); return; } // 不相邻
+      if (Math.abs(pr - r) + Math.abs(pc - c) !== 1) { match3Sel = [r, c]; match3Render(); return; } // 不相邻：改选新点的格子，而不是取消选中让玩家再点一次
       // 交换
       const tmp = match3Board[pr][pc];
       match3Board[pr][pc] = match3Board[r][c];
@@ -8844,12 +8883,17 @@
           match3Best = match3Score;
           saveBest(MATCH3_KEY, match3Best);
         }
+        // 补齐后可能走进死局：直接换一副新牌（状态提示在 match3EnsureMoves 里写），
+        // 分数保留，别让玩家对着换不掉的牌干瞪眼；能正常走就把旧提示清掉
+        if (!match3EnsureMoves()) $("match3Status").textContent = "";
       }
       match3Render();
     }
     function match3Reset() {
       match3Score = 0; match3Moves = 0; match3Sel = null;
       match3NewBoard();
+      match3EnsureMoves();
+      $("match3Status").textContent = "";
       match3Render();
     }
     $("match3ResetBtn").addEventListener("click", match3Reset);
@@ -8858,6 +8902,8 @@
         get match3() { return { board: match3Board.map((r) => r.slice()), score: match3Score, moves: match3Moves, best: match3Best }; },
         matchSet(board) { match3Board = board.map((r) => r.slice()); match3Score = 0; match3Moves = 0; match3Sel = null; match3Render(); },
         matchPick(r, c) { match3Pick(r, c); },
+        matchHasMove() { return match3HasMove(); },
+        matchEnsure() { return match3EnsureMoves(); },
     }));
 
   };
@@ -11303,10 +11349,6 @@
       resumeTemplate(i) { tpl = i; render(); },
     }));
   };
-  // v1.30：深链调用必须在所有 toyInitFns 注册之后，否则 ensureToyInit 会空跑
-  // 深链：打开 #guess 就直接进数字炸弹，分享给宿舍不用再教怎么点；没 hash 就进主页（置顶 + 全部游戏）
-  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
-  else showHome();
 
   /* ---------- 测试用把手（和宿舍人生一样，方便冒烟测试读内部状态） ---------- */
   /* 把手：懒初始化版——读到哪个键，就先把对应玩具初始化好（冒烟测试直调把手也能触发） */
@@ -11461,4 +11503,10 @@
       return Reflect.has(t, k);
     },
   });
+
+  // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
+  // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。
+  // v1.30 要求不变：必须在所有 toyInitFns 注册之后。
+  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
+  else showHome();
 })(); // IIFE 收尾（原 renderTimer() 调用已搬进 timer 段的初始化）

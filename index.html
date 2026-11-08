@@ -225,14 +225,14 @@
   <!-- 石头剪刀布 -->
   <section class="panel toy hidden" id="toy-rps">
     <h2>✊ 石头剪刀布</h2>
-    <p class="hint">和电脑猜拳，先赢 5 局拿下整场。输了别赖，赢了请全宿舍喝水。</p>
+    <p class="hint">和电脑猜拳，先赢 3 局拿下整场。输了别赖，赢了请全宿舍喝水。</p>
     <div class="rps-stage">
       <div class="rps-side"><span class="rps-label">你</span><span class="rps-hand" id="rpsYou">❔</span></div>
       <div class="rps-vs">VS</div>
       <div class="rps-side"><span class="rps-label">电脑</span><span class="rps-hand" id="rpsCpu">❔</span></div>
     </div>
     <p class="result-line" id="rpsResult">出一个，看看谁赢。</p>
-    <p class="count-line" id="rpsScore">你 0 : 0 电脑 · 先赢 5 局获胜</p>
+    <p class="count-line" id="rpsScore">你 0 : 0 电脑 · 先赢 3 局获胜</p>
     <div class="btn-row">
       <button class="btn rps-btn" id="rpsRockBtn">✊ 石头</button>
       <button class="btn rps-btn" id="rpsScissorsBtn">✌️ 剪刀</button>
@@ -1004,7 +1004,7 @@
   <!-- 推箱子 -->
   <section class="panel toy hidden" id="toy-sokoban">
     <h2>📦 推箱子</h2>
-    <p class="hint">把所有箱子推到🎯上。手指滑动或方向键移动，箱子只能推不能拉，别推到墙角卡死。共 3 关。</p>
+    <p class="hint">把所有箱子推到🎯上。手指滑动或方向键移动，箱子只能推不能拉，别推到墙角卡死，推错了点悔棋。共 3 关。</p>
     <div class="seg-row" id="sokobanLevelRow">
       <button class="btn seg-btn picked" id="sokobanL1Btn">第 1 关</button>
       <button class="btn seg-btn" id="sokobanL2Btn">第 2 关</button>
@@ -1014,6 +1014,7 @@
     <p class="result-line" id="sokobanStatus">滑动或按方向键，开始推箱子。</p>
     <p class="count-line" id="sokobanStats">已走 0 步</p>
     <div class="btn-row">
+      <button class="btn ghost-btn small" id="sokobanUndoBtn">悔棋 ↩</button>
       <button class="btn gold-btn small" id="sokobanResetBtn">重开本关 ↺</button>
     </div>
   </section>
@@ -1069,7 +1070,7 @@
   <!-- 数字华容道 -->
   <section class="panel toy hidden" id="toy-slide15">
     <h2>🔢 数字华容道</h2>
-    <p class="hint">点空格旁边的数字滑过去，把数字按顺序排好。步数越少越厉害，最好成绩存本机。</p>
+    <p class="hint">点空格旁边的数字滑过去，把数字按顺序排好。步数越少越厉害，最好成绩存本机。点复原回到本局开局。</p>
     <div class="btn-row" id="slide15SizeRow">
       <button class="btn small ghost-btn" id="slide15_3Btn">3×3</button>
       <button class="btn small gold-btn" id="slide15_4Btn">4×4</button>

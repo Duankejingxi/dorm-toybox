@@ -173,6 +173,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
   text-align: center; border-radius: 16px; padding: 48px 16px; font-size: 24px; font-weight: 800;
   cursor: pointer; border: 1px solid var(--line); background: rgba(255, 255, 255, .04);
   min-height: 170px; display: flex; align-items: center; justify-content: center;
+  touch-action: none; /* v3.0-r16：变绿瞬间快点，别被双击缩放/滚动抢走 */
 }
 .reaction-stage.waiting { background: #7a1f1f; border-color: #ff7a6b; }
 .reaction-stage.go { background: #1d7a3a; border-color: #7dff9b; }
@@ -249,7 +250,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .sudoku-numbers { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
 .sudoku-num { width: 34px; height: 40px; font-size: 18px; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 197, 66, .14); color: var(--ink); cursor: pointer; }
 .schulte-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
-.schulte-cell { aspect-ratio: 1; font-size: 22px; font-weight: 700; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); cursor: pointer; }
+.schulte-cell { aspect-ratio: 1; font-size: 22px; font-weight: 700; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); cursor: pointer; touch-action: none; /* v3.0-r16：快速连点，别被双击缩放打断 */ }
 .schulte-cell.done { background: rgba(245, 197, 66, .25); border-color: var(--gold); color: var(--gold); }
 .score-board { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 .score-team { flex: 1; text-align: center; }
@@ -258,7 +259,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .score-vs { font-size: 18px; font-weight: 800; color: rgba(255, 255, 255, .5); }
 .score-btns { display: flex; gap: 6px; justify-content: center; }
 .led-colors { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
-.led-color { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.led-color { width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; } /* R16：色点原来 30px，难按（同 R14 涂鸦色点） */
 .led-color.active { border-color: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, .5); }
 .led-speeds { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 .led-display { margin-top: 12px; background: #000; border: 1px solid var(--line); border-radius: 12px; padding: 18px 0; overflow: hidden; }
@@ -336,7 +337,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 
 /* 宿舍值日表 */
 .duty-tasks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.duty-task { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; cursor: pointer; }
+.duty-task { display: inline-flex; align-items: center; gap: 5px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; cursor: pointer; } /* R16：原来约 30px 高，提到 44px 触屏 */
 .duty-wrap { overflow-x: auto; margin-top: 12px; }
 .duty-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .duty-table th, .duty-table td { padding: 8px 6px; border-bottom: 1px solid rgba(255, 255, 255, .08); text-align: left; }
@@ -378,6 +379,8 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 /* 待办清单 */
 .beads-controls input { flex: 1; min-width: 0; }
 .todo-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.todo-row input[type="checkbox"] { width: 22px; height: 22px; flex: none; accent-color: var(--gold); } /* R16：复选框原来 13px，手机难勾 */
+.todo-move { min-width: 40px; padding: 0 6px; flex: none; } /* R16：↑↓ 调顺序，手机可点 */
 .todo-row.done .todo-text { text-decoration: line-through; color: #8b81a3; }
 .todo-text { flex: 1; font-size: 16px; }
 .frog-name { font-weight: 800; margin: 6px 0 8px; }
@@ -447,6 +450,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .sch-label.now { color: var(--gold); border: 1px solid var(--gold); }
 .sch-cell { min-height: 52px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .sch-cell.filled { background: linear-gradient(180deg, rgba(245, 197, 66, .22), rgba(245, 197, 66, .08)); border-color: var(--gold); color: var(--ink); }
+.sch-cell.armed { border-color: #e5484d; box-shadow: 0 0 0 2px rgba(229, 72, 77, .5); } /* R16：两点确认删除，第一点武装变红 */
 .sch-cell.today { border-color: rgba(245, 197, 66, .5); }
 .sch-cell.now { box-shadow: 0 0 10px rgba(245, 197, 66, .5); }
 .sch-name { font-size: 13px; font-weight: 800; line-height: 1.2; }
@@ -465,7 +469,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .gomoku-stone.black { background: radial-gradient(circle at 35% 30%, #555, #000 70%); }
 .gomoku-stone.white { background: radial-gradient(circle at 35% 30%, #fff, #cfcfcf 70%); }
 .gomoku-stone.last { outline: 2px solid #ff4d4d; outline-offset: 1px; }
-.piano-keys { display: flex; max-width: 340px; margin: 14px auto 0; height: 150px; position: relative; }
+.piano-keys { display: flex; max-width: 340px; margin: 14px auto 0; height: 150px; position: relative; touch-action: none; } /* R16：滑音时不滚动页面 */
 .piano-white { flex: 1; border: 1px solid #999; border-radius: 0 0 8px 8px; background: linear-gradient(180deg, #fff, #e8e8e8); color: #333; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; }
 .piano-white.active { background: linear-gradient(180deg, #ffe9a8, #f5c542); }
 .piano-black { position: absolute; top: 0; width: 11%; height: 58%; border-radius: 0 0 6px 6px; background: linear-gradient(180deg, #444, #000); color: #ddd; font-size: 10px; cursor: pointer; z-index: 2; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }

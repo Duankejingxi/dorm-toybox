@@ -1395,6 +1395,8 @@
     const TOMATO_KEY = "dorm-toybox-tomatoes-v1";
     let remaining = focusSeconds;
     let timerId = null;
+    let pomodoroEndAt = 0; // v3.0-r16：按截止时间算剩余，切后台被节流也不慢（旧写法每 tick --1 秒，后台 1 分钟才 tick 一次就慢 59 秒）
+    function pomodoroLeftSec() { return pomodoroEndAt ? Math.max(0, Math.round((pomodoroEndAt - performance.now()) / 1000)) : remaining; }
     let tomatoesToday = 0;
     try {
       const saved = JSON.parse(localStorage.getItem(TOMATO_KEY) || "null");
@@ -1467,6 +1469,7 @@
       b.setAttribute("data-minutes", String(m));
       b.addEventListener("click", () => {
         if (timerId) { clearInterval(timerId); timerId = null; }
+        pomodoroEndAt = 0;
         focusSeconds = m * 60;
         remaining = focusSeconds;
         $("timerStartBtn").textContent = "开始专注 ▶";
@@ -1480,19 +1483,24 @@
     });
     $("timerStartBtn").addEventListener("click", () => {
       if (timerId) {
+        remaining = pomodoroLeftSec();
+        pomodoroEndAt = 0;
         clearInterval(timerId);
         timerId = null;
         $("timerStartBtn").textContent = "继续专注 ▶";
         $("timerStatus").textContent = "暂停中。歇一会没关系，回来继续。";
+        renderTimer();
         return;
       }
       if (remaining === 0) remaining = focusSeconds;
+      pomodoroEndAt = performance.now() + remaining * 1000;
       $("timerStartBtn").textContent = "暂停 ⏸";
       $("timerStatus").textContent = "专注中……手机翻过去，这段时间只干一件事。";
       timerId = setInterval(() => {
-        remaining--;
+        remaining = pomodoroLeftSec();
         renderTimer();
         if (remaining <= 0) {
+          pomodoroEndAt = 0;
           clearInterval(timerId);
           timerId = null;
           tomatoesToday++;
@@ -1506,6 +1514,7 @@
     });
     $("timerResetBtn").addEventListener("click", () => {
       if (timerId) { clearInterval(timerId); timerId = null; }
+      pomodoroEndAt = 0;
       remaining = focusSeconds;
       $("timerStartBtn").textContent = "开始专注 ▶";
       $("timerStatus").textContent = "已重置。先想好这段时间要干什么。";
@@ -1971,6 +1980,8 @@
       $("rpsResult").textContent = "出一个，看看谁赢。AI 正在研究你的套路……";
     });
     renderRpsScore();
+    // v3.0-r16：刷新后比分已打完时也要露出重置按钮，不然出招被拦、重置又藏着，整场卡死
+    if (rpsScore.you >= RPS_TARGET || rpsScore.cpu >= RPS_TARGET) $("rpsResetBtn").classList.remove("hidden");
 
   };
   /* ---------- 10. 数字炸弹 ---------- */
@@ -1982,6 +1993,7 @@
     let guessLow = 1, guessHigh = 100; // 当前区间
     let guessMode = "solo"; // solo | duo
     let guessTurn = 0; // 双人模式轮到谁（0=玩家一，1=玩家二）
+    let guessOver = false; // v3.0-r16：终局后锁死，不然拆弹成功/分出胜负后还能继续猜、重复刷结果
     const guessSec = $("toy-guess");
     // 区间进度条
     const rangeWrap = document.createElement("div");
@@ -2005,14 +2017,10 @@
     const turnP = document.createElement("p");
     turnP.className = "count-line"; turnP.style.display = "none";
     if (guessSec) {
-      // 插到 guessBtn 后面
-      const gb = $("guessBtn");
-      if (gb && gb.parentNode) {
-        // stub 兼容：直接 append
-        guessSec.appendChild(modeRow);
-        guessSec.appendChild(turnP);
-        guessSec.appendChild(rangeWrap);
-      }
+      // 直接 append 到 section 末尾（和老虎机赔率表同款写法；旧写法要求 guessBtn 有 parentNode，冒烟测试的桩元素没有 parent，模式按钮在测试里就丢了）
+      guessSec.appendChild(modeRow);
+      guessSec.appendChild(turnP);
+      guessSec.appendChild(rangeWrap);
     }
     function renderGuessRange() {
       const pctLow = ((guessLow - 1) / 99) * 100;
@@ -2022,10 +2030,20 @@
       rangeLabel.textContent = "🎯 区间：[" + guessLow + ", " + guessHigh + "] · 已猜 " + guessTries.length + " 次";
     }
     function resetGuessRange() { guessLow = 1; guessHigh = 100; guessTurn = 0; renderGuessRange(); }
+    function resetGuessRound() { // v3.0-r16：开新局（换数/切模式都走这里，避免单双人共用已知炸弹）
+      guessTarget = 1 + Math.floor(Math.random() * 100);
+      guessTries = [];
+      guessOver = false;
+      resetGuessRange();
+      renderGuessChips();
+      renderGuessCount();
+      $("guessInput").value = "";
+    }
     soloBtn.addEventListener("click", () => {
       guessMode = "solo";
       soloBtn.classList.add("picked"); duoBtn.classList.remove("picked");
       turnP.style.display = "none";
+      resetGuessRound();
       $("guessResult").textContent = "单人模式：猜中炸弹即拆弹成功！";
     });
     duoBtn.addEventListener("click", () => {
@@ -2033,6 +2051,7 @@
       duoBtn.classList.add("picked"); soloBtn.classList.remove("picked");
       turnP.style.display = "";
       turnP.textContent = "👤 轮到玩家一猜（猜中者输！）";
+      resetGuessRound();
       $("guessResult").textContent = "双人对战：轮流猜，猜中炸弹的人输！";
     });
     function loadGuessBest() {
@@ -2056,6 +2075,10 @@
       });
     }
     function guessOnce() {
+      if (guessOver) {
+        $("guessResult").textContent = "这局已经结束了，点「换个数重开」再来一局。";
+        return;
+      }
       const n = parseInt($("guessInput").value, 10);
       if (isNaN(n) || n < 1 || n > 100) {
         $("guessResult").textContent = "请输入 1–100 之间的整数。";
@@ -2068,6 +2091,7 @@
       if (n > guessTarget && n <= guessHigh) guessHigh = n - 1;
       renderGuessRange();
       if (n === guessTarget) {
+        guessOver = true;
         if (guessMode === "duo") {
           const loser = guessTurn === 0 ? "玩家一" : "玩家二";
           const winner = guessTurn === 0 ? "玩家二" : "玩家一";
@@ -2104,11 +2128,7 @@
       if (e.key === "Enter") { e.preventDefault(); guessOnce(); }
     });
     $("guessResetBtn").addEventListener("click", () => {
-      guessTarget = 1 + Math.floor(Math.random() * 100);
-      guessTries = [];
-      resetGuessRange();
-      renderGuessChips();
-      renderGuessCount();
+      resetGuessRound();
       $("guessResult").textContent = "换了个数，重新猜。";
       $("guessInput").value = "";
     });
@@ -2122,7 +2142,7 @@
     let memoryLock = false;
     let memoryMatched = 0;
     let memoryMoves = 0;
-    let memoryStartAt = 0;
+    let memoryStartAt = null; // v3.0-r15：用 null 做“未开始”哨兵，不用 0（performance.now() 在加载瞬间可为 0，!0 会重复建计时器且旧的泄漏）
     let memoryTimerId = null;
     function loadMemoryBest() {
       try {
@@ -2137,7 +2157,7 @@
         : "还没人留下纪录。第一个通关的就是纪录。";
     }
     function memoryElapsed() {
-      return memoryStartAt ? Math.floor((performance.now() - memoryStartAt) / 1000) : 0;
+      return memoryStartAt === null ? 0 : Math.floor((performance.now() - memoryStartAt) / 1000);
     }
     function renderMemoryStats() {
       $("memoryStats").textContent = "步数 " + memoryMoves + " · 用时 " + memoryElapsed() + " 秒";
@@ -2148,7 +2168,7 @@
       memoryLock = false;
       memoryMatched = 0;
       memoryMoves = 0;
-      memoryStartAt = 0;
+      memoryStartAt = null;
       if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; }
       const grid = $("memoryGrid");
       grid.innerHTML = "";
@@ -2167,7 +2187,7 @@
     }
     function memoryFlip(card) {
       if (memoryLock || card.classList.contains("flipped") || card.classList.contains("matched") || card.classList.contains("flipping") || card.classList.contains("unflipping")) return;
-      if (!memoryStartAt) {
+      if (memoryStartAt === null) {
         memoryStartAt = performance.now();
         memoryTimerId = setInterval(renderMemoryStats, 500);
       }
@@ -2233,7 +2253,7 @@
 
     // 退出就停：翻牌计时只刷显示，回来再续上（用时按时间戳算，不会丢）
     toyLeaveCleanup.memory = () => { if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; } };
-    toyEnterResume.memory = () => { if (memoryStartAt && memoryMatched < MEMORY_EMOJIS.length && !memoryTimerId) memoryTimerId = setInterval(renderMemoryStats, 500); };
+    toyEnterResume.memory = () => { if (memoryStartAt !== null && memoryMatched < MEMORY_EMOJIS.length && !memoryTimerId) memoryTimerId = setInterval(renderMemoryStats, 500); };
 
   };
   /* ---------- 12. 打字测试 ---------- */
@@ -2241,7 +2261,7 @@
     const TYPING_BEST_KEY = "dorm-toybox-typing-best-v1";
     const TYPING_LEVEL_KEY = "dorm-toybox-typing-level-v1"; // 已解锁到的最高关（0-based）
     let typingTarget = "";
-    let typingStartAt = 0;
+    let typingStartAt = null; // v3.0-r16：用 null 做“未开始”哨兵，不用 0（同 R15 数独/记忆翻牌：performance.now() 在加载瞬间可为 0，!0 会重复建计时器且旧的泄漏）
     let typingTimerId = null;
     let typingDone = false;
     let typingComposing = false; // 输入法正在拼字（composition）时不比对
@@ -2302,7 +2322,7 @@
       });
     }
     function typingElapsedSec() {
-      return typingStartAt ? (performance.now() - typingStartAt) / 1000 : 0;
+      return typingStartAt === null ? 0 : (performance.now() - typingStartAt) / 1000;
     }
     function renderTypingTarget() {
       const box = $("typingTarget");
@@ -2317,7 +2337,7 @@
     function typingNewSentence() {
       const lv = TYPING_LEVELS[typingLevel] || TYPING_LEVELS[0];
       typingTarget = pick(lv.sentences);
-      typingStartAt = 0;
+      typingStartAt = null;
       typingDone = false;
       if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
       $("typingInput").value = "";
@@ -2379,7 +2399,7 @@
     }
     function typingOnInput() {
       if (typingComposing) return;
-      if (!typingStartAt && !typingDone) {
+      if (typingStartAt === null && !typingDone) {
         typingStartAt = performance.now();
         typingTimerId = setInterval(typingTick, 200);
       }
@@ -2401,7 +2421,7 @@
 
     // 退出就停：打字计时只刷显示，回来再续上（用时按时间戳算，不会丢）
     toyLeaveCleanup.typing = () => { if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; } };
-    toyEnterResume.typing = () => { if (typingStartAt && !typingDone && !typingTimerId) typingTimerId = setInterval(typingTick, 200); };
+    toyEnterResume.typing = () => { if (typingStartAt !== null && !typingDone && !typingTimerId) typingTimerId = setInterval(typingTick, 200); };
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get typing() { return { level: typingLevel, best: typingBest }; },
         typingSetLevel(i) { typingLevel = Math.min(4, Math.max(0, i)); renderTypingLevels(); typingNewSentence(); },
@@ -2544,7 +2564,7 @@
     const paytable = document.createElement("div");
     paytable.className = "slots-paytable";
     paytable.innerHTML = '<p class="paytable-title">📋 赔率表</p>' +
-      '<p>三个 🍒/🍋/🔔/⭐ 一样：+10 分</p>' +
+      '<p>三个 🍒/🍋/🍇/🔔/⭐ 一样：+10 分</p>' +
       '<p>三个 💎 一样：+30 分 💰</p>' +
       '<p>🪙 欢乐豆：赢分 1:1 兑换，存 localStorage</p>';
     const coinsP = document.createElement("p");
@@ -2664,13 +2684,15 @@
     $("slotsSpinA").addEventListener("click", () => slotsSpin("a"));
     $("slotsSpinB").addEventListener("click", () => slotsSpin("b"));
     $("slotsResetBtn").addEventListener("click", () => {
-      slotsStats = { a: 0, b: 0, round: 1, turn: "a" };
+      // v3.0-r16：重置只清比分/轮次，欢乐豆保留（旧写法丢了 coins，下次赢分就变 NaN）
+      slotsStats = { a: 0, b: 0, round: 1, turn: "a", coins: (typeof slotsStats.coins === "number" ? slotsStats.coins : 100) };
       saveSlotsStats();
       renderSlotsReels("a", Array(9).fill("🍒"));
       renderSlotsReels("b", Array(9).fill("🍒"));
       slotsResultEl("a").textContent = "等你拉。";
       slotsResultEl("b").textContent = "等你拉。";
       renderSlotsStats();
+      renderSlotsCoins();
     });
     slotsResultEl("a").textContent = "等你拉。";
     slotsResultEl("b").textContent = "等你拉。";
@@ -2882,7 +2904,7 @@
     let sudokuEntries = [];
     let sudokuSelected = -1;
     let sudokuMistakes = 0;
-    let sudokuStartAt = 0;
+    let sudokuStartAt = null; // v3.0-r15：同记忆翻牌，用 null 做哨兵，不用 0（performance.now() 可为 0）
     let sudokuTimerId = null;
     let sudokuWon = false;
     function loadSudokuBest() {
@@ -2890,7 +2912,7 @@
       catch (e) { return 0; }
     }
     let sudokuBest = loadSudokuBest();
-    function sudokuElapsedSec() { return sudokuStartAt ? (performance.now() - sudokuStartAt) / 1000 : 0; }
+    function sudokuElapsedSec() { return sudokuStartAt === null ? 0 : (performance.now() - sudokuStartAt) / 1000; }
     function renderSudokuBest() {
       $("sudokuBest").textContent = sudokuBest > 0
         ? "宿舍纪录：" + sudokuBest + " 秒通关"
@@ -2941,7 +2963,7 @@
     }
     function sudokuFill(n) {
       if (sudokuWon || sudokuSelected < 0 || sudokuPuzzle[sudokuSelected] !== 0) return;
-      if (!sudokuStartAt) {
+      if (sudokuStartAt === null) {
         sudokuStartAt = performance.now();
         sudokuTimerId = setInterval(renderSudokuStats, 1000);
       }
@@ -2975,7 +2997,7 @@
       sudokuEntries = new Array(81).fill(0);
       sudokuSelected = -1;
       sudokuMistakes = 0;
-      sudokuStartAt = 0;
+      sudokuStartAt = null;
       sudokuWon = false;
       if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; }
       $("sudokuResult").textContent = "点一个空格开始填。";
@@ -2998,7 +3020,7 @@
     $("sudokuNewBtn").addEventListener("click", sudokuNewGame);
     sudokuNewGame();
     toyLeaveCleanup.sudoku = () => { if (sudokuTimerId) { clearInterval(sudokuTimerId); sudokuTimerId = null; } };
-    toyEnterResume.sudoku = () => { if (sudokuStartAt && !sudokuWon && !sudokuTimerId) sudokuTimerId = setInterval(renderSudokuStats, 1000); };
+    toyEnterResume.sudoku = () => { if (sudokuStartAt !== null && !sudokuWon && !sudokuTimerId) sudokuTimerId = setInterval(renderSudokuStats, 1000); };
 
   };
   /* ---------- 16. 舒尔特方格 ---------- */
@@ -3007,7 +3029,7 @@
     const SCHULTE_BEST_KEY = "dorm-toybox-schulte-best-v1";
     let schulteSize = 5; // 默认 5x5（测试刚性）
     let schulteNext = 1;
-    let schulteStartAt = 0;
+    let schulteStartAt = null; // v3.0-r16：用 null 做“未开始”哨兵，不用 0（同 R15 数独/记忆翻牌）
     let schulteTimerId = null;
     let schulteDone = false;
     function schulteKey() { return schulteSize === 5 ? SCHULTE_BEST_KEY : SCHULTE_BEST_KEY + "-" + schulteSize + "x" + schulteSize; }
@@ -3021,7 +3043,7 @@
         ? "宿舍纪录（" + schulteSize + "×" + schulteSize + "）：" + schulteBest.toFixed(1) + " 秒"
         : "还没人通关。第一个通关的就是纪录。";
     }
-    function schulteElapsed() { return schulteStartAt ? (performance.now() - schulteStartAt) / 1000 : 0; }
+    function schulteElapsed() { return schulteStartAt === null ? 0 : (performance.now() - schulteStartAt) / 1000; }
     function renderSchulteStats() { $("schulteStats").textContent = "用时 " + schulteElapsed().toFixed(1) + " 秒"; }
     function schulteSetDiff(n) {
       schulteSize = n;
@@ -3038,7 +3060,7 @@
       const total = schulteSize * schulteSize;
       const numbers = shuffle(Array.from({ length: total }, (_, i) => i + 1));
       schulteNext = 1;
-      schulteStartAt = 0;
+      schulteStartAt = null;
       schulteDone = false;
       if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
       const grid = $("schulteGrid");
@@ -3070,7 +3092,7 @@
         if (typeof SFX !== "undefined") SFX.click();
         return;
       }
-      if (!schulteStartAt) {
+      if (schulteStartAt === null) {
         schulteStartAt = performance.now();
         schulteTimerId = setInterval(renderSchulteStats, 100);
       }
@@ -3105,7 +3127,7 @@
 
     // 退出就停：舒尔特计时只刷显示，回来再续上（用时按时间戳算，不会丢）
     toyLeaveCleanup.schulte = () => { if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; } };
-    toyEnterResume.schulte = () => { if (schulteStartAt && !schulteDone && !schulteTimerId) schulteTimerId = setInterval(renderSchulteStats, 100); };
+    toyEnterResume.schulte = () => { if (schulteStartAt !== null && !schulteDone && !schulteTimerId) schulteTimerId = setInterval(renderSchulteStats, 100); };
 
   };
   /* ---------- 17. 记分牌 ---------- */
@@ -3248,20 +3270,24 @@
     /* ---- 比赛计时器 ---- */
     let scoreTimerId = null;
     let scoreTimerLeft = 5 * 60;
+    let scoreTimerEndAt = 0; // v3.0-r16：按截止时间算剩余，切后台被节流也不慢（同番茄钟）
+    function scoreTimerLeftSec() { return scoreTimerEndAt ? Math.max(0, Math.round((scoreTimerEndAt - performance.now()) / 1000)) : scoreTimerLeft; }
     function renderScoreTimer() {
       const m = Math.floor(scoreTimerLeft / 60);
       const sec = scoreTimerLeft % 60;
       $("scoreTimerDisplay").textContent = (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec;
     }
     function pauseScoreTimer() {
-      if (scoreTimerId) { clearInterval(scoreTimerId); scoreTimerId = null; }
+      if (scoreTimerId) { scoreTimerLeft = scoreTimerLeftSec(); scoreTimerEndAt = 0; clearInterval(scoreTimerId); scoreTimerId = null; }
     }
     const timerStartBtn = $("scoreTimerStartBtn");
     if (timerStartBtn) timerStartBtn.addEventListener("click", () => {
       if (scoreTimerId) return;
       if (typeof SFX !== "undefined") SFX.click();
+      if (scoreTimerLeft <= 0) { const mins = Math.min(99, Math.max(1, parseInt($("scoreTimerMin").value, 10) || 5)); scoreTimerLeft = mins * 60; }
+      scoreTimerEndAt = performance.now() + scoreTimerLeft * 1000;
       scoreTimerId = setInterval(() => {
-        scoreTimerLeft--;
+        scoreTimerLeft = scoreTimerLeftSec();
         if (scoreTimerLeft <= 0) {
           scoreTimerLeft = 0;
           pauseScoreTimer();
@@ -3278,6 +3304,7 @@
     const timerResetBtn = $("scoreTimerResetBtn");
     if (timerResetBtn) timerResetBtn.addEventListener("click", () => {
       pauseScoreTimer();
+      scoreTimerEndAt = 0;
       const mins = Math.min(99, Math.max(1, parseInt($("scoreTimerMin").value, 10) || 5));
       scoreTimerLeft = mins * 60;
       renderScoreTimer();
@@ -4887,6 +4914,7 @@
       $("doodleResult").textContent = "已画 " + doodleStrokes + " 笔，点保存存成图片。";
     }, { passive: false });
     doodleCanvas.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "touch") return; // v3.0-r16：触摸走 touchstart，pointer 事件也收到触摸会双重落笔（笔画数翻倍）
       if (!doodleCtx) return;
       if (e.preventDefault) e.preventDefault();
       doodlePushHistory(); // 落笔前存快照
@@ -4913,6 +4941,7 @@
       doodleLast = p;
     }, { passive: false });
     doodleCanvas.addEventListener("pointermove", (e) => {
+      if (e.pointerType === "touch") return; // v3.0-r16：同上，触摸走 touchmove
       if (!doodleDrawing || !doodleCtx) return;
       const s = doodleScale();
       const p = { x: e.offsetX * s, y: e.offsetY * s };
@@ -5435,11 +5464,33 @@
         try { span.innerHTML = html; } catch (e) { span.textContent = item.text; }
         // 确保测试能读到文本（textContent 包含）
         if (!span.textContent.includes(item.text)) span.textContent = item.text;
+        const up = document.createElement("button");
+        up.className = "btn ghost-btn small todo-move";
+        up.textContent = "↑";
+        up.setAttribute("aria-label", "上移 " + item.text);
+        up.disabled = idx === 0;
+        up.addEventListener("click", () => {
+          if (idx === 0) return;
+          const [moved] = todoItems.splice(idx, 1);
+          todoItems.splice(idx - 1, 0, moved);
+          todoSave(); todoRender();
+        });
+        const down = document.createElement("button");
+        down.className = "btn ghost-btn small todo-move";
+        down.textContent = "↓";
+        down.setAttribute("aria-label", "下移 " + item.text);
+        down.disabled = idx === todoItems.length - 1;
+        down.addEventListener("click", () => {
+          if (idx === todoItems.length - 1) return;
+          const [moved] = todoItems.splice(idx, 1);
+          todoItems.splice(idx + 1, 0, moved);
+          todoSave(); todoRender();
+        });
         const del = document.createElement("button");
         del.className = "btn ghost-btn small";
         del.textContent = "删掉";
         del.addEventListener("click", () => { todoItems = todoItems.filter((x) => x !== item); todoSave(); todoRender(); });
-        row.appendChild(cb); row.appendChild(span); row.appendChild(del);
+        row.appendChild(cb); row.appendChild(span); row.appendChild(up); row.appendChild(down); row.appendChild(del);
         list.appendChild(row);
       });
       const done = todoItems.filter((i) => i.done).length;
@@ -5869,9 +5920,12 @@
     const SCH_PERIODS = ["第 1-2 节\n8:00", "第 3-4 节\n10:00", "第 5-6 节\n14:00", "第 7-8 节\n16:00", "第 9-10 节\n19:00"];
     const SCH_PERIOD_HOURS = [[8, 10], [10, 12], [14, 16], [16, 18], [19, 21]];
     let schCourses = [];
+    let schPendingDelete = null; // v3.0-r16：两点确认删除——点已有课程一次只武装，防手滑误删
+    let schPendingCell = null;
     try { schCourses = JSON.parse(localStorage.getItem(SCH_KEY) || "[]") || []; } catch (e) { schCourses = []; }
     function schSave() { try { localStorage.setItem(SCH_KEY, JSON.stringify(schCourses)); } catch (e) { /* 忽略 */ } }
     function schRender() {
+      schPendingDelete = null; schPendingCell = null;
       const grid = $("schGrid");
       grid.innerHTML = "";
       const now = new Date();
@@ -5921,10 +5975,20 @@
           }
           cell.addEventListener("click", () => {
             if (course) {
+              if (schPendingDelete !== course) {
+                if (schPendingCell) schPendingCell.classList.remove("armed");
+                schPendingDelete = course; schPendingCell = cell;
+                cell.classList.add("armed");
+                $("schResult").textContent = "再点一次删除「" + course.name + "」，点别处取消。";
+                return;
+              }
+              schPendingDelete = null; schPendingCell = null;
               schCourses = schCourses.filter((c) => c !== course);
               schSave(); schRender();
               $("schResult").textContent = "已删掉「" + course.name + "」。";
             } else {
+              if (schPendingCell) schPendingCell.classList.remove("armed");
+              schPendingDelete = null; schPendingCell = null;
               $("schDay").value = String(d);
               $("schPeriod").value = String(p);
               $("schName").focus();
@@ -6285,6 +6349,14 @@
         osc.stop(ctx.currentTime + 1.2);
       } catch (e) { /* 忽略音频错误 */ }
     }
+    let pianoPointerDown = false; // v3.0-r16：按住滑过琴键连续弹（滑音），手机上跟手；click 有延迟且不能滑
+    function pianoBindKey(b, note) {
+      b.addEventListener("pointerdown", (e) => {
+        if (e.preventDefault) e.preventDefault();
+        pianoPlay(note.name);
+      });
+      b.addEventListener("pointerenter", () => { if (pianoPointerDown) pianoPlay(note.name); });
+    }
     (function buildPiano() {
       const wrap = $("pianoKeys");
       const whites = PIANO_NOTES.filter((n) => !n.black);
@@ -6293,7 +6365,7 @@
         b.className = "piano-white";
         b.setAttribute("data-note", note.name);
         b.textContent = note.label + " " + note.key.toUpperCase();
-        b.addEventListener("click", () => pianoPlay(note.name));
+        pianoBindKey(b, note);
         pianoKeyBtns[note.name] = b;
         wrap.appendChild(b);
       });
@@ -6305,11 +6377,16 @@
         b.setAttribute("data-note", note.name);
         b.style.left = "calc(" + (blackPos[note.name] / 7 * 100) + "% - 5.5%)";
         b.textContent = note.key.toUpperCase();
-        b.addEventListener("click", () => pianoPlay(note.name));
+        pianoBindKey(b, note);
         pianoKeyBtns[note.name] = b;
         wrap.appendChild(b);
       });
     })();
+    if (typeof document.addEventListener === "function") {
+      document.addEventListener("pointerdown", () => { pianoPointerDown = true; });
+      document.addEventListener("pointerup", () => { pianoPointerDown = false; });
+      document.addEventListener("pointercancel", () => { pianoPointerDown = false; });
+    }
     if (typeof document.addEventListener === "function") {
       document.addEventListener("keydown", (e) => {
         if ($("toy-piano").classList.contains("hidden")) return;
@@ -6597,6 +6674,7 @@
     let sokobanLevel = 0, sokobanW = 0, sokobanH = 0;
     let sokobanWalls = null, sokobanTargets = null, sokobanBoxes = [], sokobanPlayer = null;
     let sokobanMoves = 0, sokobanWon = false;
+    let sokobanHistory = []; // v3.0-r15：悔棋栈。箱子推到墙角会卡死，以前只能重开本关
     function sokobanLoad(level) {
       sokobanLevel = level;
       const rows = SOKOBAN_LEVELS[level];
@@ -6610,6 +6688,7 @@
         if (c === "$" || c === "*") sokobanBoxes.push({ x, y });
       }); });
       sokobanMoves = 0; sokobanWon = false;
+      sokobanHistory = [];
       ["sokobanL1Btn", "sokobanL2Btn", "sokobanL3Btn"].forEach((id, i) => $(id).classList.toggle("picked", i === level));
       sokobanRender();
       $("sokobanStatus").textContent = "第 " + (level + 1) + " 关：把所有箱子推到🎯上。";
@@ -6650,7 +6729,12 @@
         const bx = nx + dx, by = ny + dy;
         if (sokobanWalls.has(bx + "," + by)) return;
         if (sokobanBoxes.some((b) => b.x === bx && b.y === by)) return;
-        sokobanBoxes[bi] = { x: bx, y: by };
+      }
+      // v3.0-r15：走棋前记一步快照，悔棋用（只记能走成的步，撞墙/推不动不记；必须在改箱子之前拍）
+      sokobanHistory.push({ player: { x: sokobanPlayer.x, y: sokobanPlayer.y }, boxes: sokobanBoxes.map((b) => ({ x: b.x, y: b.y })), moves: sokobanMoves });
+      if (sokobanHistory.length > 500) sokobanHistory.shift();
+      if (bi !== -1) {
+        sokobanBoxes[bi] = { x: nx + dx, y: ny + dy };
         SFX.click();
       }
       sokobanPlayer = { x: nx, y: ny };
@@ -6661,6 +6745,17 @@
         $("sokobanStatus").textContent = "🎉 第 " + (sokobanLevel + 1) + " 关通过！用了 " + sokobanMoves + " 步。"
           + (sokobanLevel < 2 ? " 点第 " + (sokobanLevel + 2) + " 关继续。" : " 三关全通，你是推箱子大师！");
       }
+      sokobanRender();
+    }
+    // v3.0-r15：悔棋——退回上一步（人+箱子+步数一起还原）；通关后悔棋可继续推
+    function sokobanUndo() {
+      const prev = sokobanHistory.pop();
+      if (!prev) { $("sokobanStatus").textContent = "没有可悔的步了。"; return; }
+      sokobanPlayer = { x: prev.player.x, y: prev.player.y };
+      sokobanBoxes = prev.boxes.map((b) => ({ x: b.x, y: b.y }));
+      sokobanMoves = prev.moves;
+      sokobanWon = false;
+      $("sokobanStatus").textContent = "已悔一步，继续推。";
       sokobanRender();
     }
     bindSwipe($("sokobanGrid"), sokobanMove);
@@ -6675,11 +6770,13 @@
     $("sokobanL2Btn").addEventListener("click", () => sokobanLoad(1));
     $("sokobanL3Btn").addEventListener("click", () => sokobanLoad(2));
     $("sokobanResetBtn").addEventListener("click", () => sokobanLoad(sokobanLevel));
+    $("sokobanUndoBtn").addEventListener("click", sokobanUndo);
     sokobanLoad(0);
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get sokoban() { return { level: sokobanLevel, player: { x: sokobanPlayer.x, y: sokobanPlayer.y }, boxes: sokobanBoxes.map((b) => ({ x: b.x, y: b.y })), moves: sokobanMoves, won: sokobanWon }; },
+        get sokoban() { return { level: sokobanLevel, player: { x: sokobanPlayer.x, y: sokobanPlayer.y }, boxes: sokobanBoxes.map((b) => ({ x: b.x, y: b.y })), moves: sokobanMoves, won: sokobanWon, canUndo: sokobanHistory.length > 0 }; },
         sokobanLoad(level) { sokobanLoad(level); },
         sokobanMove(dir) { sokobanMove(dir); },
+        sokobanUndo() { sokobanUndo(); },
     }));
 
   };
@@ -7106,7 +7203,8 @@
     const SLIDE15_KEY = "dorm-toybox-slide15-best-v1";
     let slide15N = 4; // 默认 4x4（测试刚性）
     let slide15Board = [];
-    let slide15Moves = 0, slide15Best = null, slide15Won = false;
+    let slide15StartBoard = []; // v3.0-r15：本局开局的打乱盘，“复原”回到这里，不再回到已解状态
+    let slide15Moves = 0, slide15Best = null, slide15Won = false, slide15WinMoves = 0;
     function slide15Key() { return slide15N === 4 ? SLIDE15_KEY : SLIDE15_KEY + "-" + slide15N + "x" + slide15N; }
     function slide15Solved() {
       const total = slide15N * slide15N;
@@ -7129,9 +7227,13 @@
         cell.addEventListener("click", () => slide15Move(i));
         grid.appendChild(cell);
       });
-      $("slide15Status").textContent = "已走 " + slide15Moves + " 步 · 最好 " + (slide15Best === null ? "—" : slide15Best + " 步") + " · 参考 " + slide15Par() + " 步";
+      // v3.0-r15：通关后状态栏保留赢的提示，不再被步数覆盖（原来赢文案刚写上就被 render 冲掉）
+      $("slide15Status").textContent = slide15Won
+        ? "🎉 拼好了！用了 " + slide15WinMoves + " 步，最好 " + slide15Best + " 步。"
+        : "已走 " + slide15Moves + " 步 · 最好 " + (slide15Best === null ? "—" : slide15Best + " 步") + " · 参考 " + slide15Par() + " 步";
     }
     function slide15Move(i) {
+      if (slide15Won) return; // v3.0-r15：通关后点不动（与华容道一致），再玩请点打乱/复原
       const N = slide15N;
       const empty = slide15Board.indexOf(0);
       const ex = empty % N, ey = Math.floor(empty / N);
@@ -7148,28 +7250,34 @@
           saveBest(slide15Key(), slide15Best);
         }
         if (typeof SFX !== "undefined") SFX.win();
-        $("slide15Status").textContent = "🎉 拼好了！用了 " + slide15Moves + " 步，最好 " + slide15Best + " 步。";
-        slide15Won = true; // 撒花：格子发光（render 里加 win 类）
+        slide15Won = true; // 撒花：格子发光（render 里加 win 类）；赢文案由 render 保留
+        slide15WinMoves = slide15Moves;
       }
       slide15Render();
     }
     function slide15Shuffle() {
       // 从已解状态随机走 N*N*8 步（保证可解）
       const N = slide15N, total = N * N;
-      slide15Board = slide15Solved();
-      slide15Moves = 0;
-      slide15Won = false;
-      for (let n = 0; n < total * 8; n++) {
-        const empty = slide15Board.indexOf(0);
-        const ex = empty % N, ey = Math.floor(empty / N);
-        const opts = [];
-        if (ex > 0) opts.push(empty - 1);
-        if (ex < N - 1) opts.push(empty + 1);
-        if (ey > 0) opts.push(empty - N);
-        if (ey < N - 1) opts.push(empty + N);
-        const pick = opts[Math.floor(Math.random() * opts.length)];
-        [slide15Board[pick], slide15Board[empty]] = [slide15Board[empty], slide15Board[pick]];
+      // v3.0-r15：随机走恰好走回已解状态时重打乱，别让用户一开局就看到已拼好的盘
+      for (let tries = 0; tries < 5; tries++) {
+        slide15Board = slide15Solved();
+        slide15Moves = 0;
+        slide15Won = false;
+        slide15WinMoves = 0;
+        for (let n = 0; n < total * 8; n++) {
+          const empty = slide15Board.indexOf(0);
+          const ex = empty % N, ey = Math.floor(empty / N);
+          const opts = [];
+          if (ex > 0) opts.push(empty - 1);
+          if (ex < N - 1) opts.push(empty + 1);
+          if (ey > 0) opts.push(empty - N);
+          if (ey < N - 1) opts.push(empty + N);
+          const pick = opts[Math.floor(Math.random() * opts.length)];
+          [slide15Board[pick], slide15Board[empty]] = [slide15Board[empty], slide15Board[pick]];
+        }
+        if (!slide15Board.every((v, j) => v === (j === total - 1 ? 0 : j + 1))) break;
       }
+      slide15StartBoard = slide15Board.slice();
       // 打乱动画：staggered 出现
       slide15Render();
       const cells = $("slide15Grid").children;
@@ -7190,7 +7298,8 @@
       slide15Shuffle();
     }
     $("slide15ShuffleBtn").addEventListener("click", slide15Shuffle);
-    $("slide15ResetBtn").addEventListener("click", () => { slide15Board = slide15Solved(); slide15Moves = 0; slide15Won = false; slide15Render(); });
+    // v3.0-r15：复原 = 回到本局开局的打乱盘。原来是直接摆成已解状态，点两下就能刷出 2 步假纪录
+    $("slide15ResetBtn").addEventListener("click", () => { slide15Board = slide15StartBoard.slice(); slide15Moves = 0; slide15Won = false; slide15WinMoves = 0; slide15Render(); });
     $("slide15_3Btn").addEventListener("click", () => slide15SetSize(3));
     $("slide15_4Btn").addEventListener("click", () => slide15SetSize(4));
     $("slide15_5Btn").addEventListener("click", () => slide15SetSize(5));
@@ -7199,7 +7308,7 @@
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get slide15() { return { board: slide15Board.slice(), moves: slide15Moves, best: slide15Best }; },
         slide15Move(i) { slide15Move(i); },
-        slide15Set(board) { slide15Board = board.slice(); slide15Moves = 0; slide15Render(); },
+        slide15Set(board) { slide15Board = board.slice(); slide15Moves = 0; slide15Won = false; slide15WinMoves = 0; slide15Render(); },
     }));
 
   };
@@ -8447,6 +8556,7 @@
     const MAKE24_SETS = [[3, 3, 8, 8], [1, 5, 5, 5], [2, 3, 4, 6], [1, 2, 3, 4], [3, 4, 5, 6], [2, 4, 6, 8], [1, 3, 4, 6], [2, 2, 3, 9], [4, 5, 6, 7], [3, 5, 7, 9], [2, 3, 7, 10], [4, 4, 4, 4]];
     let make24Best = loadBest(MAKE24_KEY);
     let make24SetIdx = 0, make24Nums = [], make24Sel = [], make24Solved = 0, make24History = [];
+    let make24SolvedSets = new Set(); // v3.0-r16：记哪些组已解过，重解同一组不重复计入“已解 N 组”
     function make24Fmt(v) {
       if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
       return String(Math.round(v * 100) / 100);
@@ -8493,12 +8603,16 @@
       make24Sel = [];
       if (make24Nums.length === 1) {
         if (Math.abs(make24Nums[0] - 24) < 1e-6) {
-          make24Solved++;
+          const firstSolve = !make24SolvedSets.has(make24SetIdx);
+          if (firstSolve) {
+            make24SolvedSets.add(make24SetIdx);
+            make24Solved++;
+          }
           if (make24Solved > make24Best) {
             make24Best = make24Solved;
             saveBest(MAKE24_KEY, make24Best);
           }
-          $("make24Status").textContent = "🎉 等于 24！第 " + (make24SetIdx + 1) + " 组解出来了，已解 " + make24Solved + " 组。点换一组继续。";
+          $("make24Status").textContent = "🎉 等于 24！第 " + (make24SetIdx + 1) + " 组解出来了，已解 " + make24Solved + " 组。" + (firstSolve ? "点换一组继续。" : "（这组已经解过，不重复计。）");
           return;
         }
         $("make24Status").textContent = "❌ 最后剩 " + make24Fmt(make24Nums[0]) + "，不是 24。点撤销回去重算。";
@@ -9086,6 +9200,13 @@
     const cv = $("flappyCanvas");
     if (cv) {
       cv.addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); flap(); if (!raf || !running) { if (running) { cancelAnimationFrame(raf); } raf = requestAnimationFrame(step); } });
+    }
+    // R15：电脑端空格/↑键也能飞（原来只能点鼠标）
+    if (document.addEventListener) {
+      document.addEventListener("keydown", (e) => {
+        if ($("toy-flappy").classList.contains("hidden")) return;
+        if (e.key === " " || e.key === "ArrowUp") { SFX.unlock(); flap(); if (!raf || !running) { if (running) { cancelAnimationFrame(raf); } raf = requestAnimationFrame(step); } if (e.preventDefault) e.preventDefault(); }
+      });
     }
     $("flappyResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); raf = null; reset(); raf = requestAnimationFrame(step); });
     toyLeaveCleanup.flappy = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
@@ -9934,9 +10055,12 @@
   toyInitFns["go"] = function () {
     const N = 9, W = 320, CELL = 320 / 9;
     let board = [], turn = "black", over = false, passes = 0, capB = 0, capW = 0;
+    let goHistory = []; // v3.0-r15：落子后的局面序列，打劫（禁立即回提）用
+    function goKey(b) { return b.map((row) => row.map((v) => (v === "black" ? "B" : v === "white" ? "W" : ".")).join("")).join("/"); }
     function reset() {
       board = Array.from({ length: N }, () => Array(N).fill(null));
       turn = "black"; over = false; passes = 0; capB = 0; capW = 0;
+      goHistory = [goKey(board)];
       draw(); render();
     }
     function neighbors(x, y) {
@@ -9970,11 +10094,12 @@
       board[y][x] = color;
       const opp = color === "black" ? "white" : "black";
       let captured = 0;
+      const capturedStones = [];
       for (const [nx, ny] of neighbors(x, y)) {
         if (board[ny][nx] === opp) {
           const g = group(nx, ny, opp);
           if (g.libs === 0) {
-            for (const [sx, sy] of g.stones) board[sy][sx] = null;
+            for (const [sx, sy] of g.stones) { board[sy][sx] = null; capturedStones.push([sx, sy]); }
             captured += g.stones.length;
           }
         }
@@ -9982,12 +10107,21 @@
       // 自杀手不允许
       const self = group(x, y, color);
       if (self.libs === 0 && captured === 0) { board[y][x] = null; return false; }
+      // v3.0-r15：打劫——只提一子且局面回到对方落子前时，立即回提禁手（否则双方可无限提来提去）
+      const key = goKey(board);
+      if (captured === 1 && goHistory.length >= 2 && key === goHistory[goHistory.length - 2]) {
+        board[y][x] = null;
+        for (const [sx, sy] of capturedStones) board[sy][sx] = opp;
+        return false;
+      }
       if (color === "black") capB += captured; else capW += captured;
+      goHistory.push(key);
       if (SFX.enabled) SFX.click();
       return true;
     }
     function aiMove() {
-      if (over) return;
+      // v3.0-r15：只在轮到白时走。原来只判 over，玩家在 AI 思考的 400ms 里点“停一手”或重开，待执行的 AI 仍会在黑方回合落子
+      if (over || turn !== "white") return;
       // 简单 AI：找有气的空点，优先靠近已有棋子
       const cands = [];
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -10104,12 +10238,19 @@
       const y = Math.round((e.clientY - rect.top) * 9 / (rect.height || 320) - 0.5);
       if (x >= 0 && x < N && y >= 0 && y < N) onTap(x, y);
     });
-    $("goPassBtn").addEventListener("click", doPass);
+    // v3.0-r15：停一手只在轮到你（黑）时有效；AI 思考时点它直接忽略，不再吞掉这手
+    $("goPassBtn").addEventListener("click", () => { if (!over && turn === "black") doPass(); });
     $("goResetBtn").addEventListener("click", reset);
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get go() { return { turn, over, capB, capW }; },
-      goPlay(x, y) { return play(x, y, "black"); },
+      get go() { return { turn, over, capB, capW, board: board.flat().map((v) => (v === "black" ? 1 : v === "white" ? 2 : 0)) }; },
+      goPlay(x, y, color) { return play(x, y, color || "black"); },
+      goSet(cells, t) {
+        board = Array.from({ length: N }, (_, y) => Array.from({ length: N }, (_, x) => { const v = cells[y * N + x]; return v === 1 ? "black" : v === 2 ? "white" : null; }));
+        turn = t || "black"; over = false; passes = 0; capB = 0; capW = 0;
+        goHistory = [goKey(board)];
+        draw(); render();
+      },
     }));
   };
 

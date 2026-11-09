@@ -5198,7 +5198,7 @@
       { text: "免一次打水 🪣", weight: 2 },
       { text: "零食一包 🍪", weight: 3 },
       { text: "帮占座一次 🪑", weight: 2 },
-      { text: "再来一次 🎰", weight: 2 },
+      { text: "小卖部跑腿一次 🛒", weight: 2 },
       { text: "谢谢参与 🙏", weight: 4 },
     ];
     // ---- 新增：中奖率可调（localStorage 持久化） ----
@@ -6514,7 +6514,16 @@
     let gachaState = { total: 0, ssr: 0, sr: 0, r: 0, pity: 0, owned: [] };
     try {
       const saved = JSON.parse(localStorage.getItem(GACHA_KEY) || "null");
-      if (saved && typeof saved.total === "number") gachaState = saved;
+      if (saved && typeof saved.total === "number") {
+        gachaState = saved;
+        // v3.0-r17：旧存档可能没有 pity/owned（缺字段会让统计/图鉴直接崩掉，整个玩具初始化失败）
+        if (typeof gachaState.pity !== "number" || !isFinite(gachaState.pity) || gachaState.pity < 0) gachaState.pity = 0;
+        if (!Array.isArray(gachaState.owned)) gachaState.owned = [];
+        if (typeof gachaState.ssr !== "number") gachaState.ssr = 0;
+        if (typeof gachaState.sr !== "number") gachaState.sr = 0;
+        if (typeof gachaState.r !== "number") gachaState.r = 0;
+        gachaSave();
+      }
     } catch (e) { /* 忽略 */ }
     let gachaLastPull = [];
     function gachaSave() {
@@ -7071,8 +7080,14 @@
     function linkupNewBoard() {
       const tiles = [];
       LINKUP_EMOJIS.forEach((em) => { tiles.push(em, em); });
-      for (let i = tiles.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [tiles[i], tiles[j]] = [tiles[j], tiles[i]]; }
-      linkupBoard = tiles;
+      // v3.0-r17：满盘时只有相邻或贴边的对子能连，纯随机发牌约 2% 开局就是死局；
+      // 重洗到至少有一对能连为止（上限 100 次，基本一次就中），别让用户一开局就卡死
+      let tries = 0;
+      do {
+        for (let i = tiles.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [tiles[i], tiles[j]] = [tiles[j], tiles[i]]; }
+        linkupBoard = tiles.slice();
+        tries++;
+      } while (!linkupFindPair() && tries < 100);
       linkupLeft = LINKUP_EMOJIS.length;
       linkupPicked = -1; linkupOver = false;
     }
@@ -7182,9 +7197,14 @@
     $("linkupShuffleBtn").addEventListener("click", () => {
       if (linkupOver) return;
       const rest = linkupBoard.filter(Boolean);
-      for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
-      let k = 0;
-      linkupBoard = linkupBoard.map((v) => (v ? rest[k++] : ""));
+      // v3.0-r17：洗牌也可能洗出死局，重洗到有路可走为止（上限 50 次）
+      let tries = 0;
+      do {
+        for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+        let k = 0;
+        linkupBoard = linkupBoard.map((v) => (v ? rest[k++] : ""));
+        tries++;
+      } while (!linkupFindPair() && linkupBoard.filter(Boolean).length > 2 && tries < 50);
       linkupPicked = -1;
       linkupRender();
     });
@@ -7481,6 +7501,11 @@
     }
     function spotdiffStart() {
       if (spotdiffRunning) return;
+      // v3.0-r17：时间到后 time=0，直接点开始会立刻又时间到；先重开一局再计时
+      if (spotdiffTime <= 0) {
+        spotdiffLevel = 1; spotdiffScore = 0; spotdiffTime = 60;
+        spotdiffNewRound();
+      }
       spotdiffRunning = true;
       if (spotdiffTimerId) clearInterval(spotdiffTimerId);
       spotdiffTimerId = setInterval(() => {
@@ -8421,7 +8446,15 @@
       });
       $("onestrokeStatus").textContent = onestrokeDone
         ? "🎉 第 " + (onestrokeLevel + 1) + " 关画完了！" + (onestrokeLevel < 2 ? " 点重画进下一关。" : " 全部通关！")
-        : "第 " + (onestrokeLevel + 1) + " / 3 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线";
+        : "第 " + (onestrokeLevel + 1) + " / 3 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线"
+          + (onestrokeDeadEnd() ? " · 😵 走进死胡同了，点撤销退一步。" : "");
+    }
+    // v3.0-r17：当前点没有未画的相邻边、但关卡还没画完 = 死胡同（以前只静默卡住）
+    function onestrokeDeadEnd() {
+      if (onestrokeDone || onestrokePath.length === 0) return false;
+      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const cur = onestrokePath[onestrokePath.length - 1];
+      return !lv.edges.some((e) => !onestrokeUsed.has(onestrokeEdgeKey(e[0], e[1])) && (e[0] === cur || e[1] === cur));
     }
     function onestrokePick(i) {
       if (onestrokeDone) return;
@@ -8430,7 +8463,11 @@
       const cur = onestrokePath[onestrokePath.length - 1];
       const key = onestrokeEdgeKey(cur, i);
       const edgeExists = lv.edges.some((e) => onestrokeEdgeKey(e[0], e[1]) === key);
-      if (!edgeExists || onestrokeUsed.has(key)) return; // 不是相邻的点，或这条线已经画过
+      if (!edgeExists || onestrokeUsed.has(key)) {
+        // v3.0-r17：不相邻或已画过的线以前是静默忽略，用户不知道为什么点不动
+        $("onestrokeStatus").textContent = "⚠️ 这两个点之间没有线（或已经画过），换个点试试。";
+        return;
+      }
       onestrokeUsed.add(key);
       onestrokePath.push(i);
       if (onestrokeUsed.size === lv.edges.length) onestrokeDone = true;
@@ -8464,10 +8501,19 @@
   /* ---------- 61. 弹珠机 ---------- */
   toyInitFns["marble"] = function () {
     const MARBLE_KEY = "dorm-toybox-marble-best-v1";
-    const MARBLE_SLOTS = [10, 50, 100, 500, 100, 50]; // 6 个格子，中间 500 分最难进
+    const MARBLE_SLOTS = [10, 50, 100, 500, 100, 50]; // 6 个格子；实测从中间发时 500 分概率 10/32（和左边 100 分格并列最高），10 分格 1/32 才最难进，别写反了
     const MARBLE_ROWS = 5;
     let marbleBest = loadBest(MARBLE_KEY);
     let marbleScore = 0, marbleLeft = 10, marbleBall = null, marbleDirs = [], marbleOver = false;
+    let marbleLaunchX = 150; // v3.0-r17：发射口横坐标（25~275，25 一档），以前只能从中间发，全凭运气
+    let marbleLaunchLine = null; // 动态建的发射口说明行（不写进 HTML，冒烟的 id 总数 696 不变）
+    function marbleSetLaunch(x) {
+      marbleLaunchX = Math.max(25, Math.min(275, Math.round(x / 25) * 25));
+      marbleRender();
+    }
+    function marbleLaunchName() {
+      return marbleLaunchX <= 25 ? "最左" : marbleLaunchX <= 100 ? "偏左" : marbleLaunchX <= 175 ? "中间" : marbleLaunchX >= 275 ? "最右" : "偏右";
+    }
     function marbleRender() {
       const board = $("marbleBoard");
       // 每次重建：钉子 + 格子 + 珠子（冒烟桩没有 removeChild/querySelector，用 innerHTML 清空最稳）
@@ -8496,13 +8542,20 @@
         b.style.left = marbleBall.x + "px"; b.style.top = marbleBall.y + "px";
         board.appendChild(b);
       }
+      // 发射口标记：▼ 钉在顶部，跟着发射口走
+      const launcher = document.createElement("div");
+      launcher.className = "marble-launcher";
+      launcher.textContent = "▼";
+      launcher.style.left = marbleLaunchX + "px";
+      board.appendChild(launcher);
+      if (marbleLaunchLine) marbleLaunchLine.textContent = "发射口：" + marbleLaunchName() + "（点棋盘或用 ◀ ▶ 移动）";
       $("marbleScore").textContent = marbleOver
         ? "🏁 10 颗放完了！得分 " + marbleScore + "，最好 " + marbleBest + "。"
         : "得分 " + marbleScore + " · 剩 " + marbleLeft + " 颗 · 最好 " + marbleBest;
     }
     function marbleDrop() {
       if (marbleOver || marbleBall || marbleLeft <= 0) return;
-      marbleBall = { x: 150, y: 10, row: 0 };
+      marbleBall = { x: marbleLaunchX, y: 10, row: 0 };
       marbleDirs = [];
       for (let r = 0; r < MARBLE_ROWS; r++) marbleDirs.push(Math.random() < 0.5 ? -1 : 1);
       marbleRender();
@@ -8536,14 +8589,48 @@
     }
     function marbleReset() {
       marbleScore = 0; marbleLeft = 10; marbleBall = null; marbleDirs = []; marbleOver = false;
+      marbleLaunchX = 150;
       marbleRender();
     }
+    // ---- 发射口控制（动态建，仿照刮刮乐的中奖率滑杆，不动 HTML 的 id 总数） ----
+    (function marbleBuildControls() {
+      const sec = $("toy-marble");
+      if (!sec) return;
+      const row = document.createElement("div");
+      row.className = "btn-row";
+      const leftBtn = document.createElement("button");
+      leftBtn.className = "btn ghost-btn small";
+      leftBtn.textContent = "◀ 左移";
+      leftBtn.addEventListener("click", () => marbleSetLaunch(marbleLaunchX - 25));
+      const rightBtn = document.createElement("button");
+      rightBtn.className = "btn ghost-btn small";
+      rightBtn.textContent = "右移 ▶";
+      rightBtn.addEventListener("click", () => marbleSetLaunch(marbleLaunchX + 25));
+      row.appendChild(leftBtn); row.appendChild(rightBtn);
+      sec.appendChild(row);
+      marbleLaunchLine = document.createElement("p");
+      marbleLaunchLine.className = "count-line";
+      sec.appendChild(marbleLaunchLine);
+    })();
+    // 点棋盘顶部也能定发射口（按 25 一档吸附）
+    $("marbleBoard").addEventListener("pointerdown", (e) => {
+      const board = $("marbleBoard");
+      let x;
+      if (board.getBoundingClientRect) {
+        const rect = board.getBoundingClientRect();
+        x = (e.clientX - rect.left) * 300 / (rect.width || 300);
+      } else {
+        x = (typeof e.offsetX === "number") ? e.offsetX : 150;
+      }
+      marbleSetLaunch(x);
+    });
     $("marbleDropBtn").addEventListener("click", marbleDrop);
     $("marbleResetBtn").addEventListener("click", marbleReset);
     marbleRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get marble() { return { score: marbleScore, left: marbleLeft, ball: marbleBall ? { x: marbleBall.x, y: marbleBall.y, row: marbleBall.row } : null, dirs: marbleDirs.slice(), over: marbleOver, best: marbleBest }; },
+        get marble() { return { score: marbleScore, left: marbleLeft, ball: marbleBall ? { x: marbleBall.x, y: marbleBall.y, row: marbleBall.row } : null, dirs: marbleDirs.slice(), over: marbleOver, best: marbleBest, launchX: marbleLaunchX }; },
         marbleSetDirs(dirs) { marbleDirs = dirs.slice(); },
+        marbleSetLaunch(x) { marbleSetLaunch(x); },
         marbleDrop() { marbleDrop(); },
         marbleStep() { marbleStep(); },
     }));
@@ -9027,6 +9114,13 @@
     const ARCHERY_C = 150; // 靶心
     let archeryBest = loadBest(ARCHERY_KEY);
     let archeryScore = 0, archeryLeft = 10, archeryShots = [];
+    // v3.0-r17：拉弓机制。以前是“点哪射哪”，点红心就是满分，毫无技术含量；
+    // 现在按住拉弓（力度 0→100，约 0.75 秒拉满），准星会晃，拉得越满晃得越小、散布越小，松手才射
+    let archeryCharging = false, archeryPower = 0, archeryAim = null, archeryPhase = 0, archeryChargeId = null;
+    function archerySway() {
+      const amp = 3 + 23 * (1 - archeryPower / 100); // 拉满只剩 3px 微晃，没拉满晃到 26px
+      return { x: Math.sin(archeryPhase * 0.35) * amp, y: Math.cos(archeryPhase * 0.3) * amp * 0.7 };
+    }
     function archeryDraw() {
       const cv = $("archeryCanvas");
       if (!cv || !cv.getContext) return;
@@ -9044,6 +9138,18 @@
       // 箭痕
       ctx.font = "16px sans-serif"; ctx.textAlign = "center";
       archeryShots.forEach((s) => ctx.fillText("✖", s.x, s.y));
+      if (archeryCharging && archeryAim) {
+        const sw = archerySway();
+        const ax = archeryAim.x + sw.x, ay = archeryAim.y + sw.y;
+        // 准星
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ax, ay, 10, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax - 14, ay); ctx.lineTo(ax + 14, ay); ctx.moveTo(ax, ay - 14); ctx.lineTo(ax, ay + 14); ctx.stroke();
+        // 力度条
+        ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(20, 282, 260, 10);
+        ctx.fillStyle = archeryPower >= 100 ? "#f5c542" : "#3ec6a7";
+        ctx.fillRect(20, 282, 260 * archeryPower / 100, 10);
+      }
     }
     function archeryShoot(x, y) {
       if (archeryLeft <= 0) return;
@@ -9059,28 +9165,71 @@
       archeryRender();
     }
     function archeryRender() {
-      $("archeryScore").textContent = archeryLeft <= 0
-        ? "🏁 10 支射完了！得分 " + archeryScore + "，最好 " + archeryBest + "。"
-        : "得分 " + archeryScore + " · 剩 " + archeryLeft + " 支 · 最好 " + archeryBest;
+      $("archeryScore").textContent = archeryCharging
+        ? "🏹 拉弓中 " + archeryPower + "%" + (archeryPower >= 100 ? "（拉满了，稳！）" : "（拉满越稳）") + " · 剩 " + archeryLeft + " 支"
+        : archeryLeft <= 0
+          ? "🏁 10 支射完了！得分 " + archeryScore + "，最好 " + archeryBest + "。"
+          : "得分 " + archeryScore + " · 剩 " + archeryLeft + " 支 · 最好 " + archeryBest;
       archeryDraw();
     }
+    function archeryChargeTick() {
+      if (!archeryCharging) return;
+      archeryPower = Math.min(100, archeryPower + 4);
+      archeryPhase++;
+      archeryRender();
+    }
+    function archeryCancelCharge() {
+      if (archeryChargeId) { clearInterval(archeryChargeId); archeryChargeId = null; }
+      archeryCharging = false; archeryPower = 0; archeryAim = null;
+      archeryRender();
+    }
+    function archeryPos(e) {
+      const cv = $("archeryCanvas");
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 300, height: 300 };
+      return {
+        x: (e.clientX - rect.left) * 300 / (rect.width || 300),
+        y: (e.clientY - rect.top) * 300 / (rect.height || 300),
+      };
+    }
+    function archeryRelease() {
+      if (!archeryCharging) return;
+      if (archeryChargeId) { clearInterval(archeryChargeId); archeryChargeId = null; }
+      const sw = archerySway();
+      const spread = (100 - archeryPower) / 100 * 40; // 没拉满：落点在 40px 内随机偏
+      const ang = Math.random() * Math.PI * 2;
+      const lx = Math.max(0, Math.min(300, archeryAim.x + sw.x + Math.cos(ang) * spread));
+      const ly = Math.max(0, Math.min(300, archeryAim.y + sw.y + Math.sin(ang) * spread));
+      archeryCharging = false; archeryPower = 0; archeryAim = null;
+      archeryShoot(lx, ly);
+    }
     function archeryReset() {
+      if (archeryChargeId) { clearInterval(archeryChargeId); archeryChargeId = null; }
+      archeryCharging = false; archeryPower = 0; archeryAim = null; archeryPhase = 0;
       archeryScore = 0; archeryLeft = 10; archeryShots = [];
       archeryRender();
     }
     $("archeryCanvas").addEventListener("pointerdown", (e) => {
-      const cv = $("archeryCanvas");
-      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 300, height: 300 };
-      const x = (e.clientX - rect.left) * 300 / (rect.width || 300);
-      const y = (e.clientY - rect.top) * 300 / (rect.height || 300);
-      archeryShoot(x, y);
+      if (e.button === 2 || archeryLeft <= 0 || archeryCharging) return;
+      archeryCharging = true; archeryPower = 0; archeryPhase = 0;
+      archeryAim = archeryPos(e);
+      if (archeryChargeId) clearInterval(archeryChargeId);
+      archeryChargeId = setInterval(archeryChargeTick, 30);
+      archeryRender();
     });
+    $("archeryCanvas").addEventListener("pointermove", (e) => {
+      if (archeryCharging) { archeryAim = archeryPos(e); archeryDraw(); }
+    });
+    $("archeryCanvas").addEventListener("pointerup", () => archeryRelease());
+    $("archeryCanvas").addEventListener("pointerleave", () => { if (archeryCharging) archeryCancelCharge(); });
+    $("archeryCanvas").addEventListener("pointercancel", () => { if (archeryCharging) archeryCancelCharge(); });
     $("archeryResetBtn").addEventListener("click", archeryReset);
     archeryReset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get archery() { return { score: archeryScore, left: archeryLeft, shots: archeryShots.slice(), best: archeryBest }; },
+        get archery() { return { score: archeryScore, left: archeryLeft, shots: archeryShots.slice(), best: archeryBest, charging: archeryCharging, power: archeryPower }; },
         archeryShoot(x, y) { archeryShoot(x, y); },
+        archeryRelease() { archeryRelease(); },
     }));
+    toyLeaveCleanup.archery = () => { if (archeryChargeId) { clearInterval(archeryChargeId); archeryChargeId = null; } archeryCharging = false; };
 
   };
   /* ================= v3.0 新玩具（14 个） ================= */
@@ -9237,27 +9386,58 @@
       while (occupied.has(x + "," + y) && tries < 200);
       food = { x, y };
     }
-    function stepSnake(s, other) {
-      if (!s.alive) return;
-      const head = { x: s.body[0].x + s.dir.x, y: s.body[0].y + s.dir.y };
-      // 撞墙
-      if (head.x < 0 || head.x >= N || head.y < 0 || head.y >= N) { s.alive = false; return; }
-      // 撞自己或对方
-      const hitSelf = s.body.some((b, i) => i > 0 && b.x === head.x && b.y === head.y);
-      const hitOther = other.body.some((b) => b.x === head.x && b.y === head.y);
-      if (hitSelf || hitOther) { s.alive = false; return; }
-      // 对头相撞：都死
-      const oh = other.body[0];
-      if (oh && oh.x + other.dir.x === head.x && oh.y + other.dir.y === head.y && other.alive) {
-        // 简化：先动的赢，后动的撞上已移动的头
+    // v3.0-r17：同时移动。以前是 P1 先动、P2 再动，P1 的头先占格，P2 撞上去只死自己，
+    // 对头互换也判 P1 赢；现在两头同时算，互换/同格都同归于尽，尾巴本步会让位就不算撞
+    function stepBoth() {
+      const h1 = { x: s1.body[0].x + s1.dir.x, y: s1.body[0].y + s1.dir.y };
+      const h2 = { x: s2.body[0].x + s2.dir.x, y: s2.body[0].y + s2.dir.y };
+      const eat1 = s1.alive && food && h1.x === food.x && h1.y === food.y;
+      const eat2 = s2.alive && food && h2.x === food.x && h2.y === food.y;
+      function selfHit(s, h, eating) {
+        if (h.x < 0 || h.x >= N || h.y < 0 || h.y >= N) return true; // 撞墙
+        const solid = eating ? s.body.slice() : s.body.slice(0, -1); // 没吃到，尾巴那格会空出来
+        return solid.some((b) => b.x === h.x && b.y === h.y); // 撞自己
       }
-      s.body.unshift(head);
-      if (food && head.x === food.x && head.y === food.y) {
-        s.score++; if (SFX.enabled) SFX.pop(0.4 + s.score * 0.03);
-        placeFood();
-      } else {
-        s.body.pop();
+      let d1 = s1.alive && selfHit(s1, h1, eat1);
+      let d2 = s2.alive && selfHit(s2, h2, eat2);
+      // 对头：撞向同一格，或互换位置，都死
+      if (s1.alive && s2.alive && !d1 && !d2) {
+        if (h1.x === h2.x && h1.y === h2.y) { d1 = true; d2 = true; }
+        else if (h1.x === s2.body[0].x && h1.y === s2.body[0].y && h2.x === s1.body[0].x && h2.y === s1.body[0].y) { d1 = true; d2 = true; }
       }
+      // 撞对方身体：对方的头（会移走）和尾巴（没吃到会让位）不算；对方已死则全身都算
+      if (s1.alive && !d1) {
+        const o = (s2.alive && !d2) ? (eat2 ? s2.body.slice(1) : s2.body.slice(1, -1)) : s2.body.slice();
+        if (o.some((b) => b.x === h1.x && b.y === h1.y)) d1 = true;
+      }
+      if (s2.alive && !d2) {
+        const o = (s1.alive && !d1) ? (eat1 ? s1.body.slice(1) : s1.body.slice(1, -1)) : s1.body.slice();
+        if (o.some((b) => b.x === h2.x && b.y === h2.y)) d2 = true;
+      }
+      if (s1.alive) {
+        if (d1) { s1.alive = false; }
+        else {
+          s1.body.unshift(h1);
+          if (eat1) { s1.score++; if (SFX.enabled) SFX.pop(0.4 + s1.score * 0.03); placeFood(); }
+          else s1.body.pop();
+        }
+      }
+      if (s2.alive) {
+        if (d2) { s2.alive = false; }
+        else {
+          s2.body.unshift(h2);
+          if (eat2) { s2.score++; if (SFX.enabled) SFX.pop(0.4 + s2.score * 0.03); placeFood(); }
+          else s2.body.pop();
+        }
+      }
+    }
+    function snake2FinishStep() {
+      if (!s1.alive || !s2.alive) {
+        running = false;
+        winner = !s1.alive && !s2.alive ? "平局！" : !s1.alive ? (aiMode ? "🤖 AI 获胜！" : "P2 🔵 获胜！") : "P1 🟢 获胜！";
+        if (SFX.enabled) SFX.win();
+      }
+      draw(); render();
     }
     function step(now) {
       if (!running) return;
@@ -9269,14 +9449,8 @@
       if (moveAcc >= 7 * 16.7) { // 每 ~117ms 走一格，与刷新率无关
         moveAcc = 0;
         aiThink();
-        stepSnake(s1, s2);
-        stepSnake(s2, s1);
-        if (!s1.alive || !s2.alive) {
-          running = false;
-          winner = !s1.alive && !s2.alive ? "平局！" : !s1.alive ? (aiMode ? "🤖 AI 获胜！" : "P2 🔵 获胜！") : "P1 🟢 获胜！";
-          if (SFX.enabled) SFX.win();
-        }
-        draw(); render();
+        stepBoth();
+        snake2FinishStep();
       }
       if (running) raf = requestAnimationFrame(step);
     }
@@ -9346,18 +9520,19 @@
       else if (k === "s") setDir(s1, 0, 1);
       else if (k === "a") setDir(s1, -1, 0);
       else if (k === "d") setDir(s1, 1, 0);
-      else if (e.key === "ArrowUp") { setDir(s2, 0, -1); e.preventDefault(); }
-      else if (e.key === "ArrowDown") { setDir(s2, 0, 1); e.preventDefault(); }
-      else if (e.key === "ArrowLeft") { setDir(s2, -1, 0); e.preventDefault(); }
-      else if (e.key === "ArrowRight") { setDir(s2, 1, 0); e.preventDefault(); }
+      // v3.0-r17：方向键只在双人模式管 P2；单人时 P2 是 AI，方向键再去拨它就是作弊
+      else if (e.key === "ArrowUp") { if (!aiMode) setDir(s2, 0, -1); e.preventDefault(); }
+      else if (e.key === "ArrowDown") { if (!aiMode) setDir(s2, 0, 1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { if (!aiMode) setDir(s2, -1, 0); e.preventDefault(); }
+      else if (e.key === "ArrowRight") { if (!aiMode) setDir(s2, 1, 0); e.preventDefault(); }
     });
     const cv = $("snake2Canvas");
     if (cv) cv.addEventListener("pointerdown", (e) => {
       SFX.unlock();
       const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 320 };
       const x = e.clientX - rect.left;
-      // 左半屏转 P1，右半屏转 P2（顺时针转）
-      const s = x < rect.width / 2 ? s1 : s2;
+      // v3.0-r17：单人时整屏都转 P1（右半屏再去转 AI 的蛇是作弊）；双人时左半屏转 P1，右半屏转 P2（顺时针转）
+      const s = (aiMode || x < rect.width / 2) ? s1 : s2;
       const d = s.dir;
       setDir(s, -d.y, d.x);
     });
@@ -9367,9 +9542,16 @@
     toyLeaveCleanup.snake2 = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get snake2() { return { p1: s1.score, p2: s2.score, running, winner }; },
+      get snake2() { return { p1: s1.score, p2: s2.score, running, winner, aiMode, dir1: { x: s1.dir.x, y: s1.dir.y }, dir2: { x: s2.dir.x, y: s2.dir.y }, alive1: s1.alive, alive2: s2.alive }; },
       snake2SetDir(p, dx, dy) { setDir(p === 1 ? s1 : s2, dx, dy); },
-      snake2Step() { stepSnake(s1, s2); stepSnake(s2, s1); draw(); render(); },
+      snake2Step() { stepBoth(); snake2FinishStep(); },
+      snake2Set(b1, d1, b2, d2, fx, fy) {
+        s1.body = b1.map((c) => ({ x: c.x, y: c.y })); s1.dir = { x: d1.x, y: d1.y };
+        s2.body = b2.map((c) => ({ x: c.x, y: c.y })); s2.dir = { x: d2.x, y: d2.y };
+        food = { x: fx, y: fy };
+        s1.alive = true; s2.alive = true; s1.score = 0; s2.score = 0;
+        running = true; winner = ""; draw(); render();
+      },
     }));
   };
 

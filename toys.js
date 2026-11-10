@@ -702,6 +702,7 @@
   /* ---------- 2. 真心话大冒险 ---------- */
   toyInitFns["cards"] = function () {
     let usedTruths = [], usedDares = [];
+    let lastKind = "truth"; // R19：跳过重抽用的上次种类。原来在 if (cardsSec) 块里声明，块外的 eitherBtn 监听够不着。
     // ---- 新增：自定义题库（localStorage） ----
     const CARDS_CUSTOM_KEY = "dorm-toybox-cards-custom-v1";
     let customTruths = [], customDares = [];
@@ -771,7 +772,7 @@
         cardsSec.appendChild(bottleDiv);
       }
       bottleBtn.addEventListener("click", () => {
-        const names = nameInput.value.trim().split(/\s+/).filter(Boolean);
+        const names = nameInput.value.trim().split(/[\s,，、；;]+/).filter(Boolean); // R19：中文顿号/逗号/分号分隔也认，不然整串算一个人还悄悄回落到默认玩家
         const players = names.length >= 2 ? names : ["你", "左边", "右边", "对面"];
         const picked = players[Math.floor(Math.random() * players.length)];
         const deg = 360 * 5 + Math.floor(Math.random() * 360);
@@ -812,7 +813,6 @@
       skipBtn.className = "btn ghost-btn small"; skipBtn.textContent = "⏭ 跳过重抽";
       skipBtn.style.marginTop = "8px";
       cardsSec.appendChild(skipBtn);
-      let lastKind = "truth";
       const origDraw = drawCard;
       skipBtn.addEventListener("click", () => {
         // 重抽一张同类型的（不计入已抽，避免浪费）
@@ -820,8 +820,8 @@
         if (usedDares.length > 0 && lastKind === "dare") usedDares.pop();
         origDraw(lastKind);
       });
-      // 记录上次类型
-      ["truthBtn", "dareBtn", "eitherBtn"].forEach((id) => {
+      // 记录上次类型（eitherBtn 在抽卡处记真实种类，这里只记两个明确按钮）
+      ["truthBtn", "dareBtn"].forEach((id) => {
         const b = $(id);
         if (b) b.addEventListener("click", () => {
           if (id === "truthBtn") lastKind = "truth";
@@ -831,7 +831,7 @@
     }
     $("truthBtn").addEventListener("click", () => drawCard("truth"));
     $("dareBtn").addEventListener("click", () => drawCard("dare"));
-    $("eitherBtn").addEventListener("click", () => drawCard(Math.random() < 0.5 ? "truth" : "dare"));
+    $("eitherBtn").addEventListener("click", () => { const kind = Math.random() < 0.5 ? "truth" : "dare"; lastKind = kind; drawCard(kind); }); // R19：随便来要记真实种类，不然“跳过重抽”总按真心话重抽
     renderCardCount();
 
   };
@@ -1317,6 +1317,7 @@
   toyInitFns["picker"] = function () {
     const PICKER_NAMES_KEY = "dorm-toybox-picker-names-v1";
     let picked = [];
+    let pickRolling = false; // R19：滚动中再点抽就丢弃，不然多条滚动计时器并跑，会抽出重名、一次点出多个结果
     // 名单持久化：上次粘贴的不用重贴
     try {
       const saved = lsGet(PICKER_NAMES_KEY, "");
@@ -1360,6 +1361,7 @@
         return;
       }
       if (typeof SFX !== "undefined") SFX.click();
+      if (pickRolling) return; // R19：上一轮还在滚就忽略这次点击
       const noRepeat = $("noRepeatCheck").checked;
       let candidates = noRepeat ? pool.filter((n) => !picked.includes(n)) : pool;
       if (candidates.length === 0) {
@@ -1370,12 +1372,14 @@
       let ticks = 0;
       const result = $("pickResult");
       result.classList.remove("pop", "slowing");
+      pickRolling = true;
       const timer = setInterval(() => {
-        result.textContent = pick(pool);
+        result.textContent = pick(candidates); // R19：滚动只闪候选人（已抽过的不再闪，不然“不再重复”看着像假的）
         ticks++;
         if (ticks === 7) result.classList.add("slowing"); // 减速：名字越滚越慢的视觉
         if (ticks >= 10) {
           clearInterval(timer);
+          pickRolling = false;
           const winner = pick(candidates);
           result.classList.remove("slowing");
           result.textContent = "🎉 " + winner;
@@ -2580,6 +2584,24 @@
       }
     }
     $("puzzleResetBtn").addEventListener("click", puzzleShuffle);
+    // R19：方向键滑块（电脑键盘也能玩；与点击走同一入口 puzzleMove，顶到边不动）
+    function puzzleSlide(dir) {
+      const b = puzzleBlankAt();
+      let target = -1;
+      if (dir === "up" && b >= 3) target = b - 3;
+      else if (dir === "down" && b <= 5) target = b + 3;
+      else if (dir === "left" && b % 3 !== 0) target = b - 1;
+      else if (dir === "right" && b % 3 !== 2) target = b + 1;
+      if (target >= 0) puzzleMove(target);
+    }
+    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function puzzleKeys(e) {
+      if ($("toy-puzzle") && $("toy-puzzle").classList.contains("hidden")) return;
+      const dir = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+      if (dir) { puzzleSlide(dir); e.preventDefault(); }
+    });
+    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+      puzzleKey(dir) { puzzleSlide(dir); },
+    }));
     puzzleShuffle();
 
   };
@@ -7979,22 +8001,33 @@
         }
       } catch (e) { /* 忽略音频错误 */ }
     }
+    // R19：只建一次格子、之后原地改 class。原来每走一拍就 innerHTML 重建 36 个格子，
+    // 播放中点格子可能正好点在被换掉的旧节点上（点按丢）、焦点也丢。
+    let drumsBuilt = false;
     function drumsRender() {
       const grid = $("drumsGrid");
-      grid.innerHTML = "";
+      if (!drumsBuilt) {
+        grid.innerHTML = "";
+        DRUM_TRACKS.forEach((tr, t) => {
+          const label = document.createElement("div");
+          label.className = "drums-label";
+          label.textContent = tr.icon;
+          label.title = tr.name;
+          grid.appendChild(label);
+          for (let s = 0; s < 8; s++) {
+            const cell = document.createElement("button");
+            cell.className = "drums-cell";
+            cell.setAttribute("aria-label", tr.name + " 第 " + (s + 1) + " 拍");
+            cell.addEventListener("click", () => { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); });
+            drumsCellBtns[t + "-" + s] = cell;
+            grid.appendChild(cell);
+          }
+        });
+        drumsBuilt = true;
+      }
       DRUM_TRACKS.forEach((tr, t) => {
-        const label = document.createElement("div");
-        label.className = "drums-label";
-        label.textContent = tr.icon;
-        label.title = tr.name;
-        grid.appendChild(label);
         for (let s = 0; s < 8; s++) {
-          const cell = document.createElement("button");
-          cell.className = "drums-cell" + (drumsGrid[t][s] ? " on" : "") + (drumsPlaying && s === drumsStep ? " now" : "");
-          cell.setAttribute("aria-label", tr.name + " 第 " + (s + 1) + " 拍");
-          cell.addEventListener("click", () => { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); });
-          drumsCellBtns[t + "-" + s] = cell;
-          grid.appendChild(cell);
+          drumsCellBtns[t + "-" + s].className = "drums-cell" + (drumsGrid[t][s] ? " on" : "") + (drumsPlaying && s === drumsStep ? " now" : "");
         }
       });
       $("drumsStatus").textContent = drumsPlaying ? "▶ 播放中 · 第 " + (drumsStep + 1) + " 拍" : "已停 · 第 — 拍";
@@ -8022,6 +8055,7 @@
       $("drumsPlayBtn").textContent = "播放 ▶";
       drumsRender();
     }
+    toyLeaveCleanup.drums = () => { drumsStop(); }; // R19：原来没有离场清理，切走玩具后鼓点还一直响、计时器一直跑
     $("drumsPlayBtn").addEventListener("click", () => { if (drumsPlaying) drumsStop(); else drumsPlay(); });
     $("drumsClearBtn").addEventListener("click", () => { drumsGrid = DRUM_TRACKS.map(() => [false, false, false, false, false, false, false, false]); drumsRender(); });
     $("drumsDemoBtn").addEventListener("click", () => {
@@ -9606,7 +9640,9 @@
     const modeBtn = $("snake2ModeBtn");
     if (modeBtn) modeBtn.addEventListener("click", () => { aiMode = !aiMode; if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
     toyLeaveCleanup.snake2 = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    toyEnterResume.snake2 = () => { if (!winner && !running) { running = true; lastT = 0; moveAcc = 0; raf = requestAnimationFrame(step); } }; // R19：同叠塔，切走再回来蛇冻住（实测 running 从 true 变 false，且点画布只转向不续跑）
     reset(); draw(); render();
+    raf = requestAnimationFrame(step); // R19：init 只 reset 不启动 raf，打开后蛇根本不动、必须点重开才走（无头实测 1.2 秒画面纹丝不动）
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get snake2() { return { p1: s1.score, p2: s2.score, running, winner, aiMode, dir1: { x: s1.dir.x, y: s1.dir.y }, dir2: { x: s2.dir.x, y: s2.dir.y }, alive1: s1.alive, alive2: s2.alive }; },
       snake2SetDir(p, dx, dy) { setDir(p === 1 ? s1 : s2, dx, dy); },
@@ -9918,6 +9954,8 @@
     const N = 16, MINES = 40;
     const KEY = "dorm-toybox-mines2-best-v1";
     let board = [], revealed = 0, flags = 0, over = false, win = false, flagMode = false, startTime = 0;
+    let mines2SuppressCtx = false; // R19：安卓长按会同时触发 450ms 计时插旗 + contextmenu；计时插旗后压住一次 contextmenu，手指抬起即清（不用时间窗口，免得 1 秒内右键点别的格被误吞）
+    let mines2SuppressClick = false; // R19：长按拔旗后随之而来的 click（点在新格子上）也要压一次，不然刚拔掉旗就把格子点开了，雷区直接炸
     let best = lsGet(KEY, "");
     function reset() {
       board = [];
@@ -10018,11 +10056,13 @@
           (c.open ? (c.mine ? "background:#e5484d;color:#fff;" : "background:#2a2f42;color:#fff;") : "background:#1e2230;");
         if (c.open) d.textContent = c.mine ? "💣" : (c.num > 0 ? c.num : "");
         else if (c.flag) d.textContent = "🚩";
-        d.addEventListener("click", () => { SFX.unlock(); flagMode ? toggleFlag(x, y) : open(x, y); });
-        d.addEventListener("contextmenu", (e) => { e.preventDefault(); toggleFlag(x, y); });
+        d.addEventListener("click", () => { if (mines2SuppressClick) { mines2SuppressClick = false; return; } SFX.unlock(); flagMode ? toggleFlag(x, y) : open(x, y); }); // R19：长按刚结束的这次 click 是同一按压的尾巴，吞掉（格子重建后 click 会落到新格子上，per-cell 标记拦不住，必须用共享标记）
+        d.addEventListener("contextmenu", (e) => { e.preventDefault(); if (mines2SuppressCtx) return; toggleFlag(x, y); }); // R19：长按计时刚插过旗时，这次 contextmenu 是同一按压的重复触发，吞掉（标记由 pointerup 统一转成 click 压制，不在这里清，不然抬指后的 click 拦不住）
         let pressT = null;
-        d.addEventListener("pointerdown", () => { pressT = setTimeout(() => { toggleFlag(x, y); pressT = null; }, 450); });
-        d.addEventListener("pointerup", () => { if (pressT) clearTimeout(pressT); });
+        d.addEventListener("pointerdown", (e) => { mines2SuppressClick = false; mines2SuppressCtx = false; if (e && e.button !== undefined && e.button !== 0) return; pressT = setTimeout(() => { toggleFlag(x, y); mines2SuppressCtx = true; pressT = null; }, 450); }); // R19：右键不进长按计时（同小扫雷）；新一按先清掉上一按残留的压制（浏览器没发 click 时它会一直留着）
+        d.addEventListener("pointerup", () => { if (pressT) { clearTimeout(pressT); pressT = null; } if (mines2SuppressCtx) { mines2SuppressCtx = false; mines2SuppressClick = true; } }); // R19：长按过才转一次 click 压制；普通点按（计时没到）不压，下次 click 正常开格
+        d.addEventListener("pointercancel", () => { if (pressT) { clearTimeout(pressT); pressT = null; } mines2SuppressCtx = false; }); // R19：系统手势打断长按也要清计时，不然手指都走了还会插旗
+        d.addEventListener("pointerleave", () => { if (pressT) { clearTimeout(pressT); pressT = null; } mines2SuppressCtx = false; }); // R19：手指滑出格子也要清计时
         bd.appendChild(d);
       });
       if (over || win) {
@@ -10998,10 +11038,10 @@
         if (d < bestD) { bestD = d; bestN = n; }
       }
       if (!bestN || bestD > 70) { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); render(); return; }
-      bestN.hit = true;
-      combo++; maxCombo = Math.max(maxCombo, combo);
-      if (bestD < 22) { score += 300; counts.p++; if (SFX.enabled) SFX.pop(0.9); }
-      else if (bestD < 48) { score += 100; counts.g++; if (SFX.enabled) SFX.pop(0.5); }
+      bestN.hit = true; // 坏区命中也消耗音符，不会重复计 miss（R19 复查确认）
+      // R19：连击只在 Perfect/Good 时涨。原来先 combo++ 再判 miss，白白把“最大连击”抬高 1（2 连击后 1 次坏区 miss，结算显示 3）
+      if (bestD < 22) { combo++; maxCombo = Math.max(maxCombo, combo); score += 300; counts.p++; if (SFX.enabled) SFX.pop(0.9); }
+      else if (bestD < 48) { combo++; maxCombo = Math.max(maxCombo, combo); score += 100; counts.g++; if (SFX.enabled) SFX.pop(0.5); }
       else { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); }
       render();
     }
@@ -11084,7 +11124,7 @@
     toyLeaveCleanup.rhythm = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get rhythm() { return { score, combo, best, running, counts }; },
+      get rhythm() { return { score, combo, maxCombo, best, running, counts }; }, // R19：补 maxCombo 供回归测试（原来结算屏才看得到）
       rhythmHit(lane) { hit(lane); },
       rhythmStart() { if (!running) { reset(); raf = requestAnimationFrame(step); } },
       rhythmNotes() { const n = notes.find((x) => !x.hit); return n ? { y: Math.round(n.y * 10) / 10, count: notes.length } : { y: -999, count: notes.length }; },
@@ -11181,6 +11221,7 @@
     if (cv) cv.addEventListener("pointerdown", (e) => { e.preventDefault(); drop(); });
     $("towerResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
     toyLeaveCleanup.tower = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
+    toyEnterResume.tower = () => { if (!over && !running) { running = true; lastT = 0; raf = requestAnimationFrame(step); } }; // R19：切走再回来方块冻住（cleanup 停了 raf 但没续上），只有重开能救
     reset(); running = false; draw(); render();
     // 自动开始移动（展示用）
     raf = requestAnimationFrame(step); running = true;
@@ -11529,7 +11570,7 @@
       phase = -1;
       renderRoles();
       $("skFlow").classList.remove("hidden");
-      $("skPhase").textContent = "身份已发：依次传手机，每人点自己的牌看身份（双击牌标记出局）";
+      $("skPhase").textContent = "身份已发：依次传手机，每人点自己的牌看身份（标记出局：先开「💀 点牌标记出局」再点牌）"; // R19：原来写“双击牌标记出局”，手机没双击
       $("skClueList").innerHTML = "";
       stopTimer();
       if (SFX.enabled) SFX.pop();

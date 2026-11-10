@@ -567,6 +567,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 #pongCanvas { touch-action: none; }
 .onestroke-board { position: relative; width: 300px; height: 260px; margin: 14px auto 0; background: rgba(255, 255, 255, .04); border-radius: 12px; touch-action: none; }
 .onestroke-dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a8, var(--gold2)); border: 2px solid #8a6d1f; cursor: pointer; z-index: 2; }
+.onestroke-dot::after { content: ""; position: absolute; inset: -9px; } /* R19：圆点视觉 26px 不变，点按热区扩到 44px（实测 +18px 处点不中） */
 .onestroke-line { position: absolute; height: 4px; background: #7ec8ff; transform-origin: 0 50%; border-radius: 2px; z-index: 1; }
 .marble-board { position: relative; width: 300px; height: 280px; margin: 14px auto 0; background: linear-gradient(180deg, #10101f, #1b1b3a); border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
 .marble-launcher { position: absolute; top: 8px; width: 18px; height: 18px; margin: -9px 0 0 -9px; font-size: 14px; line-height: 18px; text-align: center; color: var(--gold2); z-index: 2; pointer-events: none; }

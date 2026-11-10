@@ -391,8 +391,9 @@
   function showHowtoBar(tid, force) {
     var toy = TOYS.find(function (t) { return t.id === tid; });
     if (!toy || !toy.howto) return;
-    var panel = $("toy-" + tid);
-    // 工具箱重定向的入口（stopwatch/aa/fx/bmi）没有独立 panel，跳过
+    // R20：工具箱重定向的入口（fx/bmi/stopwatch/aa）没有独立可见 panel，提示条要进重定向后的工具箱；
+    // 旧写法取 $("toy-"+tid)，落到隐藏的旧 section，用户永远看不到提示条，"？"按钮也加在了看不见的地方。
+    var panel = $("toy-" + (TOOLBOX_REDIRECT[tid] || tid));
     if (!panel) return;
     var old = panel.querySelector(".howto-bar");
     if (old) {
@@ -435,16 +436,22 @@
   function ensureHowtoHelpBtn(panel, tid) {
     // 每个玩具标题旁加"？"按钮（只加一次）
     var h2 = panel.querySelector("h2");
-    if (!h2 || h2.querySelector(".howto-help")) return;
-    var b = document.createElement("button");
-    b.className = "howto-help";
-    b.setAttribute("aria-label", "怎么玩");
-    b.textContent = "？";
-    b.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      showHowtoBar(tid, true);
-    });
-    h2.appendChild(b);
+    if (!h2) return;
+    // R20：工具箱标题是几个入口共用的（kin 归亲戚/fx/bmi），"？"要跟当前入口走；
+    // 旧写法第一次加完就再也不换，点开 BMI 再点"？"看到的还是汇率的玩法。
+    var b = h2.querySelector(".howto-help");
+    if (!b) {
+      b = document.createElement("button");
+      b.className = "howto-help";
+      b.setAttribute("aria-label", "怎么玩");
+      b.textContent = "？";
+      b.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        showHowtoBar(b.getAttribute("data-tid") || tid, true);
+      });
+      h2.appendChild(b);
+    }
+    b.setAttribute("data-tid", tid);
   }
   /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
   function showHome(toTop) {
@@ -1397,6 +1404,12 @@
       renderPickLeft();
       renderPickHistory();
     });
+    // R25：首次打开名单是空的，点一下填示例就能试
+    $("pickSampleBtn").addEventListener("click", () => {
+      $("nameList").value = "阿伟\n小明\n阿强\n老陈\n大刘\n小美";
+      try { lsSet(PICKER_NAMES_KEY, $("nameList").value); } catch (e) { /* 忽略 */ }
+      renderPickLeft();
+    });
     $("nameList").addEventListener("change", () => {
       try { lsSet(PICKER_NAMES_KEY, $("nameList").value); } catch (e) { /* 忽略 */ }
       renderPickLeft();
@@ -1579,6 +1592,7 @@
       swRender();
     });
     $("swLapBtn").addEventListener("click", () => {
+      if (!swRunning && swElapsed === 0) return; // R20：还没开始（或已清零）时点计次不记 0 圈
       swLaps.push(swCurrent());
       const li = document.createElement("li");
       li.textContent = "第 " + swLaps.length + " 次 · " + swFormat(swCurrent());
@@ -1658,6 +1672,15 @@
       cuRender();
     });
     cuRender();
+    // R23：正计时也要像秒表一样离场停、回来续（原来只清秒表，正计时的 500ms 计时器切走后还在后台跑）
+    const cuCleanup = () => { if (cuTimerId) { clearInterval(cuTimerId); cuTimerId = null; } };
+    const cuResume = () => { if (cuRunning && !cuTimerId) cuTimerId = setInterval(cuRender, 500); };
+    const _swLeave = toyLeaveCleanup.timer;
+    const _swResume = toyEnterResume.timer;
+    toyLeaveCleanup.timer = () => { if (_swLeave) _swLeave(); cuCleanup(); };
+    toyEnterResume.timer = () => { if (_swResume) _swResume(); cuResume(); };
+    toyLeaveCleanup.stopwatch = toyLeaveCleanup.timer;
+    toyEnterResume.stopwatch = toyEnterResume.timer;
   };
   /* ---------- 7. 随机分组 ---------- */
   toyInitFns["groups"] = function () {
@@ -1683,11 +1706,19 @@
       if (!groupSelected) return false;
       const from = groupSelected;
       if (from.gi === toGi) { groupSelected = null; renderGroups(lastGroups, false); return true; }
+      // R23：别把一组最后一个人移走——移完那组变 0 人空组，复制文案里队长变 undefined
+      if (lastGroups[from.gi] && lastGroups[from.gi].length <= 1) {
+        groupSelected = null;
+        renderGroups(lastGroups, false);
+        $("groupResult").textContent = "「" + from.name + "」是第 " + (from.gi + 1) + " 组唯一的成员，移走这组就空了。";
+        return false;
+      }
       const moved = lastGroups[from.gi] && lastGroups[from.gi].splice(from.mi, 1)[0];
       if (moved === undefined) { groupSelected = null; return false; }
       lastGroups[toGi].push(moved);
       groupSelected = null;
       renderGroups(lastGroups, false);
+      $("groupResult").textContent = "已把「" + moved + "」移到第 " + (toGi + 1) + " 组。"; // R21：renderGroups 会写“已随机分成”，手动移动后要改口
       if (typeof SFX !== "undefined") SFX.click();
       return true;
     }
@@ -1759,11 +1790,20 @@
         const ul = t && t.closest ? t.closest("ul[data-group]") : null;
         if (!ul || !dragData) return;
         const toGi = +ul.getAttribute("data-group");
+        // R23：同点选移动，拖走最后一人也要拦（不然拖出空组，队长变 undefined）
+        if (lastGroups[dragData.gi] && lastGroups[dragData.gi].length <= 1) {
+          const only = lastGroups[dragData.gi][dragData.mi];
+          const fromGi = dragData.gi;
+          dragData = null;
+          $("groupResult").textContent = "「" + only + "」是第 " + (fromGi + 1) + " 组唯一的成员，移走这组就空了。";
+          return;
+        }
         const moved = lastGroups[dragData.gi].splice(dragData.mi, 1)[0];
         if (moved === undefined) return;
         lastGroups[toGi].push(moved);
         groupSelected = null; // R18：拖完清掉点选，避免旧选中标到错的人
         renderGroups(lastGroups, false);
+        $("groupResult").textContent = "已把「" + moved + "」移到第 " + (toGi + 1) + " 组。"; // R21：同点选移动，别写“已随机分成”
         if (typeof SFX !== "undefined") SFX.click();
         dragData = null;
       });
@@ -1782,8 +1822,13 @@
       groupSelected = null; // R18：重新分组清掉旧选中
       renderGroups(groups, true);
     });
+    // R25：首次打开名单是空的，点一下填示例就能试
+    $("groupSampleBtn").addEventListener("click", () => {
+      $("groupNames").value = "阿伟\n小明\n阿强\n老陈\n大刘\n小美\n阿珍\n小北";
+      try { lsSet(GROUPS_NAMES_KEY, $("groupNames").value); } catch (e) { /* 忽略 */ }
+    });
     $("copyGroupsBtn").addEventListener("click", async () => {
-      const text = lastGroups.map((g, i) => "第 " + (i + 1) + " 组（队长 " + g[0] + "）：" + g.join("、")).join("\n");
+      const text = lastGroups.map((g, i) => "第 " + (i + 1) + " 组（队长 " + (g[0] || "（空组）") + "）：" + g.join("、")).join("\n"); // R23：空组兜底，队长永不写 undefined
       try {
         await navigator.clipboard.writeText("👥 随机分组结果\n" + text);
         $("copyGroupsBtn").textContent = "已复制 ✅";
@@ -2026,7 +2071,8 @@
       $("rpsResult").textContent = msg;
       renderRpsScore();
       saveRps();
-      $("rpsResetBtn").classList.remove("hidden");
+      // R21：只有打完一场才露重置按钮（原来每出一招都露出来，整场都挂着“再来一场”）
+      if (rpsScore.you >= RPS_TARGET || rpsScore.cpu >= RPS_TARGET) $("rpsResetBtn").classList.remove("hidden");
     }
     $("rpsRockBtn").addEventListener("click", () => rpsPlay("rock"));
     $("rpsScissorsBtn").addEventListener("click", () => rpsPlay("scissors"));
@@ -2038,6 +2084,7 @@
       $("rpsYou").textContent = "❔";
       $("rpsCpu").textContent = "❔";
       $("rpsResult").textContent = "出一个，看看谁赢。AI 正在研究你的套路……";
+      $("rpsResetBtn").classList.add("hidden"); // R21：新一局开始就藏回去，不然整场都挂着个“再来一场”
     });
     renderRpsScore();
     // v3.0-r16：刷新后比分已打完时也要露出重置按钮，不然出招被拦、重置又藏着，整场卡死
@@ -2144,6 +2191,15 @@
         $("guessResult").textContent = "请输入 1–100 之间的整数。";
         return;
       }
+      // R21：猜过的数不再计次数；区间外的数不计次数（按区间条提示换一个）
+      if (guessTries.includes(n)) {
+        $("guessResult").textContent = "「" + n + "」已经猜过了，换一个数。";
+        return;
+      }
+      if (n < guessLow || n > guessHigh) {
+        $("guessResult").textContent = "「" + n + "」不在区间 [" + guessLow + ", " + guessHigh + "] 里，换一个。";
+        return;
+      }
       guessTries.push(n);
       renderGuessChips();
       // 更新区间
@@ -2157,6 +2213,7 @@
           const winner = guessTurn === 0 ? "玩家二" : "玩家一";
           SFX.win();
           $("guessResult").textContent = "💥 " + loser + " 猜中炸弹，输了！" + winner + " 获胜！";
+          turnP.textContent = "本局结束，点「换个数重开」再来一局。"; // R21：终局后回合提示别还写着轮到谁猜
         } else {
           const tries = guessTries.length;
           SFX.win();
@@ -2204,6 +2261,7 @@
     let memoryMoves = 0;
     let memoryStartAt = null; // v3.0-r15：用 null 做“未开始”哨兵，不用 0（performance.now() 在加载瞬间可为 0，!0 会重复建计时器且旧的泄漏）
     let memoryTimerId = null;
+    let memoryGen = 0; // R22：对局世代——重开后旧的翻牌结算超时必须作废，不然会污染新局
     function loadMemoryBest() {
       try {
         const saved = JSON.parse(localStorage.getItem(MEMORY_BEST_KEY) || "null");
@@ -2229,6 +2287,7 @@
       memoryMatched = 0;
       memoryMoves = 0;
       memoryStartAt = null;
+      memoryGen++; // R22：重开局世代 +1，旧的翻牌结算超时作废
       if (memoryTimerId) { clearInterval(memoryTimerId); memoryTimerId = null; }
       const grid = $("memoryGrid");
       grid.innerHTML = "";
@@ -2266,7 +2325,9 @@
         renderMemoryStats();
         const a = memoryFlipped[0];
         const b = memoryFlipped[1];
+        const gen = memoryGen; // R22：记下本局世代，结算时世代变了说明已重开，直接作废
         setTimeout(() => {
+          if (gen !== memoryGen) return; // R22：旧局结算不碰新局（否则幽灵 +1 配对数，新局 7 对就提前通关）
           if (a.getAttribute("data-emoji") === b.getAttribute("data-emoji")) {
             a.classList.add("matched");
             b.classList.add("matched");
@@ -2436,10 +2497,10 @@
         if (typingTimerId) { clearInterval(typingTimerId); typingTimerId = null; }
         $("typingInput").disabled = true;
         const seconds = Math.max(elapsed, 0.1);
-        const cpm = Math.round((typingTarget.length / seconds) * 60);
+        const cpm = Math.round((correct / seconds) * 60); // R27：速度按打对的字算（原来按全文长度，错字也算速度；实时统计却是按打对的字算，两处不一致）
         const accuracy = Math.round((correct / typingTarget.length) * 100);
         let msg = "🎉 打完！速度 " + cpm + " 字/分 · 正确率 " + accuracy + "% · 用时 " + seconds.toFixed(1) + " 秒。";
-        if (typingBest === 0 || cpm > typingBest) {
+        if (cpm > 0 && (typingBest === 0 || cpm > typingBest)) { // R27：0 字/分不存纪录（0 = 无纪录，存了会污染纪录位并谎报“新纪录”）
           typingBest = cpm;
           saveBest(TYPING_BEST_KEY, cpm);
           msg += "新纪录！";
@@ -2610,6 +2671,7 @@
     const SLOTS_KEY = "dorm-toybox-slots-v2";
     const SLOTS_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 4, 8], [2, 4, 6]];
     let slotsSpinning = false;
+    let slotsTimer = null; // R21：拉动进行中的计时器 id，重置要停掉它，不然重置后旧拉动跑完照样加分翻轮次
     function loadSlotsStats() {
       try {
         const s = JSON.parse(localStorage.getItem(SLOTS_KEY) || "null");
@@ -2714,13 +2776,14 @@
       const reelsEl = slotsReelsEl(who);
       if (reelsEl) reelsEl.classList.add("spinning");
       let ticks = 0;
-      const timer = setInterval(() => {
+      slotsTimer = setInterval(() => {
         const roll = [];
         for (let i = 0; i < 9; i++) roll.push(pick(SLOTS_SYMBOLS));
         renderSlotsReels(who, roll);
         ticks++;
         if (ticks >= 12) {
-          clearInterval(timer);
+          clearInterval(slotsTimer);
+          slotsTimer = null;
           const final = [];
           for (let i = 0; i < 9; i++) final.push(pick(SLOTS_SYMBOLS));
           // 中奖率：近一半的局保底中一条线，不然十把九空太无聊
@@ -2762,6 +2825,10 @@
     $("slotsSpinA").addEventListener("click", () => slotsSpin("a"));
     $("slotsSpinB").addEventListener("click", () => slotsSpin("b"));
     $("slotsResetBtn").addEventListener("click", () => {
+      // R21：先停掉进行中的拉动（不然旧拉动跑完照样加分翻轮次，重置白点了）
+      if (slotsTimer) { clearInterval(slotsTimer); slotsTimer = null; }
+      slotsSpinning = false;
+      ["a", "b"].forEach((w) => { const r = slotsReelsEl(w); if (r) r.classList.remove("spinning"); });
       // v3.0-r16：重置只清比分/轮次，欢乐豆保留（旧写法丢了 coins，下次赢分就变 NaN）
       slotsStats = { a: 0, b: 0, round: 1, turn: "a", coins: (typeof slotsStats.coins === "number" ? slotsStats.coins : 100) };
       saveSlotsStats();
@@ -3180,7 +3247,7 @@
       if (schulteNext > total) {
         schulteDone = true;
         if (schulteTimerId) { clearInterval(schulteTimerId); schulteTimerId = null; }
-        const seconds = schulteElapsed();
+        const seconds = Math.max(schulteElapsed(), 0.1); // R27：0.0 秒不存纪录（0 = 无纪录，存了 0 会把“已通关”显示回“还没人通关”，下次还谎报“新纪录”；与打字 0.1 秒下限同款）
         let msg = "🎉 完成！用时 " + seconds.toFixed(1) + " 秒。";
         if (schulteBest === 0 || seconds < schulteBest) {
           schulteBest = seconds;
@@ -3255,6 +3322,10 @@
     });
     $("scoreResetBtn").addEventListener("click", () => {
       score = { a: 0, b: 0, nameA: score.nameA, nameB: score.nameB };
+      // R23：清零也要清 C–H 队（原来只清 A/B，C 队分数残留，结算时还会赢）
+      scoreExtra.teams.forEach((t) => { t.score = 0; });
+      saveExtra();
+      renderExtraTeams();
       saveScore();
       renderScore();
     });
@@ -3581,7 +3652,7 @@
         });
         grid.appendChild(cell);
       }
-      const pct = Math.round((lived / LIFE_TOTAL_MONTHS) * 100);
+      const pct = Math.min(100, Math.round((lived / LIFE_TOTAL_MONTHS) * 100)); // R24：1900 年生人 lived 超 960 格，百分比别写 159%
       $("lifeStats").textContent = "你已经过了 " + lived + " 个月（" + pct + "%），还剩 " + remaining + " 个月。金色的是已经过的，点任意格子看看那时的你。";
     }
     $("lifeGenBtn").addEventListener("click", lifeRender);
@@ -3614,6 +3685,7 @@
       } catch (e) { return []; }
     }
     let ledger = loadLedger();
+    function r2Ledger(n) { return Math.round(n * 100) / 100; } // R23：浮点求和取整到分再显示
     function saveLedger() {
       try { localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger)); } catch (e) { /* 忽略 */ }
     }
@@ -3636,7 +3708,7 @@
       });
       $("ledgerTotals").textContent = ledger.length === 0
         ? "还没记过账。"
-        : "收入 " + income + " 元 · 支出 " + expense + " 元 · 结余 " + (income - expense) + " 元";
+        : "收入 " + r2Ledger(income) + " 元 · 支出 " + r2Ledger(expense) + " 元 · 结余 " + r2Ledger(income - expense) + " 元"; // R23：金额按分取整再显示，不然 0.1+0.2 会印出 0.30000000000000004
       $("ledgerInBtn").classList.toggle("gold-btn", ledgerType === "in");
       $("ledgerInBtn").classList.toggle("ghost-btn", ledgerType !== "in");
       $("ledgerOutBtn").classList.toggle("gold-btn", ledgerType === "out");
@@ -3664,7 +3736,13 @@
     /* ----- AA 分摊（原有逻辑 + 一键复制） ----- */
 
     function aaParseNames() {
-      return $("aaNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
+      // R23：重名只算一人（同分组去重；不然同一个人算两份，垫付结算也对不上）
+      const seen = new Set();
+      return $("aaNames").value.split("\n").map((s) => s.trim()).filter((s) => {
+        if (!s || seen.has(s)) return false;
+        seen.add(s);
+        return true;
+      });
     }
     function aaRefreshPayer() {
       const names = aaParseNames();
@@ -3754,7 +3832,7 @@
     let beadsFocusN = null; // 正在单独拼的色号，null = 全部显示
     let beadsLastPixels = null, beadsLastCols = 0, beadsLastRows = 0;
     let beadsLastImage = null; // 传过的原图：换格数时直接拿它重算，不用重新选图
-    let beadsShowingPhoto = false; // 当前图纸是不是照片算出来的（示例爱心是固定 16 格，不跟格数走）
+    let beadsShowingPhoto = false; // 当前图纸是不是照片算出来的（R24 前示例爱心固定 16 格不跟格数走，现已跟格数重排）
     let beadsSymbols = {}; // 色号 -> 符号
     let beadsLegendItems = []; // { n, el }
     function beadRingBg(hex) {
@@ -3941,6 +4019,14 @@
     $("beadsSize").addEventListener("change", () => {
       // 换格数（清晰度）图纸马上重算：拿存着的原图按新格数重缩，不用重新选图
       if (beadsLastImage && beadsShowingPhoto) beadsFromImage(beadsLastImage);
+      else if (!beadsShowingPhoto && beadsLastPixels) {
+        // R24：示例爱心以前不跟格数走，换格数时控件静默没反应（页头 hint 却写着“换格数后图纸马上重算”）——按新格数就近取样重排示例图
+        const size = parseInt($("beadsSize").value, 10) || 16;
+        const charHex = { ".": "#E5ECF1", R: "#B4060E", P: "#EA8AA5" };
+        const pixels = [];
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) pixels.push(charHex[BEADS_SAMPLE[Math.floor((r * 16) / size)][Math.floor((c * 16) / size)]] || "#E5ECF1");
+        beadsRender(pixels, size, size);
+      }
     });
     $("beadsMaxColors").addEventListener("change", () => {
       // 换颜色数上限就按原图重算：少的色并进最近的保留色，图例和符号跟着变
@@ -4089,6 +4175,7 @@
       const amount = parseFloat($("fxAmount").value);
       const from = $("fxFrom").value, to = $("fxTo").value;
       if (isNaN(amount)) { $("fxResult").textContent = "先填个金额。"; return; }
+      if (amount <= 0) { $("fxResult").textContent = "金额要大于 0。"; return; } // R20：负数/0 之前照常换算出负数，毫无意义
       const cny = amount / fxRates[from];
       const out = cny * fxRates[to];
       $("fxResult").textContent = amount + " " + from + " ≈ " + out.toFixed(2) + " " + to;
@@ -4249,7 +4336,10 @@
         drawBmiGauge(m ? parseFloat(m[1]) : 0);
       }, 0);
     });
-    drawBmiGauge(0);
+    // R26：首次打开就按滑杆默认值（170cm/65kg）同步并出结果。
+    // 原来 init 不调 bmiSyncFromSliders，隐藏输入框一直是空的，打开只见“先填身高体重”，
+    // 点“算一下”也报“先填对身高”——滑杆明明显示着 170/65，像按钮坏了。
+    bmiSyncFromSliders();
 
   };
   /* ---------- 24. 汇率计算器（联网每天更新一次，存本机；离线用备用汇率） ---------- */
@@ -4338,7 +4428,7 @@
       const kw = (filter || "").trim().toLowerCase();
       let count = 0;
       SLANG.forEach((item) => {
-        if (kw && !(item.zh.includes(kw) || item.en.toLowerCase().includes(kw))) return;
+        if (kw && !(item.zh.includes(kw) || item.en.toLowerCase().includes(kw) || item.ja.includes(kw) || item.ko.includes(kw))) return; // R25：原来只搜中文/英文，搜日语/韩语永远“没搜到”，howto 却写中英日韩对照
         count++;
         const card = document.createElement("div");
         card.className = "slang-card";
@@ -4458,7 +4548,7 @@
     }
     function compassUpdate(deg) {
       $("compassCard").style.transform = "rotate(" + (-deg) + "deg)"; // 指针不动，表盘转
-      $("compassDeg").textContent = Math.round(deg) + "° · " + compassDir(deg);
+      $("compassDeg").textContent = (Math.round(deg) % 360) + "° · " + compassDir(deg); // R25：359.9° 四舍五入是 360°，表盘没有 360 刻度，归 0°
     }
     function compassHandler(e) {
       let deg = null;
@@ -4512,10 +4602,11 @@
       if (db < 30) return "很安静 🤫";
       if (db < 50) return "正常说话声 🗣";
       if (db < 70) return "有点吵 📢";
-      if (db < 90) return "很吵，注意听力 🙉";
+      if (db < 85) return "很吵，注意听力 🙉"; // R25：满格信号也只有约 89.9dB，90 档永远到不了
       return "非常吵，离远点！🚨";
     }
     const noiseHist = [];
+    let noiseLastHistAt = 0; // R25：曲线 1 秒记 1 个点（见 noiseRender）
     let noiseVibAt = 0;
     function noiseDrawGauge(db) {
       try {
@@ -4578,7 +4669,7 @@
     }
     function noiseRender(db) {
       $("noiseDb").textContent = Math.round(db) + " dB";
-      $("noiseMeter").style.width = Math.min(100, Math.max(0, db)) + "%";
+      $("noiseMeter").style.width = Math.min(100, Math.max(0, db) / 120 * 100) + "%"; // R25：表条原来把分贝数直接当百分比，60dB 占 60%，和 0–120 的表盘刻度对不上
       $("noiseLevel").textContent = noiseLevel(db);
       const over = db >= 70;
       $("noiseDb").classList.toggle("over", over);
@@ -4590,8 +4681,9 @@
           noiseVibAt = now;
         }
       }
-      noiseHist.push(db);
-      if (noiseHist.length > 60) noiseHist.shift();
+      // R25：原来每帧都记一个点，60 个点只盖约 1 秒，标签却写“最近 60 秒”；改成 1 秒记 1 个点，60 个点正好 60 秒
+      const nowHist = Date.now();
+      if (nowHist - noiseLastHistAt >= 1000) { noiseHist.push(db); if (noiseHist.length > 60) noiseHist.shift(); noiseLastHistAt = nowHist; }
       noiseDrawGauge(db);
       noiseDrawHist();
     }
@@ -4610,28 +4702,41 @@
         return;
       }
       navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-        noiseStream = stream;
-        const AC = window.AudioContext || window.webkitAudioContext;
-        noiseCtx = new AC();
-        const src = noiseCtx.createMediaStreamSource(stream);
-        const analyser = noiseCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        src.connect(analyser);
-        const buf = new Uint8Array(analyser.fftSize);
-        noiseRunning = true;
-        $("noiseBtn").textContent = "停止检测 ⏹";
-        $("noiseResult").textContent = "正在检测……数值是估算，仅供参考。";
-        const tick = () => {
-          if (!noiseRunning) return;
-          analyser.getByteTimeDomainData(buf);
-          let sum = 0;
-          for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
-          const rms = Math.sqrt(sum / buf.length);
-          const db = rms > 0 ? 20 * Math.log10(rms) + 90 : 0;
-          noiseRender(db);
-          noiseRaf = requestAnimationFrame(tick);
-        };
-        tick();
+        // R29：建 AudioContext/分析器失败（老机器没 AudioContext）不能静默——之前抛错直接走 .catch，
+        // 提示错写成“麦克风权限”，麦克风流还一直开着漏录
+        try {
+          noiseStream = stream;
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (typeof AC !== "function") throw new Error("no AudioContext");
+          noiseCtx = new AC();
+          const src = noiseCtx.createMediaStreamSource(stream);
+          const analyser = noiseCtx.createAnalyser();
+          analyser.fftSize = 2048;
+          src.connect(analyser);
+          const buf = new Uint8Array(analyser.fftSize);
+          noiseRunning = true;
+          $("noiseBtn").textContent = "停止检测 ⏹";
+          $("noiseResult").textContent = "正在检测……数值是估算，仅供参考。";
+          const tick = () => {
+            if (!noiseRunning) return;
+            analyser.getByteTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+            const rms = Math.sqrt(sum / buf.length);
+            const db = rms > 0 ? 20 * Math.log10(rms) + 90 : 0;
+            noiseRender(db);
+            noiseRaf = requestAnimationFrame(tick);
+          };
+          tick();
+        } catch (e) {
+          noiseRunning = false;
+          try { if (noiseCtx) noiseCtx.close(); } catch (_) {}
+          noiseCtx = null;
+          try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+          noiseStream = null;
+          $("noiseBtn").textContent = "开始检测 🎙";
+          $("noiseResult").textContent = "当前设备不支持音频处理，在手机上打开试试。";
+        }
       }).catch(() => {
         $("noiseResult").textContent = "需要允许麦克风权限才能测噪音。";
       });
@@ -4715,9 +4820,14 @@
       wnCurrent = null;
       if (!silent) $("wnResult").textContent = "已停止。";
     }
-    // 每种音色的合成链：返回 { nodes:[...], gain }
-    function wnBuild(sid, ctx, master) {
+    function wnVolFactor() { // R25：音量滑杆 0–100 转 0–1；只有 NaN 才回落 0.6，0 就是静音（原来 `x/100 || 0.6` 把 0 也当没填）
+      const v = parseInt($("wnVolume").value, 10);
+      return Number.isNaN(v) ? 0.6 : v / 100;
+    }
+    // 每种音色的合成链：返回 { nodes:[...], gain }；level 是该音色的基准响度，真正的主增益 = level × 音量滑杆（R25：原来 wnBuild 直接写死 master 增益，滑杆白调）
+    function wnBuild(sid, ctx) {
       const builtCrackle = {};
+      let level = 0.5;
       const sr = ctx.sampleRate, len = sr * 2;
       const buf = ctx.createBuffer(1, len, sr);
       const d = buf.getChannelData(0);
@@ -4739,15 +4849,15 @@
         const lfo = ctx.createOscillator(); lfo.frequency.value = 0.4;
         const lg = ctx.createGain(); lg.gain.value = 0.25;
         lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
-        master.gain.value = 0.5;
+        level = 0.5;
       } else if (sid === "sea") {
         // 海浪：低通 500Hz + 0.12Hz 慢起伏
         const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 500;
         src.connect(lp); connect(lp);
         const lfo = ctx.createOscillator(); lfo.frequency.value = 0.12;
         const lg = ctx.createGain(); lg.gain.value = 0.45;
-        lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
-        master.gain.value = 0.6;
+        lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo); // R29：删掉重复的第 2 次 connect/start/push——同一个振荡器 start 两次真机抛 InvalidStateError，整个海浪声播不了（之前只有雨/风扇/篝火/白噪音能播）
+        level = 0.6;
       } else if (sid === "fan") {
         // 风扇：低频嗡鸣 + 8Hz 扇叶拍打
         const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 240;
@@ -4758,7 +4868,7 @@
         const lfo = ctx.createOscillator(); lfo.frequency.value = 8;
         const lg = ctx.createGain(); lg.gain.value = 0.18;
         lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo);
-        master.gain.value = 0.5;
+        level = 0.5;
       } else if (sid === "fire") {
         // 篝火：高通噼啪基底 + 随机爆裂声
         const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 900;
@@ -4779,13 +4889,13 @@
         }, 180);
         builtCrackle.crackle = crackle;
         builtCrackle.disarm = () => { crackleAlive = false; };
-        master.gain.value = 0.45;
+        level = 0.45;
       } else {
         // 白噪音：直出
         connect(src);
-        master.gain.value = 0.32;
+        level = 0.32;
       }
-      return { nodes, out, crackle: builtCrackle.crackle || null };
+      return { nodes, out, crackle: builtCrackle.crackle || null, level };
     }
     WN_SOUNDS.forEach((s) => {
       const b = document.createElement("button");
@@ -4799,12 +4909,12 @@
           if (wnCtx.state === "suspended") wnCtx.resume();
           wnStopAll(true);
           const master = wnCtx.createGain();
-          master.gain.value = 0.5 * (parseInt($("wnVolume").value, 10) / 100 || 0.6);
           master.connect(wnCtx.destination);
-          const built = wnBuild(s.id, wnCtx, master);
+          const built = wnBuild(s.id, wnCtx);
+          master.gain.value = built.level * wnVolFactor(); // R25：主增益 = 音色系数 × 滑杆（原来先按滑杆算、再被 wnBuild 写死覆盖）
           built.nodes.forEach((n) => { try { if (n.start && n !== built.out) n.start(); } catch (e) {} });
           try { built.out.connect(master); } catch (e) {}
-          wnNodes = { nodes: built.nodes.concat([master]), gain: master, crackle: built.crackle };
+          wnNodes = { nodes: built.nodes.concat([master]), gain: master, crackle: built.crackle, level: built.level };
           wnCurrent = s.id;
           // 定时关闭
           const mins = parseInt($("wnSleep").value, 10) || 0;
@@ -4820,7 +4930,7 @@
       $("wnSounds").appendChild(b);
     });
     $("wnVolume").addEventListener("input", () => {
-      if (wnNodes && wnNodes.gain) wnNodes.gain.gain.value = (parseInt($("wnVolume").value, 10) / 100 || 0) * 0.5;
+      if (wnNodes && wnNodes.gain) wnNodes.gain.gain.value = (wnNodes.level || 0.5) * wnVolFactor(); // R25：原来拉滑杆一律按 0.5 算，海浪 0.6/白噪音 0.32 的音色系数被抹掉
     });
     $("wnStopBtn").addEventListener("click", () => wnStopAll(false));
 
@@ -4974,7 +5084,8 @@
     function doodlePushHistory() {
       if (!doodleCtx) return;
       try {
-        doodleHistory.push(doodleCtx.getImageData(0, 0, doodleCanvas.width, doodleCanvas.height));
+        // R25：快照只存了画面没存笔数——撤销后画面回去了笔数还在，空白画布也能“保存成功”；清空后撤销也丢了笔数
+        doodleHistory.push({ img: doodleCtx.getImageData(0, 0, doodleCanvas.width, doodleCanvas.height), strokes: doodleStrokes });
         if (doodleHistory.length > 20) doodleHistory.shift();
         const ub = $("doodleUndoBtn");
         if (ub) ub.disabled = false;
@@ -5053,9 +5164,10 @@
       doodleUndoBtn.addEventListener("click", () => {
         if (!doodleCtx || !doodleHistory.length) return;
         try {
-          const img = doodleHistory.pop();
-          doodleCtx.putImageData(img, 0, 0);
-          $("doodleResult").textContent = "↩ 撤销了一步。";
+          const snap = doodleHistory.pop();
+          doodleCtx.putImageData(snap.img, 0, 0);
+          doodleStrokes = snap.strokes; // R25：撤销连笔数一起还原
+          $("doodleResult").textContent = doodleStrokes === 0 ? "↩ 撤销了一步，画布是空的。" : "↩ 撤销了一步。";
           if (!doodleHistory.length) doodleUndoBtn.disabled = true;
         } catch (e) {}
       });
@@ -5201,7 +5313,10 @@
     function snakeStep() {
       if (snakeNextDir) { snakeDir = snakeNextDir; snakeNextDir = null; }
       const head = { x: snakeBody[0].x + snakeDir.x, y: snakeBody[0].y + snakeDir.y };
-      if (head.x < 0 || head.y < 0 || head.x >= SNAKE_GRID || head.y >= SNAKE_GRID || snakeBody.some((s) => s.x === head.x && s.y === head.y)) { snakeGameOver(); return; }
+      // R26：头撞进尾巴当前格不算撞自己——尾巴本步会挪走；只有吃豆那步尾巴不动，才算撞
+      const snakeWillEat = snakeFood && head.x === snakeFood.x && head.y === snakeFood.y;
+      const snakeBodyToCheck = snakeWillEat ? snakeBody : snakeBody.slice(0, -1);
+      if (head.x < 0 || head.y < 0 || head.x >= SNAKE_GRID || head.y >= SNAKE_GRID || snakeBodyToCheck.some((s) => s.x === head.x && s.y === head.y)) { snakeGameOver(); return; }
       snakeBody.unshift(head);
       if (snakeFood && head.x === snakeFood.x && head.y === snakeFood.y) {
         snakeScore++;
@@ -5867,7 +5982,7 @@
     g2048New();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get g2048() { return { board: g2048.slice(), score: gScore, over: gOver, won: gWon }; },
-        g2048Set(board) { g2048 = board.slice(); g2048Render(); },
+        g2048Set(board) { g2048 = board.slice(); gOver = false; gWon = false; g2048Render(); }, // R22：摆新盘要清终局/获胜旗，不然终局后摆盘再动会被拦住
         g2048Move(dir) { g2048Move(dir); },
     }));
 
@@ -5876,6 +5991,7 @@
   toyInitFns["mines"] = function () {
     const M_ROWS = 9, M_COLS = 9, M_MINES = 10;
     let mCells = [], mStarted = false, mOver = false, mFlagMode = false, mTimer = null, mSeconds = 0;
+    let mSuppressCtx = false, mSuppressClick = false; // R21：同大扫雷 R19——安卓长按会同时触发 450ms 计时插旗 + contextmenu；计时插旗后要压住一次 contextmenu，抬指后的 click 也要压一次，不然旗刚插上就被拔掉、格子还被点开
     function mNew() {
       mCells = [];
       for (let i = 0; i < M_ROWS * M_COLS; i++) mCells.push({ mine: false, revealed: false, flagged: false, count: 0 });
@@ -5924,12 +6040,12 @@
           if (cell.mine) btn.textContent = "💣";
           else if (cell.count > 0) { btn.textContent = cell.count; btn.classList.add("n" + cell.count); }
         } else if (cell.flagged) btn.textContent = "🚩";
-        btn.addEventListener("click", () => mClick(i, false));
-        btn.addEventListener("contextmenu", (e) => { if (e.preventDefault) e.preventDefault(); mClick(i, true); });
+        btn.addEventListener("click", () => { if (mSuppressClick) { mSuppressClick = false; return; } mClick(i, false); }); // R21：长按刚结束的这次 click 是同一按压的尾巴，吞掉（格子重建后 click 落到新格子上，per-cell 标记拦不住，必须用共享标记，同大扫雷 R19）
+        btn.addEventListener("contextmenu", (e) => { if (e.preventDefault) e.preventDefault(); if (mSuppressCtx) return; mClick(i, true); }); // R21：长按计时刚插过旗时，这次 contextmenu 是同一按压的重复触发，吞掉，不然旗刚插上立刻又被拔掉
         let pressTimer = null;
-        btn.addEventListener("pointerdown", (e) => { if (e && e.button !== undefined && e.button !== 0) return; pressTimer = setTimeout(() => { mClick(i, true); pressTimer = null; }, 450); }); // 右键不进长按计时，不然按住右键 450ms 会多插一次旗再取消
-        btn.addEventListener("pointerup", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
-        btn.addEventListener("pointerleave", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+        btn.addEventListener("pointerdown", (e) => { mSuppressClick = false; mSuppressCtx = false; if (e && e.button !== undefined && e.button !== 0) return; pressTimer = setTimeout(() => { mClick(i, true); mSuppressCtx = true; mSuppressClick = true; pressTimer = null; }, 450); }); // R21：右键不进长按计时，不然按住右键 450ms 会多插一次旗再取消；新一按先清掉上一按残留的压制（浏览器没发 click 时它会一直留着）
+        btn.addEventListener("pointerup", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } mSuppressCtx = false; }); // R21：contextmenu 的压制抬指即清；click 压制留到 click 消费或下一按清掉（timer 里已置位，不依赖 pointerup 落在哪个格子上）
+        btn.addEventListener("pointerleave", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }); // R21：手指滑出格子只清计时，不清 contextmenu 压制——contextmenu 在长按后才发，滑出时清掉会让它漏进来
         btn.addEventListener("pointercancel", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }); // 系统手势打断长按也要清计时，不然手指都走了还会插旗
         grid.appendChild(btn);
       });
@@ -5940,16 +6056,24 @@
       mTimer = setInterval(() => { mSeconds++; $("minesTime").textContent = "⏱ " + mSeconds + " 秒"; }, 1000);
     }
     function mStopTimer() { if (mTimer) { clearInterval(mTimer); mTimer = null; } }
+    function mFlagCount() { return mCells.filter((c) => c.flagged).length; }
+    // R26：旗只有 10 面（等于雷数），插满就不再插，不然“剩 -1 颗雷”；两处插旗入口（右键/长按、插旗模式）共用
+    function mToggleFlag(i) {
+      const cell = mCells[i];
+      if (cell.revealed) return false;
+      if (!cell.flagged && mFlagCount() >= M_MINES) { $("minesStatus").textContent = "🚩 旗插满了（共 " + M_MINES + " 面），先拔掉一面再插。"; return false; }
+      cell.flagged = !cell.flagged;
+      if ($("minesStatus").textContent.includes("旗插满了")) $("minesStatus").textContent = "🚩 剩 " + (M_MINES - mFlagCount()) + " 颗雷没找到。";
+      return true;
+    }
     function mClick(i, flag) {
       if (mOver) return;
       const cell = mCells[i];
       if (flag) {
-        if (cell.revealed) return;
-        cell.flagged = !cell.flagged;
-        mRender();
+        if (mToggleFlag(i)) mRender();
         return;
       }
-      if (mFlagMode) { if (!cell.revealed) { cell.flagged = !cell.flagged; mRender(); } return; }
+      if (mFlagMode) { if (mToggleFlag(i)) mRender(); return; }
       if (cell.revealed || cell.flagged) return;
       if (!mStarted) { mPlaceMines(i); mStarted = true; mStartTimer(); }
       if (cell.mine) {
@@ -6000,10 +6124,11 @@
     let schCourses = [];
     let schPendingDelete = null; // v3.0-r16：两点确认删除——点已有课程一次只武装，防手滑误删
     let schPendingCell = null;
+    let schClearArmed = false; // R23：清空全部也要两点确认（同删单门课；原来一点就清空整张表）
     try { schCourses = JSON.parse(localStorage.getItem(SCH_KEY) || "[]") || []; } catch (e) { schCourses = []; }
     function schSave() { try { localStorage.setItem(SCH_KEY, JSON.stringify(schCourses)); } catch (e) { /* 忽略 */ } }
     function schRender() {
-      schPendingDelete = null; schPendingCell = null;
+      schPendingDelete = null; schPendingCell = null; schClearArmed = false;
       const grid = $("schGrid");
       grid.innerHTML = "";
       const now = new Date();
@@ -6052,6 +6177,7 @@
             cell.textContent = "＋";
           }
           cell.addEventListener("click", () => {
+            schClearArmed = false; // 点格子取消清空武装
             if (course) {
               if (schPendingDelete !== course) {
                 if (schPendingCell) schPendingCell.classList.remove("armed");
@@ -6093,7 +6219,15 @@
       if ($("schTeacher")) $("schTeacher").value = "";
       $("schResult").textContent = "已加上「" + name + "」（" + SCH_DAYS[day] + " " + SCH_PERIODS[period].split("\n")[0] + "）。";
     });
-    $("schClearBtn").addEventListener("click", () => { schCourses = []; schSave(); schRender(); $("schResult").textContent = "课程表已清空。"; });
+    $("schClearBtn").addEventListener("click", () => {
+      if (!schClearArmed) {
+        schClearArmed = true;
+        $("schResult").textContent = "再点一次清空全部 " + schCourses.length + " 门课，点别处取消。";
+        return;
+      }
+      schClearArmed = false;
+      schCourses = []; schSave(); schRender(); $("schResult").textContent = "课程表已清空。";
+    });
     schRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get schedule() { return { courses: schCourses.slice() }; },
@@ -6487,7 +6621,7 @@
       $("pianoResult").textContent = "♪ 正在弹《" + title + "》……";
       PIANO_SONGS[key].forEach((note, i) => {
         pianoSongTimers.push(setTimeout(() => {
-          pianoPlay(note);
+          pianoPlay(note, true); // R24：示范曲不录进用户录音（原来录音开着时点小星星，14 个音全录进去，回放就串了）
           if (i === PIANO_SONGS[key].length - 1) $("pianoResult").textContent = "♪ 《" + title + "》弹完了。";
         }, i * 450));
       });
@@ -6536,7 +6670,7 @@
       });
       pianoSongTimers.push(setTimeout(() => { $("pianoResult").textContent = "♪ 回放完了。"; }, (saved[saved.length - 1].t || 0) + 600));
     });
-    toyLeaveCleanup.piano = () => { pianoStopSong(); pianoRecording = false; };
+    toyLeaveCleanup.piano = () => { pianoStopSong(); pianoRecording = false; if (recBtn) { recBtn.textContent = "⏺ 录音"; recBtn.classList.remove("active"); } }; // R24：切走只停录音不复位按钮，回来按钮还写着“停止录音”却已不在录（点它反而是开始新录音）
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get piano() { return { lastNote: pianoLastNote }; },
         pianoPlay(name) { pianoPlay(name); },
@@ -6914,6 +7048,7 @@
         && b.x >= breakoutPaddleX - b.r && b.x <= breakoutPaddleX + 60 + b.r) {
         b.dy = -Math.abs(b.dy);
         b.dx += ((b.x - (breakoutPaddleX + 30)) / 30) * 0.8; // 打在挡板边缘会变向
+        b.dx = Math.max(-4, Math.min(4, b.dx)); // R21：边缘连打会把横向速度越刷越快（30 次到 11+，球横着飞没法接）；夹到 ±4
         b.y = BREAKOUT_H - 14 - b.r;
       }
       // 砖块
@@ -7415,7 +7550,7 @@
     const JUMP_KEY = "dorm-toybox-jump-best-v1";
     const JUMP_W = 340, JUMP_MAX = 280;
     let jumpBest = loadBest(JUMP_KEY);
-    let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null, jumpBusy = false;
+    let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null, jumpBusy = false, jumpShiftId = null; // R26：jumpShiftId——落地 350ms 位移定时器，重开要清掉（见 jumpReset）
     let jumpPlatA = { x: 20, w: 60 }, jumpPlatB = { x: 180, w: 56 }, jumpCharX = 34;
     function jumpNewPlatB() {
       const w = 40 + Math.floor(Math.random() * 31);
@@ -7432,6 +7567,7 @@
     }
     function jumpReset() {
       if (jumpChargeId) { clearInterval(jumpChargeId); jumpChargeId = null; }
+      if (jumpShiftId) { clearTimeout(jumpShiftId); jumpShiftId = null; } // R26：落地后立刻重开，陈旧的 350ms 位移不能再改写新局
       jumpScore = 0; jumpPower = 0; jumpOver = false; jumpCharging = false; jumpBusy = false;
       jumpPlatA = { x: 20, w: 60 }; jumpPlatB = jumpNewPlatB(); jumpCharX = 34;
       $("jumpChar").classList.remove("charging");
@@ -7476,7 +7612,8 @@
         // 场景左移：落脚的台子变成起点，再生成下一个；左移完成前不接受新的蓄力，
         // 不然能在 350ms 的窗口里对着同一个台子再跳一次刷分
         jumpBusy = true;
-        setTimeout(() => {
+        jumpShiftId = setTimeout(() => { // R26：记下 id，重开时清掉
+          jumpShiftId = null;
           if (jumpOver) return;
           jumpPlatA = { x: 20, w: jumpPlatB.w };
           jumpCharX = 20 + Math.floor((jumpPlatA.w - 32) / 2);
@@ -7569,7 +7706,7 @@
         const cells = $("spotdiffGrid").children;
         if (cells[i] && cells[i].classList) cells[i].classList.add("found");
         spotdiffLock = true;
-        setTimeout(() => { spotdiffLock = false; spotdiffNewRound(); }, 450);
+        setTimeout(() => { spotdiffLock = false; if (spotdiffRunning) spotdiffNewRound(); }, 450); // R28a：时间到后别进新关（会冲掉"时间到"文案，棋盘看着能点实际已停）
       } else {
         spotdiffScore = Math.max(0, spotdiffScore - 5);
         const cells = $("spotdiffGrid").children;
@@ -7833,8 +7970,8 @@
       const cur = IDIOM_CHAIN[idiomIdx];
       const need = cur.charAt(3);
       const correct = IDIOM_CHAIN[idiomIdx + 1];
-      // 干扰项：链里不以 need 开头的成语
-      const distract = IDIOM_CHAIN.filter((w) => w !== correct && w.charAt(0) !== need);
+      // 干扰项：链 + 扩展库里不以 need 开头的成语（R22：扩展库原来定义了却没人用，选项更多样）
+      const distract = IDIOM_CHAIN.concat(IDIOM_EXTRA).filter((w) => w !== correct && w.charAt(0) !== need);
       const d1 = distract[Math.floor(Math.random() * distract.length)];
       let d2 = distract[Math.floor(Math.random() * distract.length)];
       while (d2 === d1) d2 = distract[Math.floor(Math.random() * distract.length)];
@@ -8008,12 +8145,9 @@
       const grid = $("drumsGrid");
       if (!drumsBuilt) {
         grid.innerHTML = "";
+        // R28：行标签（🥁/👏/🎩/🪘）移到图例，网格只剩 8 列格子，才能放大到 41×44px；
+        // 原来 52px 标签列 + 340px 上限，格子只有 31px，手机上总点错
         DRUM_TRACKS.forEach((tr, t) => {
-          const label = document.createElement("div");
-          label.className = "drums-label";
-          label.textContent = tr.icon;
-          label.title = tr.name;
-          grid.appendChild(label);
           for (let s = 0; s < 8; s++) {
             const cell = document.createElement("button");
             cell.className = "drums-cell";
@@ -8164,26 +8298,27 @@
       }
       stroopNewRound();
     }
+    function stroopTick() { // R23：抽出来复用（离场停表、回场续上）；原来是 stroopStart 里的匿名回调
+      stroopTime--;
+      if (stroopTime <= 0) {
+        stroopTime = 0; stroopRunning = false;
+        clearInterval(stroopTimerId); stroopTimerId = null;
+        if (stroopScore > stroopBest) {
+          stroopBest = stroopScore;
+          saveBest(STROOP_KEY, stroopBest);
+        }
+        $("stroopStatus").textContent = "⏰ 时间到！得分 " + stroopScore + "，最好 " + stroopBest + "。";
+        return;
+      }
+      stroopRender();
+    }
     function stroopStart() {
       if (stroopRunning) return;
       // R18：上一局时间到了之后点开始要重开新局（原来时间还是 0，第一次 tick 就立刻结束，开始按钮点了等于没点）
       if (stroopTime <= 0) { stroopScore = 0; stroopCombo = 0; stroopTime = STROOP_TIME; stroopNewRound(); }
       stroopRunning = true;
       if (stroopTimerId) clearInterval(stroopTimerId);
-      stroopTimerId = setInterval(() => {
-        stroopTime--;
-        if (stroopTime <= 0) {
-          stroopTime = 0; stroopRunning = false;
-          clearInterval(stroopTimerId); stroopTimerId = null;
-          if (stroopScore > stroopBest) {
-            stroopBest = stroopScore;
-            saveBest(STROOP_KEY, stroopBest);
-          }
-          $("stroopStatus").textContent = "⏰ 时间到！得分 " + stroopScore + "，最好 " + stroopBest + "。";
-          return;
-        }
-        stroopRender();
-      }, 1000);
+      stroopTimerId = setInterval(stroopTick, 1000);
     }
     function stroopReset() {
       if (stroopTimerId) { clearInterval(stroopTimerId); stroopTimerId = null; }
@@ -8194,6 +8329,9 @@
     $("stroopStartBtn").addEventListener("click", stroopStart);
     $("stroopResetBtn").addEventListener("click", stroopReset);
     stroopReset();
+    // R23：切走停表、回来续上；原来没有离场清理，切走后 60 秒在后台偷跑，回来可能已结束
+    toyLeaveCleanup.stroop = () => { if (stroopTimerId) { clearInterval(stroopTimerId); stroopTimerId = null; } };
+    toyEnterResume.stroop = () => { if (stroopRunning && stroopTime > 0 && !stroopTimerId) stroopTimerId = setInterval(stroopTick, 1000); };
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get stroop() { return { score: stroopScore, time: stroopTime, word: stroopWord, ink: stroopInk, running: stroopRunning, best: stroopBest, combo: stroopCombo }; },
         stroopSet(word, ink) { stroopWord = word; stroopInk = ink; stroopRunning = true; stroopRender(); },
@@ -8421,6 +8559,7 @@
       });
       // 怪兽撞飞船 / 掉出底边
       shooterEnemies = shooterEnemies.filter((e) => {
+        if (shooterOver) return false; // R24：同一帧两怪同撞，第一只已撞毁终局，第二只别再扣命——原来命掉到 -1
         if (Math.abs(e.x - shooterShipX) < 24 && Math.abs(e.y - 270) < 24) {
           shooterLives--;
           SFX.lose();
@@ -8519,10 +8658,20 @@
     ];
     let onestrokeLevel = 0, onestrokePath = [], onestrokeUsed = new Set(), onestrokeDone = false;
     function onestrokeEdgeKey(a, b) { return Math.min(a, b) + "-" + Math.max(a, b); }
+    // R29：起笔陷阱——欧拉轨迹必须从奇点出发；第 2 关奇点是 0、2 号点，第 3 关是 1、2 号点，
+    // 从别的点起笔注定走进死胡同。起笔前把能画完的起笔点圈出来（0 个奇点 = 欧拉回路，任意起笔都行，不用提示）。
+    function onestrokeStartNodes() {
+      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const deg = lv.nodes.map(() => 0);
+      lv.edges.forEach((e) => { deg[e[0]]++; deg[e[1]]++; });
+      const odd = deg.map((d, i) => (d % 2 === 1 ? i : -1)).filter((i) => i >= 0);
+      return odd.length === 2 ? odd : [];
+    }
     function onestrokeRender() {
       const lv = ONESTROKE_LEVELS[onestrokeLevel];
       const board = $("onestrokeBoard");
       board.innerHTML = "";
+      const starts = onestrokePath.length === 0 ? onestrokeStartNodes() : [];
       // 已画的线
       onestrokeUsed.forEach((key) => {
         const [a, b] = key.split("-").map(Number);
@@ -8538,7 +8687,7 @@
       // 点
       lv.nodes.forEach((pt, i) => {
         const d = document.createElement("button");
-        d.className = "onestroke-dot";
+        d.className = "onestroke-dot" + (starts.includes(i) ? " onestroke-start" : "");
         d.style.left = pt[0] + "px"; d.style.top = pt[1] + "px";
         d.setAttribute("aria-label", "点 " + (i + 1));
         d.addEventListener("click", () => onestrokePick(i));
@@ -8547,7 +8696,10 @@
       $("onestrokeStatus").textContent = onestrokeDone
         ? "🎉 第 " + (onestrokeLevel + 1) + " 关画完了！" + (onestrokeLevel < 2 ? " 点重画进下一关。" : " 全部通关！")
         : "第 " + (onestrokeLevel + 1) + " / 3 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线"
-          + (onestrokeDeadEnd() ? " · 😵 走进死胡同了，点撤销退一步。" : "");
+          + (onestrokeDeadEnd()
+            ? (onestrokeUndoHelps() ? " · 😵 走进死胡同了，点撤销退一步。" : " · 😵 走进死胡同了——起笔点错了，点「重画」换个金色圈的点起笔。")
+            : (!onestrokeSolvable() ? " · ⚠️ 再画下去也画不完了，点「重画」换个金色圈的点起笔。" : ""))
+          + (starts.length ? " · 💡 金色圈的点才能一笔画完" : "");
     }
     // v3.0-r17：当前点没有未画的相邻边、但关卡还没画完 = 死胡同（以前只静默卡住）
     function onestrokeDeadEnd() {
@@ -8555,6 +8707,37 @@
       const lv = ONESTROKE_LEVELS[onestrokeLevel];
       const cur = onestrokePath[onestrokePath.length - 1];
       return !lv.edges.some((e) => !onestrokeUsed.has(onestrokeEdgeKey(e[0], e[1])) && (e[0] === cur || e[1] === cur));
+    }
+    // R29：从当前点出发、剩下的边还能不能一笔画完（欧拉轨迹判定：剩余边连通，且奇点 0 个，
+    // 或 2 个且当前点是其中之一）。错起笔时全程都不满足——死胡同里撤销也救不回，文案不能只说“点撤销”。
+    function onestrokeSolvable() {
+      if (onestrokeDone || onestrokePath.length === 0) return true;
+      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const cur = onestrokePath[onestrokePath.length - 1];
+      const rem = lv.edges.filter((e) => !onestrokeUsed.has(onestrokeEdgeKey(e[0], e[1])));
+      if (rem.length === 0) return true;
+      const adj = {};
+      rem.forEach((e) => { (adj[e[0]] = adj[e[0]] || []).push(e[1]); (adj[e[1]] = adj[e[1]] || []).push(e[0]); });
+      const seen = new Set([cur]);
+      const stack = [cur];
+      while (stack.length) { const n = stack.pop(); (adj[n] || []).forEach((m) => { if (!seen.has(m)) { seen.add(m); stack.push(m); } }); }
+      if (!rem.every((e) => seen.has(e[0]) && seen.has(e[1]))) return false;
+      const deg = lv.nodes.map(() => 0);
+      rem.forEach((e) => { deg[e[0]]++; deg[e[1]]++; });
+      const odd = deg.map((d, i) => (d % 2 === 1 ? i : -1)).filter((i) => i >= 0);
+      return odd.length === 0 || (odd.length === 2 && odd.includes(cur));
+    }
+    // R29：死胡同里撤销一步能不能救回来——把最后一条边放回未画再判一次（同步改完马上还原）
+    function onestrokeUndoHelps() {
+      if (onestrokePath.length <= 1) return false;
+      const last = onestrokePath[onestrokePath.length - 1];
+      const prev = onestrokePath[onestrokePath.length - 2];
+      onestrokeUsed.delete(onestrokeEdgeKey(prev, last));
+      onestrokePath.pop();
+      const ok = onestrokeSolvable();
+      onestrokePath.push(last);
+      onestrokeUsed.add(onestrokeEdgeKey(prev, last));
+      return ok;
     }
     function onestrokePick(i) {
       if (onestrokeDone) return;
@@ -8605,6 +8788,7 @@
     const MARBLE_ROWS = 5;
     let marbleBest = loadBest(MARBLE_KEY);
     let marbleScore = 0, marbleLeft = 10, marbleBall = null, marbleDirs = [], marbleOver = false;
+    let marbleStepId = null; // R28a：掉落定时器 id，重开要清掉，否则孤儿定时器让重开后的球走双倍步
     let marbleLaunchX = 150; // v3.0-r17：发射口横坐标（25~275，25 一档），以前只能从中间发，全凭运气
     let marbleLaunchLine = null; // 动态建的发射口说明行（不写进 HTML，冒烟的 id 总数 696 不变）
     function marbleSetLaunch(x) {
@@ -8659,7 +8843,8 @@
       marbleDirs = [];
       for (let r = 0; r < MARBLE_ROWS; r++) marbleDirs.push(Math.random() < 0.5 ? -1 : 1);
       marbleRender();
-      setTimeout(marbleStep, 150); // 第一步靠定时器走，测试可先 marbleSetDirs 再手动 marbleStep
+      if (marbleStepId) { clearTimeout(marbleStepId); marbleStepId = null; }
+      marbleStepId = setTimeout(marbleStep, 150); // 第一步靠定时器走，测试可先 marbleSetDirs 再手动 marbleStep
     }
     function marbleStep() {
       if (!marbleBall) return;
@@ -8669,7 +8854,7 @@
         marbleBall.row++;
         marbleRender();
         if (marbleBall.row < MARBLE_ROWS) {
-          setTimeout(marbleStep, 150);
+          marbleStepId = setTimeout(marbleStep, 150);
           return;
         }
       }
@@ -8689,6 +8874,7 @@
     }
     function marbleReset() {
       marbleScore = 0; marbleLeft = 10; marbleBall = null; marbleDirs = []; marbleOver = false;
+      if (marbleStepId) { clearTimeout(marbleStepId); marbleStepId = null; } // R28a：清掉落定时器
       marbleLaunchX = 150;
       marbleRender();
     }
@@ -8799,10 +8985,13 @@
             make24Best = make24Solved;
             saveBest(MAKE24_KEY, make24Best);
           }
+          make24Render(); // R23：先渲染（数字区变成 24），再盖状态文案；原来直接 return，按钮还停在旧数字上
           $("make24Status").textContent = "🎉 等于 24！第 " + (make24SetIdx + 1) + " 组解出来了，已解 " + make24Solved + " 组。" + (firstSolve ? "点换一组继续。" : "（这组已经解过，不重复计。）");
           return;
         }
+        make24Render(); // R23：先渲染，再盖失败文案；原来 render 在后，把“不是 24”盖掉了
         $("make24Status").textContent = "❌ 最后剩 " + make24Fmt(make24Nums[0]) + "，不是 24。点撤销回去重算。";
+        return;
       }
       make24Render();
     }
@@ -8878,6 +9067,7 @@
     function fruitSliceAt(x, y) {
       if (!fruitRunning || fruitOver) return;
       fruitItems.forEach((f) => {
+        if (fruitOver) return; // R24：终局那一刀里，炸弹已引爆就别再切后面的——原来同刀的水果还加分、同刀的第二颗炸弹还扣命，命能掉到 -1
         if (f.sliced) return;
         if (Math.hypot(f.x - x, f.y - y) < 26) {
           f.sliced = true;
@@ -8960,7 +9150,7 @@
         fruitSet(items) { fruitItems = items.map((f) => ({ x: f.x, y: f.y, vx: 0, vy: 0, emoji: f.emoji, bomb: !!f.bomb, sliced: false })); fruitRunning = true; fruitOver = false; fruitRender(); },
     }));
 
-    toyLeaveCleanup.fruitslice = () => { if (fruitStepId) { clearInterval(fruitStepId); fruitStepId = null; } if (fruitSpawnId) { clearInterval(fruitSpawnId); fruitSpawnId = null; } };
+    toyLeaveCleanup.fruitslice = () => { if (fruitStepId) { clearInterval(fruitStepId); fruitStepId = null; } if (fruitSpawnId) { clearInterval(fruitSpawnId); fruitSpawnId = null; } fruitRunning = false; }; // R24：切走只停表不改 running，回来点开始直接 return、游戏冻住（同射击的 cleanup 会置 false）
   };
   /* ---------- 64. 走迷宫 ---------- */
   toyInitFns["maze"] = function () {
@@ -9253,6 +9443,7 @@
     }
     function archeryShoot(x, y) {
       if (archeryLeft <= 0) return;
+      if (!isFinite(x) || !isFinite(y)) return; // R28：NaN 落点原来静默记 0 分还扣一支箭
       const d = Math.hypot(x - ARCHERY_C, y - ARCHERY_C);
       const pts = d < 20 ? 100 : d < 40 ? 80 : d < 60 ? 60 : d < 80 ? 40 : d < 100 ? 20 : 0;
       archeryScore += pts;
@@ -9379,8 +9570,10 @@
         }
       }
       pipes = pipes.filter((p) => p.x > -PW - 10);
+      // R21：顶上不死，夹住回落——原来连点几下鸟就飞出顶死，howto 只说“别撞上”（水管/地面），顶上不该是陷阱
+      if (bird.y < 0) { bird.y = 0; bird.vy = 0; }
       // 碰撞
-      let dead = bird.y < 0 || bird.y + BH > H;
+      let dead = bird.y + BH > H;
       for (const p of pipes) {
         if (bird.x + BW > p.x && bird.x < p.x + PW) {
           if (bird.y < p.gapY || bird.y + BH > p.gapY + GAP) dead = true;
@@ -9388,6 +9581,7 @@
       }
       if (dead) {
         running = false;
+        raf = null; // R21：死后把 raf 置空——原来残留已跑完的旧 id，点屏/空格重开时 !raf 为假、新的 requestAnimationFrame 排不上，鸟定在开局位置不动（画布还写着“点屏幕再来”）
         if (score > best) { best = score; saveBest(KEY, best); isNewBest = score > 0; }
         if (SFX.enabled) { if (isNewBest) SFX.win(); else SFX.lose(); }
       }
@@ -9675,7 +9869,7 @@
     function step(now) {
       if (!running || over) return;
       if (!lastT) lastT = now;
-      const dt = Math.min(50, now - lastT);
+      const dt = Math.min(33, now - lastT); // R21：上限 50ms 时 k≈3，满速球一步 21px 会越过 16px 宽的挡板判定区直接穿过去丢分；33ms 时 k≤2、一步 ≤14px，必落在判定区内
       lastT = now;
       const k = dt / 16.7;
       ball.x += ball.vx * k; ball.y += ball.vy * k;
@@ -9731,6 +9925,11 @@
           ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
           ctx.fillText(ps >= 5 ? "🎉 你赢了！" : "😅 电脑赢了", W / 2, H / 2);
+        } else if (!running) {
+          // R23：开局画布空白，新人不知道要点一下开始（打砖块2 同款提示）
+          ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText("👆 点一下开始", W / 2, H / 2);
         }
       } catch (e) {}
     }
@@ -9763,9 +9962,10 @@
     toyLeaveCleanup.pong = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get pong() { return { ps, cs, diff, over }; },
+      get pong() { return { ps, cs, diff, over, ball: ball ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy } : null, py }; },
       pongSetDiff(d) { diff = d; render(); },
       pongStart() { if (!running && !over) { running = true; raf = requestAnimationFrame(step); } },
+      pongSet(b, py2) { if (b) ball = { x: b.x, y: b.y, vx: b.vx, vy: b.vy }; if (py2 !== undefined) py = py2; }, // R21：探针用
     }));
   };
 
@@ -9773,7 +9973,7 @@
   toyInitFns["arkanoid"] = function () {
     const W = 320, H = 400;
     let paddle = null, balls = [], bricks = [], items = [], lasers = [], level = 1, score = 0, lives = 3, running = false, raf = null, longT = 0, started = false;
-    let lastT = 0;
+    let lastT = 0, laserLast = 0; // R21：激光冷却计时
     const LEVELS = [
       ["rrrrr", "oooyo", "bbbbb", "ggggg"],
       ["rbrbr", "yoyoy", "gbgbg", "ororo", "bbbbb"],
@@ -9867,7 +10067,8 @@
       items = items.filter((it) => !it.taken && it.y < H + 10);
       // 激光
       // （简化：激光自动打最下方的砖）
-      if (lasers.length && Math.random() < 0.1) {
+      if (lasers.length && now - laserLast >= 700) { // R21：原来每帧 10% 概率打一砖，6 秒约 36 砖、一把激光单刷一整关；改 700ms 一发，6 秒最多 8 砖
+        laserLast = now;
         const alive = bricks.filter((b) => b.hp > 0);
         if (alive.length) {
           const t = alive[alive.length - 1];
@@ -9921,6 +10122,13 @@
     function render() {
       $("arkanoidScore").textContent = level > 3 ? "🏆 3 关全通！总分 " + score : "第 " + level + " 关 · 分 " + score + " · 命 " + lives;
     }
+    function canvasStart() { // R21：画布一直写着“👆 点一下开始”，但点画布只移挡板不开局，只能点重开按钮
+      if (running) return;
+      if (raf) cancelAnimationFrame(raf);
+      if (lives <= 0 || level > 3) reset(); else running = true;
+      started = true;
+      raf = requestAnimationFrame(step);
+    }
     const cv = $("arkanoidCanvas");
     if (cv) {
       const move = (e) => {
@@ -9930,8 +10138,8 @@
         paddle.x = Math.max(0, Math.min(W - pw, x - pw / 2));
       };
       cv.addEventListener("pointermove", move);
-      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
-      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX }); }, { passive: false });
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); canvasStart(); });
+      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX }); canvasStart(); }, { passive: false });
       cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX }); }, { passive: false });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function arkanoidKeys(e) {
@@ -9944,8 +10152,9 @@
     toyLeaveCleanup.arkanoid = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get arkanoid() { return { level, score, lives, bricks: bricks.filter((b) => b.hp > 0).length, running }; },
+      get arkanoid() { return { level, score, lives, bricks: bricks.filter((b) => b.hp > 0).length, running, ball: balls[0] ? { x: balls[0].x, y: balls[0].y } : null, balls: balls.length, lasers: lasers.length }; },
       arkanoidStart() { if (!running && lives > 0 && level <= 3) { running = true; started = true; raf = requestAnimationFrame(step); } },
+      arkanoidSet(balls2, lasers2) { if (balls2) balls = balls2.map((b) => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: 6 })); if (lasers2) lasers = lasers2.map((l) => ({ x: l.x })); }, // R21：探针用
     }));
   };
 
@@ -10093,7 +10302,7 @@
   /* ---- 6. chess 象棋（简化） ---- */
   toyInitFns["chess"] = function () {
     // 9x10 棋盘，简化规则：车/马/炮/兵/将/士/象
-    const W = 320, H = 352, CW = 320 / 9, CH = 320 / 10;
+    const W = 320, H = 352, CW = 320 / 9, CH = H / 10; // R26：行高按画布实高 352/10=35.2（原来 320/10=32：棋画在 320 高里，点击却按 352 高映射，下半区点兵点成上一行、红将几乎点不中）
     let board = [], sel = null, turn = "red", over = false, msg = "";
     const INIT = [
       ["bR", "bN", "bB", "bA", "bK", "bA", "bB", "bN", "bR"],
@@ -10433,10 +10642,16 @@
       }
       if (!cands.length) { doPass(); return; }
       cands.sort((a, b) => b.score - a.score);
-      const p = cands[0];
-      play(p.x, p.y, "white");
-      passes = 0; turn = "black";
-      draw(); render();
+      // R23：按分试下，play() 失败（打劫禁手）就试下一个，都不行才停一手。
+      // 原来不看返回值：禁手时白棋空过一手还把 passes 清零，双停终局永远到不了
+      for (const p of cands) {
+        if (play(p.x, p.y, "white")) {
+          passes = 0; turn = "black";
+          draw(); render();
+          return;
+        }
+      }
+      doPass();
     }
     function doPass() {
       passes++;
@@ -10547,7 +10762,7 @@
     const COLORS = ["red", "yellow", "green", "blue"];
     const CNAMES = { red: "红", yellow: "黄", green: "绿", blue: "蓝" };
     let deck = [], pHand = [], aiHand = [], top = null, turn = "p", over = false, drawCount = 0;
-    let pile = [], pendingWild = null;
+    let pile = [], pendingWild = null, aiTimer = null; // R20：aiTimer 记待定的 AI 回应，重开要取消
     // 摸牌：牌堆空了就重洗弃牌堆；都没了就给一张变色（保底不崩）
     function drawCard() {
       if (deck.length === 0 && pile.length > 0) deck = shuffle(pile.splice(0));
@@ -10569,11 +10784,12 @@
       return shuffle(d);
     }
     function reset() {
+      if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; } // R20：重开取消待定的 AI 回应，不然旧回应会在新局里替 AI 出牌
       deck = buildDeck(); pile = []; pendingWild = null;
       pHand = []; aiHand = [];
       for (let i = 0; i < 7; i++) { pHand.push(drawCard()); aiHand.push(drawCard()); }
       let guard = 0;
-      do { top = drawCard(); guard++; } while (top.c === "wild" && guard < 50);
+      do { top = drawCard(); if (top.c === "wild") deck.splice(Math.floor(Math.random() * (deck.length + 1)), 0, top); guard++; } while (top.c === "wild" && guard < 50); // R20：万能顶牌按规则放回牌堆重抽，之前直接丢了，牌堆少一张
       turn = "p"; over = false; drawCount = 0;
       draw(); render("轮到你出牌");
     }
@@ -10648,6 +10864,7 @@
       if (pw && !over && turn === "p") doPPlay(pw.i, pw.card, c);
     }
     function doPPlay(i, card, color) {
+      pendingWild = null; // R20：选色中改出别的牌时，旧的待选状态不能残留
       pHand.splice(i, 1);
       recycleTop();
       top = card;
@@ -10655,10 +10872,11 @@
       if (pHand.length === 0) { gameOver("p"); return; }
       const skip = applyEffect(card, false, color);
       draw(); render(skip ? "AI 被跳过，继续你出！" : "AI 出牌中…");
-      if (!skip) { turn = "ai"; setTimeout(aiPlay, 700); }
+      if (!skip) { turn = "ai"; aiTimer = setTimeout(aiPlay, 700); } // R20：记下计时器，重开可取消
       else draw();
     }
     function aiPlay() {
+      aiTimer = null; // R20：回应已到点，计时器不再待定
       if (over) return;
       // 策略：优先出普通牌，留 wild/+4 等关键时刻；对手剩牌少时优先出 +2/+4
       let idx = -1, bestScore = -1e9;
@@ -10685,7 +10903,7 @@
       if (aiHand.length === 1) render("⚠️ AI 只剩 1 张了！");
       const skip = applyEffect(card, true);
       draw();
-      if (skip) { render("你被跳过了，AI 继续！"); setTimeout(aiPlay, 700); }
+      if (skip) { render("你被跳过了，AI 继续！"); aiTimer = setTimeout(aiPlay, 700); } // R20：记下计时器，重开可取消
       else { turn = "p"; render("轮到你出牌"); }
     }
     function gameOver(winner) {
@@ -10730,7 +10948,7 @@
       pHand.push(drawCard());
       if (SFX.enabled) SFX.click();
       draw(); render("摸了牌，轮到 AI");
-      turn = "ai"; setTimeout(aiPlay, 700);
+      turn = "ai"; aiTimer = setTimeout(aiPlay, 700); // R20：记下计时器，重开可取消
     });
     $("unoResetBtn").addEventListener("click", reset);
     reset();
@@ -10823,8 +11041,9 @@
     $("mjResetBtn").addEventListener("click", reset);
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get mahjong() { return { count: hand.length, over, win: checkWin() }; },
+      get mahjong() { return { count: hand.length, over, win: checkWin(), hand: hand.slice() }; },
       mahjongDiscard(i) { discard(i); },
+      mahjongSet(h) { hand = h.slice().sort((a, b) => a - b); over = false; draw(); render(); }, // R21：探针用
     }));
   };
 
@@ -10839,8 +11058,9 @@
       return shuffle(d);
     }
     function reset() {
-      if (pChips <= 0) pChips = 100;
-      if (aChips <= 0) aChips = 100;
+      let note = ""; // R21：hint 说“赢光 AI 就赢”，原来输光/赢光后重开悄悄满血复活、没有任何交代
+      if (pChips <= 0) { pChips = 100; note = "你上局输光了，重新买入 100 筹码。"; }
+      if (aChips <= 0) { aChips = 100; note = "🏆 你赢光了 AI！AI 重新买入 100 筹码，再来一局。"; }
       deck = newDeck();
       pHole = [deck.pop(), deck.pop()];
       aHole = [deck.pop(), deck.pop()];
@@ -10848,7 +11068,7 @@
       // 盲注（筹码不足时按小的收，不透支）
       const bb = Math.min(5, pChips, aChips);
       pChips -= bb; aChips -= bb; pot = bb * 2;
-      draw(); render("你的回合：跟注 " + bb + " 或弃牌");
+      draw(); render((note ? note + " " : "") + "你的回合：跟注 " + bb + " 或弃牌");
     }
     // 牌型评估：返回 [rank, tiebreak...]
     function eval7(cards) {
@@ -11273,7 +11493,7 @@
       frame++;
       spawn(dt);
       score += k;
-      if (invuln > 0) invuln -= k;
+      if (invuln > 0) invuln -= dt; // R21：invuln 是毫秒（1500），之前按帧减（k≈1/帧），中弹后无敌 1500 帧≈25 秒，3 条命等于死不了
       for (const b of bullets) { b.x += b.vx * k; b.y += b.vy * k; }
       bullets = bullets.filter((b) => b.y < H + 20 && b.x > -20 && b.x < W + 20);
       // 碰撞 + 擦弹
@@ -11332,7 +11552,7 @@
           ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
           ctx.fillText("💥 坠毁！", W / 2, H / 2 - 10);
           ctx.font = "18px sans-serif";
-          ctx.fillText("得分 " + score + " · 最好 " + best, W / 2, H / 2 + 24);
+          ctx.fillText("得分 " + Math.floor(score) + " · 最好 " + Math.floor(best), W / 2, H / 2 + 24); // R21：score 是每帧累加的浮点，原来直接拼出 4000.7185628744755 这种长小数
         } else if (!running && !started) {
           ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
@@ -11341,7 +11561,14 @@
       } catch (e) {}
     }
     function render() {
-      $("dodgeScore").textContent = "分 " + Math.floor(score) + " · 命 " + "❤️".repeat(Math.max(0, lives)) + " · 最好 " + best + (running ? "" : " · 结束");
+      $("dodgeScore").textContent = "分 " + Math.floor(score) + " · 命 " + "❤️".repeat(Math.max(0, lives)) + " · 最好 " + Math.floor(best) + (running ? "" : " · 结束"); // R21：best 存的是浮点分数，原来直接拼出长小数
+    }
+    function canvasStart() { // R21：画布写着“👆 拖动开始躲”，但拖动只移飞机不开局，只能点重开按钮
+      if (running) return;
+      if (raf) cancelAnimationFrame(raf);
+      if (lives <= 0) reset(); else running = true;
+      started = true;
+      raf = requestAnimationFrame(step);
     }
     const cv = $("dodgeCanvas");
     if (cv) {
@@ -11353,9 +11580,9 @@
         py = Math.max(12, Math.min(H - 12, py));
       };
       cv.addEventListener("pointermove", move);
-      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); });
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); canvasStart(); });
       // iOS 双保险
-      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); }, { passive: false });
+      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); canvasStart(); }, { passive: false });
       cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); }, { passive: false });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function dodgeKeys(e) {
@@ -11371,9 +11598,10 @@
     toyLeaveCleanup.dodge = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     reset(); running = false; draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get dodge() { return { score, lives, best, running }; },
+      get dodge() { return { score, lives, best, running, invuln }; },
       dodgeStart() { if (!running && lives > 0) { running = true; started = true; raf = requestAnimationFrame(step); } },
       dodgeMove(x, y) { px = x; py = y; },
+      dodgeSet(bs) { bullets = bs.map((b) => ({ x: b.x, y: b.y, vx: b.vx || 0, vy: b.vy || 0, r: b.r || 5, id: b.id })); }, // R21：探针用
     }));
   };
 
@@ -11524,7 +11752,7 @@
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get maze3d() { return { over, steps, px: Math.round(px * 10) / 10, py: Math.round(py * 10) / 10 }; },
-      maze3dMove(f, s) { move(f, s); },
+      maze3dMove(f = 1, s = 0) { move(f, s); }, // R28：无参调用原来传 undefined，NaN 导致一步不动还静默
       maze3dTurn(d) { turn(d); },
     }));
   };
@@ -11655,7 +11883,11 @@
       const ctx = cv.getContext("2d");
       if (!ctx || !ctx.fillRect) return;
       try {
-        if (img) { try { ctx.drawImage(img, 0, 0, 320, 320); } catch (e) { drawTemplate(ctx, tpl); } }
+        if (img) { try { // R25：原来不管横竖都拉成 320×320 正方形，上传的照片被压扁；改按比例裁切铺满
+            const s = Math.max(320 / img.naturalWidth, 320 / img.naturalHeight);
+            const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+            ctx.drawImage(img, (320 - dw) / 2, (320 - dh) / 2, dw, dh);
+          } catch (e) { drawTemplate(ctx, tpl); } }
         else drawTemplate(ctx, tpl);
         ctx.font = "bold " + size + "px sans-serif";
         ctx.textAlign = "center";
@@ -11665,9 +11897,12 @@
         if (bottom) { ctx.strokeText(bottom, 160, 308); ctx.fillText(bottom, 160, 308); }
       } catch (e) {}
     }
-    $("memegenTpl0").addEventListener("click", () => { tpl = 0; img = null; if (SFX.enabled) SFX.click(); render(); });
-    $("memegenTpl1").addEventListener("click", () => { tpl = 1; img = null; if (SFX.enabled) SFX.click(); render(); });
-    $("memegenTpl2").addEventListener("click", () => { tpl = 2; img = null; if (SFX.enabled) SFX.click(); render(); });
+    function memegenMarkTpl() { // R25：三个模板按钮原来点完没任何选中态，用户不知道当前是哪个
+      [0, 1, 2].forEach((i) => { const b = $("memegenTpl" + i); if (b) b.classList.toggle("active", i === tpl); });
+    }
+    $("memegenTpl0").addEventListener("click", () => { tpl = 0; img = null; if (SFX.enabled) SFX.click(); memegenMarkTpl(); render(); });
+    $("memegenTpl1").addEventListener("click", () => { tpl = 1; img = null; if (SFX.enabled) SFX.click(); memegenMarkTpl(); render(); });
+    $("memegenTpl2").addEventListener("click", () => { tpl = 2; img = null; if (SFX.enabled) SFX.click(); memegenMarkTpl(); render(); });
     const file = $("memegenFile");
     if (file) file.addEventListener("change", () => {
       try {
@@ -11693,6 +11928,7 @@
       } catch (e) { $("memegenMsg").textContent = "下载失败，换个浏览器试试"; }
     });
     render();
+    memegenMarkTpl();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get memegen() { return { top: top, bottom: bottom, tpl: tpl }; },
       memegenSetText(t, b) {
@@ -11701,7 +11937,7 @@
         const be = $("memegenBottom"); if (be) be.value = bottom;
         render();
       },
-      memegenTemplate(i) { tpl = i; img = null; render(); },
+      memegenTemplate(i) { tpl = i; img = null; memegenMarkTpl(); render(); },
     }));
   };
 
@@ -11745,7 +11981,11 @@
         if (!d) return;
         FIELDS.forEach((f) => { const el = $(f); if (el && typeof d[f] === "string") el.value = d[f]; });
         if (typeof d.tpl === "number") tpl = d.tpl;
+        resumeMarkTpl();
       } catch (e) {}
+    }
+    function resumeMarkTpl() { // R29：两个模板按钮原来点完没有任何选中态（表情包制作 R25 修过同款），用户不知道当前是哪个模板
+      [0, 1].forEach((i) => { const b = $("resumeTpl" + i); if (b) b.classList.toggle("active", i === tpl); });
     }
     FIELDS.forEach((f) => {
       const el = $(f);
@@ -11755,9 +11995,10 @@
         saveT = setTimeout(save, 500);
       });
     });
-    toyLeaveCleanup.resume = () => { if (saveT) { clearTimeout(saveT); saveT = null; } };
-    $("resumeTpl0").addEventListener("click", () => { tpl = 0; render(); save(); if (SFX.enabled) SFX.click(); });
-    $("resumeTpl1").addEventListener("click", () => { tpl = 1; render(); save(); if (SFX.enabled) SFX.click(); });
+    // R25：原来切走只清掉待保存的防抖计时器——打完字 500ms 内切走，最后一截就丢了；改成切走时立刻刷盘
+    toyLeaveCleanup.resume = () => { if (saveT) { clearTimeout(saveT); saveT = null; save(); } };
+    $("resumeTpl0").addEventListener("click", () => { tpl = 0; resumeMarkTpl(); render(); save(); if (SFX.enabled) SFX.click(); });
+    $("resumeTpl1").addEventListener("click", () => { tpl = 1; resumeMarkTpl(); render(); save(); if (SFX.enabled) SFX.click(); });
     $("resumePrintBtn").addEventListener("click", () => { try { if (typeof window.print === "function") window.print(); } catch (e) {} });
     $("resumeDlBtn").addEventListener("click", () => {
       try {
@@ -11774,15 +12015,17 @@
     $("resumeClearBtn").addEventListener("click", () => {
       FIELDS.forEach((f) => { const el = $(f); if (el) el.value = ""; });
       try { localStorage.removeItem(KEY); } catch (e) {}
+      tpl = 0; // R25：清空回到默认蓝模板，不然清空后预览还挂着商务灰
+      resumeMarkTpl(); // R29：清空后高亮也要回蓝模板
       render();
       if (SFX.enabled) SFX.click();
     });
-    load(); render();
+    load(); render(); resumeMarkTpl(); // R29：首次打开（无存档）也要标出默认蓝模板
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get resume() { const el = $("rsName"); return { name: el ? el.value : "", tpl: tpl }; },
       resumeHtml() { return lastHtml; },
       resumeSet(f, v) { const el = $(f); if (el) { el.value = v; render(); save(); } },
-      resumeTemplate(i) { tpl = i; render(); },
+      resumeTemplate(i) { tpl = i; resumeMarkTpl(); render(); },
     }));
   };
 
@@ -11889,8 +12132,10 @@
     pong: "pong",
     pongSetDiff: "pong",
     pongStart: "pong",
+    pongSet: "pong",
     arkanoid: "arkanoid",
     arkanoidStart: "arkanoid",
+    arkanoidSet: "arkanoid",
     mines2: "mines2",
     mines2Open: "mines2",
     mines2Flag: "mines2",
@@ -11903,6 +12148,7 @@
     unoPlay: "uno",
     mahjong: "mahjong",
     mahjongDiscard: "mahjong",
+    mahjongSet: "mahjong",
     poker: "poker",
     pokerCall: "poker",
     pokerEval: "poker",
@@ -11914,6 +12160,7 @@
     dodge: "dodge",
     dodgeStart: "dodge",
     dodgeMove: "dodge",
+    dodgeSet: "dodge",
     maze3d: "maze3d",
     maze3dMove: "maze3d",
     maze3dTurn: "maze3d",

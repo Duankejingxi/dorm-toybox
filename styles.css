@@ -548,9 +548,9 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .idiom-current { font-size: 34px; font-weight: 800; color: var(--gold2); text-align: center; margin: 16px 0 4px; letter-spacing: 4px; }
 .idiom-options { display: flex; flex-direction: column; gap: 8px; max-width: 300px; margin: 14px auto 0; }
 .idiom-options .btn { width: 100%; font-size: 18px; letter-spacing: 3px; }
-.drums-grid { display: grid; grid-template-columns: 52px repeat(8, 1fr); gap: 5px; max-width: 340px; margin: 14px auto 0; align-items: center; }
-.drums-label { font-size: 20px; text-align: center; }
-.drums-cell { aspect-ratio: 1; border-radius: 6px; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); cursor: pointer; }
+.drums-legend { font-size: 13px; color: var(--muted); text-align: center; margin-top: 10px; line-height: 1.8; } /* R28：行标签移到图例，格子才能放大到可点 */
+.drums-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 10px -20px 0; } /* R28：满幅 bleed 到卡片边，8 格 × 41px；原来 52px 标签列 + 340px 上限，格子只有 31px */
+.drums-cell { min-height: 44px; border-radius: 6px; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); cursor: pointer; } /* R28：min-height 44px，原来 aspect-ratio:1 跟着 31px 宽走 */
 .drums-cell.on { background: linear-gradient(180deg, var(--gold2), #e8a90c); border-color: var(--gold2); }
 .drums-cell.now { outline: 2px solid #7ec8ff; }
 .stroop-word { font-size: 64px; font-weight: 900; text-align: center; margin: 16px 0; }
@@ -568,6 +568,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .onestroke-board { position: relative; width: 300px; height: 260px; margin: 14px auto 0; background: rgba(255, 255, 255, .04); border-radius: 12px; touch-action: none; }
 .onestroke-dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a8, var(--gold2)); border: 2px solid #8a6d1f; cursor: pointer; z-index: 2; }
 .onestroke-dot::after { content: ""; position: absolute; inset: -9px; } /* R19：圆点视觉 26px 不变，点按热区扩到 44px（实测 +18px 处点不中） */
+.onestroke-dot.onestroke-start { border-color: var(--gold); animation: schPulse 1.6s infinite; } /* R29：起笔提示——金色脉冲圈，奇点起笔才能画完（复用 schPulse） */
 .onestroke-line { position: absolute; height: 4px; background: #7ec8ff; transform-origin: 0 50%; border-radius: 2px; z-index: 1; }
 .marble-board { position: relative; width: 300px; height: 280px; margin: 14px auto 0; background: linear-gradient(180deg, #10101f, #1b1b3a); border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
 .marble-launcher { position: absolute; top: 8px; width: 18px; height: 18px; margin: -9px 0 0 -9px; font-size: 14px; line-height: 18px; text-align: center; color: var(--gold2); z-index: 2; pointer-events: none; }
@@ -1265,10 +1266,10 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
   font-size: 14px;
 }
 .slang-speak {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 6px 8px;
-}
+} /* R22：原来 36px，低于 44px 触屏标准 */
 
 /* ---------- 今日运势：签筒摇晃、雷达图 ---------- */
 .fortune-tube {
@@ -1405,6 +1406,7 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
 /* 打字闯关：关卡按钮 + 错误抖动 */
 .typing-levels { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .typing-levels .btn.active { border-color: #d4a94e; color: #f5d67b; }
+.btn-row .btn.active { border-color: #d4a94e; color: #f5d67b; } /* R25：模板按钮选中态（同打字闯关） */
 .typing-char.shake { animation: typeShake 0.3s ease; }
 @keyframes typeShake {
   0%, 100% { transform: translateX(0); }

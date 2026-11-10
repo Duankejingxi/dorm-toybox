@@ -136,6 +136,7 @@
     <div class="fade-wrap"><textarea id="nameList" rows="5" placeholder="每行一个名字，如：&#10;张三&#10;李四&#10;王五" aria-label="名字列表，每行一个"></textarea></div>
     <label class="check-line"><input type="checkbox" id="noRepeatCheck" checked> 抽过的不再重复（抽完自动重置）</label>
     <button class="big-btn" id="pickBtn">抽一个！</button>
+    <button class="btn ghost-btn small" id="pickSampleBtn">没名单？填示例 📝</button>
     <p class="result-line big" id="pickResult">还没抽过。</p>
     <p class="count-line" id="pickLeft"></p>
     <ul class="history" id="pickHistory"></ul>
@@ -204,6 +205,7 @@
       </select>
       <button class="btn gold-btn" id="doGroupBtn">分组！</button>
     </div>
+    <button class="btn ghost-btn small" id="groupSampleBtn">没名单？填示例 📝</button>
     <p class="result-line" id="groupResult">还没分过组。</p>
     <div class="group-grid" id="groupGrid"></div>
     <button class="btn ghost-btn small hidden" id="copyGroupsBtn">复制分组结果 📋</button>
@@ -562,21 +564,6 @@
     </div>
   </section>
 
-  <!-- 汇率计算器 -->
-  <section class="panel toy hidden" id="toy-fx">
-    <h2>💱 汇率计算器</h2>
-    <p class="hint">出国玩、海淘算账用。联网时每天自动更新一次汇率，存你手机里；离线就用备用汇率。</p>
-    <div class="fx-row">
-      <input id="fxAmount" type="number" placeholder="金额" aria-label="金额" min="0" step="0.01" value="100">
-      <select id="fxFrom" aria-label="从这种货币"></select>
-      <span class="fx-arrow">→</span>
-      <select id="fxTo" aria-label="换成这种货币"></select>
-    </div>
-    <p class="result-line" id="fxResult">先填个金额。</p>
-    <p class="count-line" id="fxMeta"></p>
-    <button class="btn ghost-btn small" id="fxSwapBtn">互换 ⇄</button>
-    <button class="btn ghost-btn small" id="fxRefreshBtn">刷新汇率 ↻</button>
-  </section>
 
   <!-- 中英日韩翻译器 -->
   <section class="panel toy hidden" id="toy-trans">
@@ -650,36 +637,12 @@
     <p class="result-line" id="frogResult">喜欢哪张就下载哪张。</p>
   </section>
 
-  <!-- 计时器 -->
-  <section class="panel toy hidden" id="toy-stopwatch">
-    <h2>⏱ 计时器</h2>
-    <p class="hint">秒表，精确到百分之一秒。跑步、做题、打赌都用得上，计次能记每一圈。</p>
-    <p class="sw-time" id="swTime">00:00.00</p>
-    <div class="sw-btns">
-      <button class="btn gold-btn" id="swStartBtn">开始 ▶</button>
-      <button class="btn ghost-btn" id="swLapBtn">计次 ⏱</button>
-      <button class="btn ghost-btn" id="swResetBtn">清零 ↺</button>
-    </div>
-    <ul class="sw-laps" id="swLaps"></ul>
-  </section>
 
-  <!-- BMI 体重管理 -->
-  <section class="panel toy hidden" id="toy-bmi">
-    <h2>⚖️ BMI 体重管理</h2>
-    <p class="hint">填身高体重，算 BMI 和健康体重范围。BMI 只是参考，肌肉多的人别当真。</p>
-    <div class="bmi-form">
-      <input id="bmiHeight" type="number" placeholder="身高（厘米）" aria-label="身高厘米" min="100" max="250">
-      <input id="bmiWeight" type="number" placeholder="体重（公斤）" aria-label="体重公斤" min="20" max="300" step="0.1">
-    </div>
-    <button class="btn gold-btn" id="bmiCalcBtn">算一下 📏</button>
-    <p class="result-line" id="bmiResult">先填身高体重。</p>
-    <p class="count-line" id="bmiAdvice"></p>
-  </section>
 
   <!-- 白噪音 -->
   <section class="panel toy hidden" id="toy-whitenoise">
     <h2>🌧 白噪音</h2>
-    <p class="hint">雨声、风扇声、海浪声，帮你专注、助眠。声音只在你手机里生成，不上传。</p>
+    <p class="hint">雨声、海浪声、风扇声、篝火声、白噪音 5 种，帮你专注、助眠。声音只在你手机里生成，不上传。</p>
     <div class="wn-btns" id="wnSounds"></div>
     <label class="light-slider-label">音量
       <input id="wnVolume" type="range" min="0" max="100" value="60" aria-label="音量">
@@ -725,24 +688,11 @@
     <button class="btn ghost-btn small hidden" id="dutyCopyBtn">复制值日表 📋</button>
   </section>
 
-  <!-- AA 分摊 -->
-  <section class="panel toy hidden" id="toy-aa">
-    <h2>🧾 AA 分摊</h2>
-    <p class="hint">一顿饭、一单外卖、一笔宿舍开销，总额一填，人均马上算出来。分到分绝不差一分钱：多出来的几分钱按顺序分给前面的人。选个垫付人，还能算出谁该给谁转多少钱。</p>
-    <p class="count-line">总金额（元）</p>
-    <input id="aaTotal" type="number" inputmode="decimal" min="0" step="0.01" placeholder="比如 88.5">
-    <p class="count-line">参与的人（一行一个）</p>
-    <textarea id="aaNames" rows="3" placeholder="阿伟&#10;小明&#10;阿强"></textarea>
-    <p class="count-line">谁先垫付的（可选）</p>
-    <select id="aaPayer" aria-label="垫付人"><option value="">没人垫付，只算人均</option></select>
-    <button class="btn gold-btn" id="aaCalcBtn">算一下 🧾</button>
-    <div id="aaResult"></div>
-  </section>
 
   <!-- 涂鸦板 -->
   <section class="panel toy hidden" id="toy-doodle">
     <h2>🎨 涂鸦板</h2>
-    <p class="hint">手指直接在白板上画，画完点保存存成图片。发群里当表情包也行。</p>
+    <p class="hint">手指直接在白板上画，有橡皮擦和撤销，画完点保存存成图片。发群里当表情包也行。</p>
     <div class="doodle-colors" id="doodleColors"></div>
     <div class="beads-controls">
       <select id="doodleSize" aria-label="画笔粗细">
@@ -752,9 +702,10 @@
       </select>
       <button class="btn ghost-btn small" id="doodleEraserBtn">橡皮擦</button>
       <button class="btn ghost-btn small" id="doodleUndoBtn">↩ 撤销</button>
-    <canvas id="doodleCanvas" width="680" height="680"></canvas>
       <button class="btn ghost-btn small" id="doodleClearBtn">清空</button>
     </div>
+    <!-- R25：画布原来嵌在控制行里、夹在撤销和清空按钮中间，按钮被画布劈成上下两排；挪到控制行下面 -->
+    <canvas id="doodleCanvas" width="680" height="680"></canvas>
     <p class="result-line" id="doodleResult">还没画。选个颜色，直接上手画。</p>
     <button class="btn gold-btn" id="doodleSaveBtn">保存涂鸦 ⬇</button>
   </section>
@@ -1149,6 +1100,7 @@
   <section class="panel toy hidden" id="toy-drums">
     <h2>🥁 节奏鼓机</h2>
     <p class="hint">点格子排鼓点，4 条音轨 × 8 拍，点播放就循环起来。宿舍里最吵的玩具，慎点。</p>
+    <div class="drums-legend">🥁 大鼓　👏 拍手　🎩 镲　🪘 邦戈（从上到下）</div>
     <div class="drums-grid" id="drumsGrid"></div>
     <p class="result-line" id="drumsStatus">已停 · 第 — 拍</p>
     <div class="btn-row">

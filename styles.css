@@ -248,7 +248,7 @@ footer { position: relative; z-index: 1; text-align: center; color: var(--muted)
 .sudoku-cell.br { border-right: 2px solid var(--gold); }
 .sudoku-cell.bb { border-bottom: 2px solid var(--gold); }
 .sudoku-numbers { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
-.sudoku-num { width: 34px; height: 40px; font-size: 18px; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 197, 66, .14); color: var(--ink); cursor: pointer; }
+.sudoku-num { flex: 1; min-width: 0; height: 44px; font-size: 18px; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 197, 66, .14); color: var(--ink); cursor: pointer; } /* R18：原来 34×40，低于 44px 触屏标准 */
 .schulte-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
 .schulte-cell { aspect-ratio: 1; font-size: 22px; font-weight: 700; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); cursor: pointer; touch-action: none; /* v3.0-r16：快速连点，别被双击缩放打断 */ }
 .schulte-cell.done { background: rgba(245, 197, 66, .25); border-color: var(--gold); color: var(--gold); }
@@ -792,7 +792,8 @@ body { animation: bg-drift 26s ease-in-out infinite alternate; }
 }
 .toolbox-tab {
   flex: 1;
-  padding: 10px 4px;
+  min-height: 44px; /* R18：原来约 39px，低于 44px 触屏标准 */
+  padding: 12px 4px;
   border: none;
   background: transparent;
   color: #aaa;
@@ -1655,6 +1656,7 @@ input:focus, textarea:focus, select:focus {
 @keyframes dealIn { from { opacity: 0; transform: translateY(18px) rotate(1.5deg); } to { opacity: 1; transform: none; } }
 .group-card li[draggable="true"] { cursor: grab; }
 .group-card li[draggable="true"]:active { cursor: grabbing; }
+.group-card li.picked { outline: 2px solid var(--gold2); outline-offset: 1px; border-radius: 6px; background: rgba(245, 197, 66, .18); } /* R18：点选移动的选中态 */
 /* 记分牌：多队伍 + 计时器 */
 .score-more { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
 .hint-inline { font-size: 12px; color: #888; }

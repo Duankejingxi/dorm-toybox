@@ -1162,10 +1162,10 @@
   <!-- 颜色急转弯 -->
   <section class="panel toy hidden" id="toy-stroop">
     <h2>🎨 颜色急转弯</h2>
-    <p class="hint">字上写的是一个颜色，字的墨水是另一个颜色。点墨水真正的颜色，别被字骗了。30 秒。</p>
+    <p class="hint">字上写的是一个颜色，字的墨水是另一个颜色。点墨水真正的颜色，别被字骗了。60 秒。</p>
     <p class="stroop-word" id="stroopWord">红</p>
     <div class="stroop-options" id="stroopOptions"></div>
-    <p class="result-line" id="stroopStatus">得分 0 · 剩 30 秒 · 最好 0</p>
+    <p class="result-line" id="stroopStatus">得分 0 · 剩 60 秒 · 最好 0</p>
     <div class="btn-row">
       <button class="btn gold-btn small" id="stroopStartBtn">开始 ▶</button>
       <button class="btn ghost-btn small" id="stroopResetBtn">重开 ↺</button>
@@ -1175,7 +1175,7 @@
   <!-- 脑筋急转弯 -->
   <section class="panel toy hidden" id="toy-riddle">
     <h2>🧩 脑筋急转弯</h2>
-    <p class="hint">12 道题，每题 3 个选项，答对 +10 分，每题限时 20 秒。卡住了可以看提示（-3 分）。</p>
+    <p class="hint">题库 12 道题（可按分类筛选），每题 3 个选项，答对 +10 分，每题限时 20 秒。卡住了可以看提示（-3 分）。</p>
     <div class="riddle-cats" id="riddleCats"></div>
     <p class="riddle-q" id="riddleQ">点开始，出题。</p>
     <p class="count-line" id="riddleTimer"></p>
@@ -1406,10 +1406,11 @@
 
   <section class="panel toy hidden" id="toy-scriptkill">
     <h2>🔪 剧本杀主持人</h2>
-    <p class="hint">没人会主持？它带全程：分身份 → 走流程 → 发线索。点牌翻身份，双击牌标记出局。</p>
+    <p class="hint">没人会主持？它带全程：分身份 → 走流程 → 发线索。点牌翻身份；要标记出局：先开「💀 点牌标记出局」再点牌（电脑也可双击牌）。</p>
     <div class="btn-row">
       <label>人数 <input id="skCount" type="number" min="4" max="12" value="6" style="width:56px"></label>
       <button class="btn gold-btn small" id="skDealBtn">发身份</button>
+      <button class="btn ghost-btn small" id="skModeBtn">💀 点牌标记出局：关</button>
       <button class="btn ghost-btn small" id="skResetBtn">重开 ↺</button>
     </div>
     <div id="skRoles" class="sk-roles"></div>

@@ -332,11 +332,35 @@
     // v3.0 第7轮：从主页进入时记住滚动位置（玩具间跳转不覆盖）
     if (!currentToy) { try { homeScrollY = window.scrollY || 0; } catch (e) {} }
     // 工具箱重定向：共享界面，默认 tab 不同
+    // R18：父入口本身也有默认 tab（timer→番茄钟、kin→亲戚、ledger→记账），点父入口也要回到默认 tab，
+    // 否则上次停在秒表/BMI，再点时间工具箱/实用计算器还是上次的 tab，入口名不副实。
+    const defTab = TOOLBOX_DEFAULT_TAB[clickedId] || { timer: "pomodoro", kin: "kin", ledger: "ledger" }[clickedId] || null;
     if (TOOLBOX_REDIRECT[id]) {
-      window._toolboxDefaultTab = TOOLBOX_DEFAULT_TAB[id];
+      window._toolboxDefaultTab = TOOLBOX_DEFAULT_TAB[clickedId];
       id = TOOLBOX_REDIRECT[id];
     }
     ensureToyInit(id);
+    // R18：工具箱已初始化过时，入口切换也要跟过去（fx→bmi、timer→stopwatch 等）。
+    // 原来只在 init 里读 _toolboxDefaultTab，第二次点入口时 init 不再跑，tab 停在上次的位置，
+    // 用户点了 BMI 入口却还看到汇率 tab。先点一次对应 tab 按钮（真实浏览器，顺带切 active 态），
+    // 再直接切面板（冒烟桩里 tab 按钮没有子节点，只能直接切面板；真实浏览器里和点按钮是同一结果，幂等）。
+    if (defTab) {
+      const spec = {
+        pomodoro: { bar: "timeTabBar", attr: "data-ttab", panel: "timeTabPomodoro", panels: ["timeTabPomodoro", "timeTabSw", "timeTabCountup"] },
+        sw: { bar: "timeTabBar", attr: "data-ttab", panel: "timeTabSw", panels: ["timeTabPomodoro", "timeTabSw", "timeTabCountup"] },
+        countup: { bar: "timeTabBar", attr: "data-ttab", panel: "timeTabCountup", panels: ["timeTabPomodoro", "timeTabSw", "timeTabCountup"] },
+        kin: { bar: "calcTabBar", attr: "data-ctab", panel: "calcTabKin", panels: ["calcTabKin", "calcTabFx", "calcTabBmi"] },
+        fx: { bar: "calcTabBar", attr: "data-ctab", panel: "calcTabFx", panels: ["calcTabKin", "calcTabFx", "calcTabBmi"] },
+        bmi: { bar: "calcTabBar", attr: "data-ctab", panel: "calcTabBmi", panels: ["calcTabKin", "calcTabFx", "calcTabBmi"] },
+        ledger: { bar: "ledgerTabBar", attr: "data-ltab", panel: "ledgerTabLedger", panels: ["ledgerTabLedger", "ledgerTabAa"] },
+        aa: { bar: "ledgerTabBar", attr: "data-ltab", panel: "ledgerTabAa", panels: ["ledgerTabLedger", "ledgerTabAa"] },
+      }[defTab];
+      if (spec) {
+        const bar = $(spec.bar);
+        if (bar) bar.querySelectorAll(".toolbox-tab").forEach((b) => { if (b.getAttribute(spec.attr) === defTab) b.click(); });
+        spec.panels.forEach((pid) => { const p = $(pid); if (p) p.classList.toggle("hidden", pid !== spec.panel); });
+      }
+    }
     recordRecent(clickedId);
     if (currentToy && currentToy !== id) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
@@ -532,13 +556,14 @@
         ctx.lineWidth = 2;
         ctx.strokeStyle = "rgba(255,255,255,0.75)";
         ctx.stroke();
-        // 文字
+        // 文字（r18：超过 8 字截断加…，不然长选项会穿过圆心糊到对面扇区；结果/历史仍用全名）
         ctx.save();
         ctx.rotate((a0 + a1) / 2);
         ctx.textAlign = "right";
         ctx.fillStyle = "#241300";
         ctx.font = "bold 17px sans-serif";
-        ctx.fillText(wheelOptions[i], r - 14, 6);
+        const wheelLabel = wheelOptions[i].length > 8 ? wheelOptions[i].slice(0, 8) + "…" : wheelOptions[i];
+        ctx.fillText(wheelLabel, r - 14, 6);
         ctx.restore();
       }
       ctx.restore();
@@ -1121,14 +1146,16 @@
       function makeDice3D(value) {
         const d = document.createElement("div");
         d.className = "dice-3d rolling";
-        const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+        // r18：标准骰子对面和为 7（f1↔f2=1/6，f3↔f4=3/4，f5↔f6=2/5）；原来是 1/2/3/4/5/6 顺序贴，对面和是 3/7/11
+        const faces = ["⚀", "⚅", "⚂", "⚃", "⚁", "⚄"];
         for (let i = 0; i < 6; i++) {
           const f = document.createElement("div");
           f.className = "dice-face f" + (i + 1);
           f.textContent = faces[i];
           d.appendChild(f);
         }
-        const orientations = ["rotateX(0) rotateY(0)", "rotateX(0) rotateY(180deg)", "rotateX(0) rotateY(-90deg)", "rotateX(0) rotateY(90deg)", "rotateX(-90deg) rotateY(0)", "rotateX(90deg) rotateY(0)"];
+        // r18：朝向按“该点数所在的面”重排（1 前、2 下、3 右、4 左、5 上、6 后）
+        const orientations = ["rotateX(0) rotateY(0)", "rotateX(-90deg) rotateY(0)", "rotateX(0) rotateY(-90deg)", "rotateX(0) rotateY(90deg)", "rotateX(90deg) rotateY(0)", "rotateX(0) rotateY(180deg)"];
         setTimeout(() => { d.classList.remove("rolling"); d.style.transform = orientations[value - 1]; }, 1000);
         return d;
       }
@@ -1645,6 +1672,21 @@
       });
     }
     let lastGroups = [];
+    // R18：手机点选移动——HTML5 拖拽在触屏上不触发，手机用户之前没法微调分组。
+    // 点名字选中（金框），再点另一组卡片就移过去；电脑拖拽保留。选中状态存在 groupSelected 里。
+    let groupSelected = null; // {gi, mi, name} 或 null
+    function groupMoveSelected(toGi) {
+      if (!groupSelected) return false;
+      const from = groupSelected;
+      if (from.gi === toGi) { groupSelected = null; renderGroups(lastGroups, false); return true; }
+      const moved = lastGroups[from.gi] && lastGroups[from.gi].splice(from.mi, 1)[0];
+      if (moved === undefined) { groupSelected = null; return false; }
+      lastGroups[toGi].push(moved);
+      groupSelected = null;
+      renderGroups(lastGroups, false);
+      if (typeof SFX !== "undefined") SFX.click();
+      return true;
+    }
     // 渲染分组（抽签 + 拖拽后都走这里，保证队长=每组第一个）
     function renderGroups(groups, animate) {
       lastGroups = groups;
@@ -1654,6 +1696,8 @@
         const card = document.createElement("div");
         card.className = "group-card" + (animate ? " deal" : "");
         if (animate) card.style.animationDelay = (gi * 0.09) + "s";
+        // R18：点组卡片 = 把选中的成员移进这组
+        card.addEventListener("click", () => { if (groupSelected) groupMoveSelected(gi); });
         const title = document.createElement("h3");
         title.textContent = "第 " + (gi + 1) + " 组 · " + members.length + " 人";
         const ul = document.createElement("ul");
@@ -1663,6 +1707,16 @@
           li.draggable = true;
           li.setAttribute("data-gi", String(gi));
           li.setAttribute("data-mi", String(mi));
+          if (groupSelected && groupSelected.gi === gi && groupSelected.mi === mi) li.classList.add("picked");
+          // R18：点名字 = 选中/移动（触屏方案）；点已选中的再点一次取消选中
+          li.addEventListener("click", (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (groupSelected && groupSelected.gi === gi && groupSelected.mi === mi) { groupSelected = null; renderGroups(lastGroups, false); return; }
+            if (groupSelected) { groupMoveSelected(gi); return; }
+            groupSelected = { gi: gi, mi: mi, name: m };
+            renderGroups(lastGroups, false);
+            $("groupResult").textContent = "已选中「" + m + "」，再点另一组卡片就移过去；再点一次取消。";
+          });
           if (mi === 0) {
             const b = document.createElement("b");
             b.className = "captain";
@@ -1678,7 +1732,7 @@
         grid.appendChild(card);
       });
       bindGroupDrag();
-      $("groupResult").textContent = "🎉 已随机分成 " + groups.length + " 组，每组第一个是队长。长按拖动名字可手动微调。";
+      $("groupResult").textContent = "🎉 已随机分成 " + groups.length + " 组，每组第一个是队长。点名字选中、再点另一组移动（电脑可拖动）。";
       $("copyGroupsBtn").classList.remove("hidden");
     }
     // 拖拽微调：事件委托，只绑一次
@@ -1704,6 +1758,7 @@
         const moved = lastGroups[dragData.gi].splice(dragData.mi, 1)[0];
         if (moved === undefined) return;
         lastGroups[toGi].push(moved);
+        groupSelected = null; // R18：拖完清掉点选，避免旧选中标到错的人
         renderGroups(lastGroups, false);
         if (typeof SFX !== "undefined") SFX.click();
         dragData = null;
@@ -1720,6 +1775,7 @@
       const shuffled = shuffle(names.slice());
       const groups = Array.from({ length: count }, () => []);
       shuffled.forEach((name, i) => groups[i % count].push(name));
+      groupSelected = null; // R18：重新分组清掉旧选中
       renderGroups(groups, true);
     });
     $("copyGroupsBtn").addEventListener("click", async () => {
@@ -7702,6 +7758,7 @@
     let idiomRound = 1, idiomScore = 0, idiomIdx = 0, idiomOptions = [], idiomOver = false, idiomStarted = false;
     let idiomMode = "solo"; // solo 单人 / vs AI 对战
     let idiomAiScore = 0, idiomTurn = "you"; // vs 模式：轮到谁
+    let idiomGen = 0; // R18：对局世代——vs 模式 AI 回合是延时回调，中途点重置开新局后，旧回调必须作废，不然 AI 幽灵加分
     let idiomAudioCtx = null;
     function idiomSound(ok) {
       try {
@@ -7788,8 +7845,9 @@
         // AI 回合：80% 概率答对
         idiomTurn = "ai";
         idiomRender();
+        const gen = idiomGen; // R18：记下本局世代，回调时世代变了说明已重置，直接作废
         setTimeout(() => {
-          if (idiomOver) return;
+          if (gen !== idiomGen || idiomOver) return;
           const aiRight = Math.random() < 0.8;
           if (aiRight) idiomAiScore += 10;
           idiomTurn = "you";
@@ -7806,6 +7864,7 @@
       $("idiomStatus").textContent = "💡 提示：正确答案以「" + correct.charAt(0) + "」开头，共四字";
     }
     function idiomStart(mode) {
+      idiomGen++; // R18：开新局世代 +1，旧的 AI 延时回调作废
       idiomMode = mode || "solo";
       idiomStarted = true; idiomOver = false; idiomRound = 1; idiomScore = 0; idiomAiScore = 0; idiomTurn = "you";
       idiomIdx = Math.floor(Math.random() * (IDIOM_CHAIN.length - 11));
@@ -8073,6 +8132,8 @@
     }
     function stroopStart() {
       if (stroopRunning) return;
+      // R18：上一局时间到了之后点开始要重开新局（原来时间还是 0，第一次 tick 就立刻结束，开始按钮点了等于没点）
+      if (stroopTime <= 0) { stroopScore = 0; stroopCombo = 0; stroopTime = STROOP_TIME; stroopNewRound(); }
       stroopRunning = true;
       if (stroopTimerId) clearInterval(stroopTimerId);
       stroopTimerId = setInterval(() => {
@@ -8126,6 +8187,7 @@
     const RIDDLE_TIME = 20; // 每题 20 秒
     let riddleBest = loadBest(RIDDLE_KEY);
     let riddleOrder = [], riddleIdx = 0, riddleScore = 0, riddleOver = false, riddleStarted = false;
+    let riddleAnswered = false; // r18：本题已作答，600ms 切题窗口内再点无效（防连点重复计分/跳题）
     let riddleTimeLeft = RIDDLE_TIME, riddleTimerId = null, riddleHintUsed = false;
     let riddleCat = "全部"; // 分类筛选
     let riddleAudioCtx = null;
@@ -8178,7 +8240,9 @@
       hintBtn.classList.remove("hidden");
       hintBtn.textContent = riddleHintUsed ? "💡 " + r.hint : "💡 提示（-3 分）";
       hintBtn.disabled = riddleHintUsed;
-      $("riddleStatus").textContent = "第 " + (riddleIdx + 1) + " / " + riddleOrder.length + " 题 · 得分 " + riddleScore + " · 最好 " + riddleBest;
+      $("riddleStatus").textContent = !riddleStarted
+        ? "点开始，一共 " + riddleOrder.length + " 题 · 最好 " + riddleBest // r18：未开始别写“第 1 题”，和“点开始，出题”对不上
+        : "第 " + (riddleIdx + 1) + " / " + riddleOrder.length + " 题 · 得分 " + riddleScore + " · 最好 " + riddleBest;
     }
     function riddleStopTimer() {
       if (riddleTimerId) { clearInterval(riddleTimerId); riddleTimerId = null; }
@@ -8211,7 +8275,8 @@
       riddleRender();
     }
     function riddlePick(i) {
-      if (riddleOver || !riddleStarted || riddleIdx >= riddleOrder.length) return;
+      if (riddleOver || !riddleStarted || riddleIdx >= riddleOrder.length || riddleAnswered) return;
+      riddleAnswered = true; // r18：锁住本题，600ms 内再点同一题无效
       riddleStopTimer();
       const r = RIDDLES[riddleOrder[riddleIdx]];
       const wrap = $("riddleOptions");
@@ -8235,19 +8300,20 @@
         if (riddleIdx >= riddleOrder.length) {
           riddleFinish();
         } else {
+          riddleAnswered = false; // r18：下一题解锁作答
           riddleStartTimer();
           riddleRender();
         }
       }, 600);
     }
     function riddleUseHint() {
-      if (riddleOver || !riddleStarted || riddleHintUsed || riddleIdx >= riddleOrder.length) return;
+      if (riddleOver || !riddleStarted || riddleHintUsed || riddleIdx >= riddleOrder.length || riddleAnswered) return; // r18：已作答后提示无效（防切题窗口内点提示提前露出下一题且丢计时）
       riddleHintUsed = true;
       riddleScore = Math.max(0, riddleScore - 3);
       riddleRender();
     }
     function riddleStart() {
-      riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false;
+      riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleAnswered = false; // r18：开局解锁作答
       riddleOrder = shuffle(riddleFiltered());
       riddleStartTimer();
       riddleRender();
@@ -8276,7 +8342,7 @@
     riddleOrder = RIDDLES.map((_, i) => i); riddleRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get riddle() { return { index: riddleIdx, score: riddleScore, total: riddleOrder.length, over: riddleOver, best: riddleBest, current: riddleOrder.length > 0 ? RIDDLES[riddleOrder[riddleIdx]] : null }; },
-        riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleOrder = order.slice(); riddleStopTimer(); riddleRender(); },
+        riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleAnswered = false; riddleOrder = order.slice(); riddleStopTimer(); riddleRender(); },
         riddlePick(i) { riddlePick(i); },
     }));
     toyLeaveCleanup.riddle = () => { riddleStopTimer(); };
@@ -11340,9 +11406,10 @@
     function move(fwd, strafe) {
       if (over) return;
       const sp = 0.12;
+      let moved = false; // r18：撞墙不移动时不响脚步声
       const nx = px + Math.cos(pa) * fwd * sp + Math.cos(pa + Math.PI / 2) * strafe * sp;
       const ny = py + Math.sin(pa) * fwd * sp + Math.sin(pa + Math.PI / 2) * strafe * sp;
-      if (maze[Math.floor(ny)] && maze[Math.floor(ny)][Math.floor(nx)] !== 1) { px = nx; py = ny; steps++; }
+      if (maze[Math.floor(ny)] && maze[Math.floor(ny)][Math.floor(nx)] !== 1) { px = nx; py = ny; steps++; moved = true; } // r18：撞墙不算走，moved 供脚步声判断
       // 到出口？
       if (maze[Math.floor(py)][Math.floor(px)] === 2) {
         over = true;
@@ -11354,7 +11421,7 @@
         render("找绿色出口！已走 " + steps + " 步");
       }
       draw();
-      if (SFX.enabled && steps % 4 === 0) SFX.click();
+      if (moved && SFX.enabled && steps % 4 === 0) SFX.click(); // r18：只在真走动时响，撞墙（steps 不变）不再每按一次响一次
     }
     function turn(d) { pa += d; draw(); }
     function draw() {
@@ -11431,6 +11498,7 @@
     };
     const PHASES = ["🌙 夜晚降临，所有人闭眼", "🔪 凶手请睁眼，刀一个人", "🔍 侦探请睁眼，查验一人身份", "💊 医生请睁眼，救一个人", "☀️ 天亮了，公布昨晚结果", "🗣️ 轮流发言", "🗳️ 投票放逐一人", "📢 公布出局者身份"];
     let players = [], phase = -1, timerId = null, secs = 0;
+    let skDeadMode = false; // r18：标记出局模式——手机没有双击，靠开关+点牌标记出局
     function comp(n) {
       const roles = ["killer", "detective"];
       if (n >= 6) roles.push("doctor");
@@ -11445,7 +11513,7 @@
         b.className = "sk-card" + (p.open ? " open" : "") + (p.alive ? "" : " dead");
         b.textContent = p.open ? p.no + "号 " + ROLE_DEFS[p.role].name : p.no + "号 ❓";
         b.setAttribute("aria-label", "玩家" + p.no + (p.open ? ROLE_DEFS[p.role].name : "未翻开"));
-        b.addEventListener("click", () => { p.open = !p.open; if (SFX.enabled) SFX.click(); renderRoles(); });
+        b.addEventListener("click", () => { if (skDeadMode) p.alive = !p.alive; else p.open = !p.open; if (SFX.enabled) SFX.click(); renderRoles(); }); // r18：标记出局模式下点牌切生死、不翻牌
         b.addEventListener("dblclick", () => { p.alive = !p.alive; renderRoles(); });
         box.appendChild(b);
       });
@@ -11492,11 +11560,15 @@
       $("skClueText").value = "";
       if (SFX.enabled) SFX.pop();
     }
+    function renderSkModeBtn() { const b = $("skModeBtn"); if (b) b.textContent = skDeadMode ? "💀 点牌标记出局：开" : "💀 点牌标记出局：关"; } // r18
+    const skModeBtn = $("skModeBtn");
+    if (skModeBtn) skModeBtn.addEventListener("click", () => { skDeadMode = !skDeadMode; renderSkModeBtn(); if (SFX.enabled) SFX.click(); });
+    renderSkModeBtn();
     $("skDealBtn").addEventListener("click", deal);
     $("skNextBtn").addEventListener("click", next);
     $("skTimerBtn").addEventListener("click", startTimer);
     $("skClueBtn").addEventListener("click", clue);
-    $("skResetBtn").addEventListener("click", () => { stopTimer(); players = []; phase = -1; $("skRoles").innerHTML = ""; $("skFlow").classList.add("hidden"); $("skClueList").innerHTML = ""; });
+    $("skResetBtn").addEventListener("click", () => { stopTimer(); players = []; phase = -1; skDeadMode = false; renderSkModeBtn(); $("skRoles").innerHTML = ""; $("skFlow").classList.add("hidden"); $("skClueList").innerHTML = ""; }); // r18：重开时标记出局模式也复位
     toyLeaveCleanup.scriptkill = stopTimer;
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get scriptkill() { return { phase: phase, count: players.length }; },

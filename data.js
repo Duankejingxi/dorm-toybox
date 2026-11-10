@@ -59,7 +59,7 @@ const TOYS = [
   { id: "jump", label: "🐸 跳一跳", howto: "跳一跳：按住蓄力松手跳，落到方块中心是Perfect；蓄力太小只原地蹦一下，不会掉下去。", py: "tyt", cat: "game" },
   { id: "spotdiff", label: "🔍 找不同", howto: "九宫格里找唯一不同的表情，点中+10分，60秒看你能过几关；放大镜可放大棋盘。", py: "zbt", cat: "game" },
   { id: "catch", label: "🪙 接金币", howto: "接金币：手指左右拖动篮子（或方向键），接住掉落的金币，躲开炸弹。", py: "jjb", cat: "game" },
-  { id: "idiom", label: "📖 成语接龙", howto: "成语接龙：根据上一个成语的尾字接龙，10 轮看你答对几题，可和 AI 对战。", py: "cyjl", cat: "puzzle" },
+  { id: "idiom", label: "📖 成语接龙", howto: "成语接龙：根据上一个成语的尾字接龙，10 轮看你答对几题；点「🆚 AI 对战」直接和 AI 比一比。", py: "cyjl", cat: "puzzle" },
   { id: "drums", label: "🥁 节奏鼓机", howto: "节奏鼓机：点格子编节奏，播放循环；有演示节奏和速度调节。", py: "jzgj", cat: "game" },
   { id: "stroop", label: "🎨 颜色急转弯", howto: "颜色急转弯：字的意思和颜色不一致时，按颜色选别被字骗了。", py: "ysjzw", cat: "puzzle" },
   { id: "riddle", label: "🧩 脑筋急转弯", howto: "脑筋急转弯：看题点选项，答对+10分，每题20秒，卡住可看提示（-3分），可按分类筛选。", py: "njjzw", cat: "puzzle" },

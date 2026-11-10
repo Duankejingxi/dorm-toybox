@@ -1770,7 +1770,7 @@
     }
     $("doGroupBtn").addEventListener("click", () => {
       const names = groupNamePool();
-      const count = parseInt($("groupCount").value, 10);
+      const count = parseInt($("groupCount").value, 10) || 2; // R20：兜底 2 组，值异常时不至于 groups 为空数组导致 push 报错
       if (names.length < count) {
         $("groupResult").textContent = "人太少了，至少要 " + count + " 个人才能分 " + count + " 组。";
         return;
@@ -7896,7 +7896,7 @@
       if (mv) mv.classList.toggle("active", idiomMode === "vs");
       idiomNewRound();
     }
-    $("idiomStartBtn").addEventListener("click", () => idiomStart("solo"));
+    $("idiomStartBtn").addEventListener("click", () => idiomStart(idiomMode)); // R20：开始按已选模式开局，之前写死 solo，点了 AI 对战再点开始又变回单人
     $("idiomResetBtn").addEventListener("click", () => idiomStart(idiomMode));
     const mv2 = $("idiomModeVs");
     if (mv2) mv2.addEventListener("click", () => idiomStart("vs"));

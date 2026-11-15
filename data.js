@@ -68,7 +68,7 @@ const TOYS = [
   { id: "marble", label: "🔮 弹珠机", howto: "先左右移发射口再放珠子，珠子随机弹跳，掉进哪个分值槽得多少分，10颗看总分。", py: "tzj", cat: "game" },
   { id: "make24", label: "🧮 24点", howto: "用加减乘除把4个数字算成24，点两个数字再选运算符。算错点撤销，换一组继续。", py: "24d", cat: "puzzle" },
   { id: "fruitslice", label: "🍉 切水果", howto: "切水果：手指划过切开水果，别切到炸弹，3条命。", py: "qsg", cat: "game" },
-  { id: "maze", label: "🌀 走迷宫", howto: "走迷宫：手指滑动屏幕移动，从入口走到出口，3关各有不同。", py: "zmg", cat: "game" },
+  { id: "maze", label: "🌀 走迷宫", howto: "走迷宫：在迷宫上滑一下，球沿走廊走到岔路口；走到右下角旗子过关，每关现生成、越来越大。", py: "zmg", cat: "game" },
   { id: "match3", label: "🍬 消消乐", howto: "消消乐：点两个相邻的格子交换，3个连成线就消除，连击加分。", py: "xxl", cat: "game" },
   { id: "archery", label: "🏹 射箭", howto: "射箭：按住拉弓瞄准，松手射，10支箭看总分。", py: "sj", cat: "game" },
   { id: "flappy", label: "🐤 像素鸟", howto: "像素鸟：点屏幕（电脑按空格）让小鸟飞，穿过水管缝隙，别撞上，看看能飞多远。", py: "xsn", cat: "game" },

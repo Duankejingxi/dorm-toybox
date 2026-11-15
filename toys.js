@@ -138,7 +138,7 @@
   ["wheelCanvas", "timerRing", "cuRing", "ledgerChart", "bmiGauge", "compassDialCanvas", "noiseGauge", "noiseHist",
    "snakeCanvas", "tetrisCanvas", "tetrisNext", "breakoutCanvas", "linkupPath", "shooterCanvas", "fruitsliceCanvas",
    "archeryCanvas", "flappyCanvas", "snake2Canvas", "pongCanvas", "arkanoidCanvas", "chessCanvas", "goCanvas",
-   "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
+   "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas", "mazeCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
 
   /* ---------- v1.30 后端优化：懒初始化框架 + 通用工具 ---------- */
   const toyInitFns = {};  // 玩具 id -> 初始化函数（各段落注册）
@@ -9255,111 +9255,150 @@
   };
   /* ---------- 64. 走迷宫 ---------- */
   toyInitFns["maze"] = function () {
-    // 3 个迷宫：0=路，1=墙，S=起点，E=终点。都用 BFS 验过可解（最短 12/16/12 步）
-    const MAZE_LEVELS = [
-      [
-        ["S", 0, 1, 0, 0, 0, 0],
-        [1, 0, 1, 0, 1, 1, 0],
-        [0, 0, 0, 0, 0, 1, 0],
-        [0, 1, 1, 1, 0, 1, 0],
-        [0, 0, 0, 1, 0, 0, 0],
-        [1, 1, 0, 1, 1, 1, 0],
-        [0, 0, 0, 0, 0, 0, "E"],
-      ],
-      [
-        ["S", 0, 0, 1, 0, 0, 0],
-        [1, 1, 0, 1, 0, 1, 0],
-        [0, 0, 0, 0, 0, 1, 0],
-        [0, 1, 1, 1, 1, 1, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 1, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0, "E"],
-      ],
-      [
-        ["S", 1, 0, 0, 0, 1, 0],
-        [0, 1, 0, 1, 0, 1, 0],
-        [0, 0, 0, 1, 0, 0, 0],
-        [1, 1, 0, 1, 1, 1, 0],
-        [0, 0, 0, 0, 0, 1, 0],
-        [0, 1, 1, 1, 0, 1, 0],
-        [0, 0, 0, 0, 0, 0, "E"],
-      ],
-    ];
-    let mazeLevel = 0, mazePR = 0, mazePC = 0, mazeSteps = 0, mazeDone = false;
-    function mazeFindStart() {
-      const lv = MAZE_LEVELS[mazeLevel];
-      for (let r = 0; r < lv.length; r++) for (let c = 0; c < lv[r].length; c++) {
-        if (lv[r][c] === "S") { mazePR = r; mazePC = c; return; }
+    // v4.0 重写：随机生成完美迷宫（递归回溯），关卡越往后越大；滑一下会沿走廊一直走到岔路口
+    const BEST_KEY = "dorm-toybox-maze-v2";
+    let save = (() => { try { const v = JSON.parse(lsGet(BEST_KEY, "{}")); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })();
+    let level = Math.max(1, Math.min(99, save.level | 0 || 1));
+    let N = 5, walls = null, pr = 0, pc = 0, steps = 0, done = false, trail = [], startT = 0, endT = 0, tick = null, anim = null;
+    const sizeFor = (lv) => Math.min(21, 5 + Math.floor((lv - 1) * 1.5));
+    // walls[r][c] = [上, 右, 下, 左]
+    function gen(n) {
+      const w = Array.from({ length: n }, () => Array.from({ length: n }, () => [1, 1, 1, 1]));
+      const seen = Array.from({ length: n }, () => Array(n).fill(false));
+      const st = [[0, 0]]; seen[0][0] = true;
+      const D = [[-1, 0, 0, 2], [0, 1, 1, 3], [1, 0, 2, 0], [0, -1, 3, 1]];
+      while (st.length) {
+        const [r, c] = st[st.length - 1];
+        const opts = D.filter(([dr, dc]) => { const nr = r + dr, nc = c + dc; return nr >= 0 && nr < n && nc >= 0 && nc < n && !seen[nr][nc]; });
+        if (!opts.length) { st.pop(); continue; }
+        const [dr, dc, a, b] = opts[Math.floor(Math.random() * opts.length)];
+        w[r][c][a] = 0; w[r + dr][c + dc][b] = 0; seen[r + dr][c + dc] = true;
+        st.push([r + dr, c + dc]);
       }
+      return w;
     }
-    function mazeRender() {
-      const lv = MAZE_LEVELS[mazeLevel];
-      const board = $("mazeBoard");
-      board.innerHTML = "";
-      board.style.gridTemplateColumns = "repeat(" + lv[0].length + ", 1fr)";
-      for (let r = 0; r < lv.length; r++) for (let c = 0; c < lv[r].length; c++) {
-        const cell = document.createElement("div");
-        cell.className = "maze-cell";
-        const v = lv[r][c];
-        if (v === 1) cell.classList.add("wall");
-        if (r === mazePR && c === mazePC) { cell.classList.add("player"); cell.textContent = "🟢"; }
-        else if (v === "E") cell.textContent = "🏁";
-        else if (v === "S") cell.textContent = "·";
-        board.appendChild(cell);
+    function newMaze(lv) {
+      if (lv !== undefined) level = lv;
+      N = sizeFor(level);
+      walls = gen(N);
+      pr = 0; pc = 0; steps = 0; done = false; trail = [[0, 0]]; startT = 0; endT = 0;
+      stopTick();
+      draw(); render();
+    }
+    const DIRS = { up: [-1, 0, 0], right: [0, 1, 1], down: [1, 0, 2], left: [0, -1, 3] };
+    function openCount(r, c) { return walls[r][c].reduce((a, v) => a + (v ? 0 : 1), 0); }
+    function move(dir, slide) {
+      if (done || anim) return false;
+      const d = DIRS[dir]; if (!d) return false;
+      if (walls[pr][pc][d[2]]) { if (navigator.vibrate) try { navigator.vibrate(15); } catch (e) {} return false; }
+      if (!startT) { startT = Date.now(); startTick(); }
+      const path = [];
+      let r = pr, c = pc;
+      do {
+        r += d[0]; c += d[1]; path.push([r, c]);
+        if (r === N - 1 && c === N - 1) break;
+      } while (slide && !walls[r][c][d[2]] && openCount(r, c) === 2);
+      // 一格一格动画走过去
+      let i = 0;
+      const stepOnce = () => {
+        const [nr, nc] = path[i++];
+        pr = nr; pc = nc; steps++;
+        const prev = trail[trail.length - 2];
+        if (prev && prev[0] === nr && prev[1] === nc) trail.pop(); else trail.push([nr, nc]); // 走回头路就擦掉轨迹
+        if (pr === N - 1 && pc === N - 1) { win(); anim = null; draw(); render(); return; }
+        draw(); render();
+        if (i < path.length) anim = setTimeout(stepOnce, 35); else anim = null;
+      };
+      if (SFX.enabled) SFX.click();
+      stepOnce();
+      return true;
+    }
+    function win() {
+      done = true; endT = Date.now(); stopTick();
+      const secs = (endT - startT) / 1000;
+      const key = "L" + level;
+      if (!save[key] || secs < save[key]) save[key] = Math.round(secs * 10) / 10;
+      save.level = Math.max(save.level | 0, level + 1);
+      lsSet(BEST_KEY, JSON.stringify(save));
+      if (SFX.enabled) SFX.win();
+    }
+    function startTick() { stopTick(); tick = setInterval(render, 200); }
+    function stopTick() { if (tick) { clearInterval(tick); tick = null; } }
+    function draw() {
+      const cv = $("mazeCanvas"); if (!cv || !cv.getContext) return;
+      const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
+      const S = cv.width, pad = 8, cell = (S - pad * 2) / N;
+      ctx.fillStyle = "#0f1424"; ctx.fillRect(0, 0, S, S);
+      // 终点
+      const X = (c) => pad + c * cell, Y = (r) => pad + r * cell;
+      ctx.fillStyle = "rgba(61, 214, 140, .25)"; ctx.fillRect(X(N - 1), Y(N - 1), cell, cell);
+      ctx.font = Math.floor(cell * 0.62) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🏁", X(N - 1) + cell / 2, Y(N - 1) + cell / 2 + 1);
+      // 轨迹
+      if (trail.length > 1) {
+        ctx.strokeStyle = "rgba(245, 197, 66, .55)"; ctx.lineWidth = Math.max(2, cell * 0.22); ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath();
+        trail.forEach(([r, c], i) => { const x = X(c) + cell / 2, y = Y(r) + cell / 2; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.stroke();
       }
-      $("mazeStatus").textContent = mazeDone
-        ? "🎉 第 " + (mazeLevel + 1) + " 关走出来了！" + (mazeLevel < 2 ? " 点重走进下一关。" : " 全部通关！")
-        : "第 " + (mazeLevel + 1) + " / 3 关 · 步数 " + mazeSteps;
+      // 墙
+      ctx.strokeStyle = "#8fa6ff"; ctx.lineWidth = Math.max(2, Math.min(4, cell * 0.12)); ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const w = walls[r][c], x = X(c), y = Y(r);
+        if (w[0]) { ctx.moveTo(x, y); ctx.lineTo(x + cell, y); }
+        if (w[3]) { ctx.moveTo(x, y); ctx.lineTo(x, y + cell); }
+        if (r === N - 1 && w[2]) { ctx.moveTo(x, y + cell); ctx.lineTo(x + cell, y + cell); }
+        if (c === N - 1 && w[1]) { ctx.moveTo(x + cell, y); ctx.lineTo(x + cell, y + cell); }
+      }
+      ctx.stroke();
+      // 玩家
+      const px = X(pc) + cell / 2, py = Y(pr) + cell / 2;
+      ctx.fillStyle = "#3dd68c"; ctx.shadowColor = "#3dd68c"; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(px, py, cell * 0.3, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.textBaseline = "alphabetic";
     }
-    function mazeMove(dir) {
-      if (mazeDone) return;
-      const lv = MAZE_LEVELS[mazeLevel];
-      const d = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[dir];
-      if (!d) return;
-      const nr = mazePR + d[0], nc = mazePC + d[1];
-      if (nr < 0 || nr >= lv.length || nc < 0 || nc >= lv[0].length) return;
-      if (lv[nr][nc] === 1) return; // 撞墙
-      mazePR = nr; mazePC = nc; mazeSteps++;
-      if (lv[nr][nc] === "E") mazeDone = true;
-      mazeRender();
+    function render() {
+      const secs = startT ? ((done ? endT : Date.now()) - startT) / 1000 : 0;
+      const bestL = save["L" + level];
+      $("mazeStatus").textContent = done
+        ? "🎉 第 " + level + " 关通过！" + secs.toFixed(1) + " 秒 · " + steps + " 步" + (bestL ? " · 最好 " + bestL + " 秒" : "")
+        : "第 " + level + " 关 · " + N + "×" + N + " · " + secs.toFixed(1) + " 秒" + (bestL ? " · 最好 " + bestL + " 秒" : "");
+      const nb = $("mazeNextBtn"); if (nb) nb.classList.toggle("hidden", !done);
+      const pv = $("mazePrevBtn"); if (pv) pv.disabled = level <= 1;
     }
-    function mazeReset(level) {
-      if (level !== undefined) mazeLevel = level;
-      mazeSteps = 0; mazeDone = false;
-      mazeFindStart();
-      mazeRender();
-    }
-    $("mazeResetBtn").addEventListener("click", () => {
-      if (mazeDone && mazeLevel < 2) mazeReset(mazeLevel + 1);
-      else mazeReset(mazeLevel);
-    });
-    // 滑动走迷宫（复用 bindSwipe 的思路：tile 上也要 touch-action none，CSS 里已加）
+    // 滑动：长滑沿走廊走到岔路口；点格子方向键也行
     (function () {
-      const board = $("mazeBoard");
+      const cv = $("mazeCanvas"); if (!cv) return;
       let sx = 0, sy = 0, tracking = false;
-      board.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; tracking = true; });
-      board.addEventListener("pointerup", (e) => {
-        if (!tracking) return;
-        tracking = false;
+      cv.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; tracking = true; SFX.unlock(); });
+      cv.addEventListener("pointerup", (e) => {
+        if (!tracking) return; tracking = false;
         const dx = e.clientX - sx, dy = e.clientY - sy;
-        if (Math.hypot(dx, dy) < 12) return;
-        mazeMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+        if (Math.hypot(dx, dy) < 14) return;
+        move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"), true);
       });
+      cv.addEventListener("pointercancel", () => { tracking = false; });
     })();
-    if (document.addEventListener) {
-      document.addEventListener("keydown", (e) => {
-        if ($("toy-maze").classList.contains("hidden")) return;
-        const map = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
-        if (map[e.key]) { mazeMove(map[e.key]); if (e.preventDefault) e.preventDefault(); }
-      });
-    }
-    mazeReset(0);
+    document.querySelectorAll("#mazePad [data-dir]").forEach((b) => b.addEventListener("click", () => { SFX.unlock(); move(b.getAttribute("data-dir"), true); }));
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-maze").classList.contains("hidden")) return;
+      const map = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right" };
+      if (map[e.key]) { move(map[e.key], !e.shiftKey); e.preventDefault(); }
+    });
+    $("mazeResetBtn").addEventListener("click", () => newMaze(level));
+    if ($("mazeNextBtn")) $("mazeNextBtn").addEventListener("click", () => newMaze(level + 1));
+    if ($("mazePrevBtn")) $("mazePrevBtn").addEventListener("click", () => newMaze(Math.max(1, level - 1)));
+    toyLeaveCleanup["maze"] = () => stopTick();
+    toyEnterResume["maze"] = () => { if (startT && !done) startTick(); };
+    newMaze(level);
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get maze() { return { level: mazeLevel, pr: mazePR, pc: mazePC, steps: mazeSteps, done: mazeDone, grid: MAZE_LEVELS[mazeLevel].map((r) => r.slice()) }; },
-        mazeMove(dir) { mazeMove(dir); },
-        mazeSet(level) { mazeReset(level); },
+      get maze() { return { level, n: N, pr, pc, steps, done }; },
+      mazeMove(dir, slide) { return move(dir, slide); },
+      mazeSet(lv) { newMaze(lv); },
+      mazeWalls() { return walls; },
     }));
-
   };
   /* ---------- 65. 消消乐 ---------- */
   toyInitFns["match3"] = function () {
@@ -10978,7 +11017,7 @@
       for (let i = 0; i < 7; i++) { pHand.push(drawCard()); aiHand.push(drawCard()); }
       let guard = 0;
       do { top = drawCard(); if (top.c === "wild") deck.splice(Math.floor(Math.random() * (deck.length + 1)), 0, top); guard++; } while (top.c === "wild" && guard < 50); // R20：万能顶牌按规则放回牌堆重抽，之前直接丢了，牌堆少一张
-      turn = "p"; over = false; drawCount = 0;
+      turn = "p"; over = false; drawCount = 0; drewThisTurn = false;
       draw(); render("轮到你出牌");
     }
     function canPlay(card) {
@@ -11052,6 +11091,7 @@
       if (pw && !over && turn === "p") doPPlay(pw.i, pw.card, c);
     }
     function doPPlay(i, card, color) {
+      drewThisTurn = false;
       pendingWild = null; // R20：选色中改出别的牌时，旧的待选状态不能残留
       pHand.splice(i, 1);
       recycleTop();
@@ -11092,50 +11132,72 @@
       const skip = applyEffect(card, true);
       draw();
       if (skip) { render("你被跳过了，AI 继续！"); aiTimer = setTimeout(aiPlay, 700); } // R20：记下计时器，重开可取消
-      else { turn = "p"; render("轮到你出牌"); }
+      else { turn = "p"; draw(); render("轮到你出牌"); }
     }
     function gameOver(winner) {
       over = true;
       if (SFX.enabled) { if (winner === "p") SFX.win(); else SFX.lose(); }
       draw(); render(winner === "p" ? "🎉 你赢了！" : "😅 AI 赢了");
     }
-    function cardHTML(card, i, clickable) {
-      const bg = card.c === "wild" ? "linear-gradient(135deg,#e5484d,#f5c542,#4caf50,#4f7cff)"
-        : { red: "#e5484d", yellow: "#f5c542", green: "#4caf50", blue: "#4f7cff" }[card.c];
-      const label = card.n === "wild" ? "变色" : card.n === "+4" ? "+4" : card.n === "+2" ? "+2" : card.n === "skip" ? "禁" : card.n === "rev" ? "反" : card.n;
-      return '<div class="uno-card" data-i="' + i + '" style="background:' + bg + ';' + (clickable ? "cursor:pointer;" : "") + '">' + label + "</div>";
+    const UNO_BG = { red: "#e5484d", yellow: "#f2b51d", green: "#3fa34d", blue: "#3d6fe0" };
+    const UNO_ORDER = { red: 0, yellow: 1, green: 2, blue: 3, wild: 4 };
+    const unoLabel = (c) => c.n === "wild" ? "🌈" : c.n === "skip" ? "⊘" : c.n === "rev" ? "⇄" : c.n;
+    function unoCardEl(c, cls) {
+      const el = document.createElement("div");
+      el.className = "uno-card " + (c.c === "wild" ? "wild" : "") + (cls ? " " + cls : "");
+      if (c.c !== "wild") el.style.background = UNO_BG[c.c];
+      const corner = document.createElement("small"); corner.textContent = unoLabel(c);
+      const mid = document.createElement("b"); mid.textContent = unoLabel(c);
+      el.appendChild(corner); el.appendChild(mid);
+      return el;
     }
+    let drewThisTurn = false;
     function draw() {
       const t = $("unoTop");
-      if (t) {
-        t.innerHTML = '<div class="uno-row"><span>顶牌：</span>' + cardHTML(top, -1, false) + '<span class="uno-count">AI ' + aiHand.length + " 张 · 牌堆 " + deck.length + " 张</span></div>";
+      if (t && !pendingWild) {
+        t.innerHTML = "";
+        const ai = document.createElement("div"); ai.className = "uno-ai";
+        const lbl = document.createElement("span"); lbl.textContent = "🤖 AI " + aiHand.length + " 张" + (aiHand.length === 1 ? " · UNO!" : "");
+        ai.appendChild(lbl);
+        const backs = document.createElement("div"); backs.className = "uno-backs";
+        for (let k = 0; k < Math.min(aiHand.length, 12); k++) { const bk = document.createElement("span"); bk.className = "uno-back"; backs.appendChild(bk); }
+        ai.appendChild(backs);
+        t.appendChild(ai);
+        const center = document.createElement("div"); center.className = "uno-center";
+        const deckEl = document.createElement("div"); deckEl.className = "uno-card uno-deck"; { const n = document.createElement("b"); n.textContent = deck.length; n.style.color = "#fff"; deckEl.appendChild(n); deckEl.title = "牌堆剩 " + deck.length + " 张"; }
+        center.appendChild(deckEl);
+        if (top) center.appendChild(unoCardEl(top, "top"));
+        if (top && top.c !== "wild") { const cc = document.createElement("span"); cc.className = "uno-curcolor"; cc.style.background = UNO_BG[top.c]; cc.textContent = "当前 " + CNAMES[top.c]; center.appendChild(cc); }
+        t.appendChild(center);
       }
       const h = $("unoHand");
       if (h) {
         h.innerHTML = "";
-        pHand.forEach((c, i) => {
-          const el = document.createElement("div");
-          const bg = c.c === "wild" ? "linear-gradient(135deg,#e5484d,#f5c542,#4caf50,#4f7cff)"
-            : { red: "#e5484d", yellow: "#f5c542", green: "#4caf50", blue: "#4f7cff" }[c.c];
-          const label = c.n === "wild" ? "变色" : c.n === "+4" ? "+4" : c.n === "+2" ? "+2" : c.n === "skip" ? "禁" : c.n === "rev" ? "反" : c.n;
-          el.className = "uno-card";
-          el.textContent = label;
-          try {
-            el.style.cssText = "background:" + bg + ";width:44px;height:64px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:16px;" + (turn === "p" && !over ? "cursor:pointer;" : "opacity:0.7;");
-          } catch (e) {}
-          if (turn === "p" && !over) el.addEventListener("click", () => pPlay(i));
+        // 手牌按颜色、数字排好
+        const order = pHand.map((c, i) => i).sort((x, y) => (UNO_ORDER[pHand[x].c] - UNO_ORDER[pHand[y].c]) || String(pHand[x].n).localeCompare(String(pHand[y].n)));
+        const myTurn = turn === "p" && !over;
+        order.forEach((i) => {
+          const c = pHand[i];
+          const ok = myTurn && canPlay(c) && (!drewThisTurn || i === pHand.length - 1);
+          const el = unoCardEl(c, myTurn ? (ok ? "playable" : "dim") : "");
+          if (myTurn) el.addEventListener("click", () => { if (drewThisTurn && i !== pHand.length - 1) { render("摸到的那张才能出，或者点「不出」"); return; } pPlay(i); });
           h.appendChild(el);
         });
       }
+      const db = $("unoDrawBtn");
+      if (db) { db.textContent = drewThisTurn ? "不出，结束回合 ▶" : "摸牌"; db.disabled = over || turn !== "p"; }
     }
     function render(m) { $("unoMsg").textContent = m + "（你 " + pHand.length + " 张）"; }
     $("unoDrawBtn").addEventListener("click", () => {
       if (over || turn !== "p") return;
       SFX.unlock();
       pendingWild = null;
-      pHand.push(drawCard());
+      if (drewThisTurn) { drewThisTurn = false; turn = "ai"; draw(); render("AI 出牌中…"); aiTimer = setTimeout(aiPlay, 700); return; }
+      const c = drawCard();
+      pHand.push(c);
       if (SFX.enabled) SFX.click();
-      draw(); render("摸了牌，轮到 AI");
+      if (canPlay(c)) { drewThisTurn = true; draw(); render("摸到一张能出的牌，可以直接出，或者点「不出」"); return; }
+      draw(); render("摸了一张出不了，轮到 AI");
       turn = "ai"; aiTimer = setTimeout(aiPlay, 700); // R20：记下计时器，重开可取消
     });
     $("unoResetBtn").addEventListener("click", reset);

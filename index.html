@@ -1208,11 +1208,14 @@
   <!-- 走迷宫 -->
   <section class="panel toy hidden" id="toy-maze">
     <h2>🌀 走迷宫</h2>
-    <p class="hint">把 🟢 送到 🏁。手指滑动或按方向键走，撞墙走不动。3 个迷宫。</p>
-    <div class="maze-board" id="mazeBoard"></div>
-    <p class="result-line" id="mazeStatus">第 1 / 3 关 · 步数 0</p>
+    <p class="hint">把绿球送到右下角 🏁。在迷宫上滑一下，球会沿着走廊一直走到岔路口；也可以用下面的方向键或键盘。每关都是现生成的，越往后越大。</p>
+    <canvas id="mazeCanvas" width="340" height="340" style="width:100%;max-width:400px;touch-action:none"></canvas>
+    <p class="result-line" id="mazeStatus">第 1 关</p>
+    <div class="dpad" id="mazePad"><button class="btn ghost-btn" data-dir="up" aria-label="上">▲</button><button class="btn ghost-btn" data-dir="left" aria-label="左">◀</button><button class="btn ghost-btn" data-dir="down" aria-label="下">▼</button><button class="btn ghost-btn" data-dir="right" aria-label="右">▶</button></div>
     <div class="btn-row">
-      <button class="btn ghost-btn small" id="mazeResetBtn">重走 ↺</button>
+      <button class="btn ghost-btn small" id="mazePrevBtn">◀ 上一关</button>
+      <button class="btn ghost-btn small" id="mazeResetBtn">换一张 ↺</button>
+      <button class="btn gold-btn small hidden" id="mazeNextBtn">下一关 ▶</button>
     </div>
   </section>
 

@@ -81,7 +81,7 @@ const TOYS = [
   { id: "uno", label: "🃏 UNO", howto: "和AI打UNO：点手牌出牌，颜色或数字一样就能出，先出完赢；有+2/+4/禁/反/变色功能牌，无牌可出点摸牌。", py: "uno", cat: "game" },
   { id: "mahjong", label: "🀄 麻将", howto: "四人麻将：你和三家电脑，摸一张打一张，能碰、能点炮胡、能自摸；带黄点的牌打出去就听牌。", py: "mjjhmj", cat: "game" },
   { id: "poker", label: "♠️ 德州扑克", howto: "德州扑克：2张底牌+5张公共牌，和AI比牌型，同花顺最大。", py: "dzpk", cat: "game" },
-  { id: "rhythm", label: "🎵 音游", howto: "音符掉到判定线就点对应赛道（手机点屏幕，电脑按DFJK），看连击。", py: "yy", cat: "game" },
+  { id: "rhythm", label: "🎵 音游", howto: "音游：每局现场合成一首曲子，音符落到圆圈时点对应轨道（电脑按 DFJK），三档难度，建议开声音。", py: "yy", cat: "game" },
   { id: "tower", label: "🏗️ 叠塔", howto: "叠塔：方块左右移动，点一下放下去，叠歪了就掉，看看叠多高。", py: "dt", cat: "game" },
   { id: "dodge", label: "✈️ 弹幕躲避", howto: "弹幕躲避：拖飞机躲子弹，擦弹（贴着过）加分，3条命。", py: "tmyb", cat: "game" },
   { id: "maze3d", label: "🌀 3D迷宫", howto: "伪3D迷宫：第一人称视角找绿色出口。手机点屏幕上/下走、左/右转，电脑用WASD/方向键。", py: "3dmg", cat: "game" },

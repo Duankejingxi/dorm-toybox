@@ -8444,18 +8444,66 @@
   toyInitFns["riddle"] = function () {
     const RIDDLE_KEY = "dorm-toybox-riddle-best-v1";
     const RIDDLES = [
-      { q: "什么东西越洗越脏？", options: ["衣服", "水", "手"], answer: 1, cat: "经典", hint: "洗衣服用的就是它" },
-      { q: "什么东西早上四条腿，中午两条腿，晚上三条腿？", options: ["狗", "人", "椅子"], answer: 1, cat: "经典", hint: "说的是人的一生" },
-      { q: "什么东西能装下全世界，却装不下一粒沙？", options: ["袋子", "箱子", "眼睛"], answer: 2, cat: "经典", hint: "它长在你脸上" },
-      { q: "什么东西越长越短？", options: ["蜡烛", "头发", "绳子"], answer: 0, cat: "经典", hint: "点燃了就会变短" },
-      { q: "什么东西不用的时候朝下，用的时候朝上？", options: ["碗", "帽子", "伞"], answer: 2, cat: "经典", hint: "下雨天用的" },
-      { q: "什么东西有口无牙？", options: ["井", "河", "杯子"], answer: 0, cat: "经典", hint: "可以打水的地方" },
-      { q: "什么东西天一黑就出来，天一亮就消失？", options: ["月亮", "星星", "萤火虫"], answer: 1, cat: "冷笑话", hint: "一闪一闪亮晶晶" },
-      { q: "什么东西越热越爱出来，越冷越躲起来？", options: ["冰", "汗", "火"], answer: 1, cat: "冷笑话", hint: "运动完会流" },
-      { q: "什么东西前面是平的，后面是尖的？", options: ["刀", "笔", "针"], answer: 2, cat: "逻辑", hint: "缝衣服用的" },
-      { q: "什么东西你天天见，却从来没见过它的真面目？", options: ["天空", "自己的脸", "影子"], answer: 1, cat: "逻辑", hint: "照镜子才看得到" },
-      { q: "什么东西一到手就变小？", options: ["肥皂", "糖", "冰块"], answer: 2, cat: "冷笑话", hint: "夏天会化掉" },
-      { q: "什么东西你越是想留住它，它走得越快？", options: ["时间", "水", "风"], answer: 0, cat: "逻辑", hint: "一去不复返" },
+      { q: "什么东西越洗越脏？", options: ["手", "水", "衣服"], answer: 1, cat: "经典", hint: "洗东西离不开它" },
+      { q: "什么东西能装下全世界，却装不下一粒沙？", options: ["箱子", "眼睛", "袋子"], answer: 1, cat: "经典", hint: "它长在你脸上" },
+      { q: "什么东西越长越短？", options: ["头发", "绳子", "蜡烛"], answer: 2, cat: "经典", hint: "点燃了就会变短" },
+      { q: "什么东西不用时朝下，用时朝上？", options: ["帽子", "伞", "碗"], answer: 1, cat: "经典", hint: "下雨天用的" },
+      { q: "什么东西有口无牙？", options: ["河", "井", "狗"], answer: 1, cat: "经典", hint: "可以打水" },
+      { q: "什么东西天黑出现，天亮就不见？", options: ["月饼", "路灯坏了", "星星"], answer: 2, cat: "经典", hint: "一闪一闪亮晶晶" },
+      { q: "你越是想留住它，它走得越快，它是什么？", options: ["时间", "风", "水"], answer: 0, cat: "逻辑", hint: "一去不复返" },
+      { q: "什么东西别人用得比你自己多？", options: ["你的筷子", "你的手机", "你的名字"], answer: 2, cat: "逻辑", hint: "大家都这么叫你" },
+      { q: "什么东西有头无脚？", options: ["板凳", "蛇", "砖头"], answer: 2, cat: "经典", hint: "盖房子用的" },
+      { q: "什么门永远关不上？", options: ["防盗门", "铁门", "球门"], answer: 2, cat: "经典", hint: "踢足球时守的" },
+      { q: "什么东西越生气越大？", options: ["气球", "肚子", "脾气"], answer: 2, cat: "冷笑话", hint: "人人都有" },
+      { q: "什么书在书店买不到？", options: ["秘书", "漫画书", "教科书"], answer: 0, cat: "谐音", hint: "是个职位" },
+      { q: "什么车寸步难行？", options: ["自行车", "火车", "风车"], answer: 2, cat: "经典", hint: "在原地转圈" },
+      { q: "什么帽子不能戴？", options: ["草帽", "棒球帽", "螺丝帽"], answer: 2, cat: "谐音", hint: "机械零件" },
+      { q: "什么鸡没有翅膀？", options: ["田鸡", "乌骨鸡", "火鸡"], answer: 0, cat: "谐音", hint: "其实是青蛙" },
+      { q: "什么鼠最爱干净？", options: ["米老鼠", "松鼠", "环保署"], answer: 2, cat: "谐音", hint: "是个政府部门" },
+      { q: "什么瓜不能吃？", options: ["傻瓜", "西瓜", "黄瓜"], answer: 0, cat: "谐音", hint: "骂人的话" },
+      { q: "什么花不能浇水？", options: ["玫瑰花", "雪花", "向日葵"], answer: 1, cat: "经典", hint: "冬天才有" },
+      { q: "什么蛋不能吃？", options: ["鸡蛋", "鸭蛋", "笨蛋"], answer: 2, cat: "谐音", hint: "骂人的话" },
+      { q: "什么球离你最近？", options: ["地球", "眼球", "足球"], answer: 1, cat: "逻辑", hint: "长在脸上" },
+      { q: "什么人一年只工作一天？", options: ["老师", "圣诞老人", "快递员"], answer: 1, cat: "冷笑话", hint: "12 月 25 日" },
+      { q: "什么东西有脚却不会走路？", options: ["鸭子", "桌子", "螃蟹"], answer: 1, cat: "经典", hint: "吃饭写字都用它" },
+      { q: "什么动物最怕水？", options: ["猫", "没有一个（都会喝水）", "鸡"], answer: 1, cat: "冷笑话", hint: "陷阱题" },
+      { q: "一个人从飞机上跳下来没用降落伞却没事，为什么？", options: ["飞机停在地上", "下面是海", "他会飞"], answer: 0, cat: "逻辑", hint: "没说飞机在天上" },
+      { q: "小明的妈妈有三个儿子，大毛二毛，老三叫什么？", options: ["小明", "四毛", "三毛"], answer: 0, cat: "逻辑", hint: "看清题目第一个词" },
+      { q: "什么东西打破了才能用？", options: ["鸡蛋", "杯子", "镜子"], answer: 0, cat: "经典", hint: "做饭第一步" },
+      { q: "什么路最窄？", options: ["冤家路窄", "山路", "小路"], answer: 0, cat: "谐音", hint: "成语" },
+      { q: "什么床不能睡？", options: ["上下铺", "沙发床", "河床"], answer: 2, cat: "谐音", hint: "在水底" },
+      { q: "什么海没有水？", options: ["东海", "辞海", "死海"], answer: 1, cat: "谐音", hint: "一本工具书" },
+      { q: "什么牛不吃草？", options: ["牦牛", "奶牛", "蜗牛"], answer: 2, cat: "谐音", hint: "背着壳爬" },
+      { q: "什么马不能骑？", options: ["河马", "斑马", "小马"], answer: 0, cat: "谐音", hint: "在水里泡着" },
+      { q: "什么布剪不断？", options: ["瀑布", "纱布", "棉布"], answer: 0, cat: "谐音", hint: "从山上流下来" },
+      { q: "什么人生病从来不看医生？", options: ["小孩", "盲人", "医生"], answer: 1, cat: "冷笑话", hint: "“看”不了" },
+      { q: "什么东西放进冰箱会变热？", options: ["冰块", "热水", "冰箱外壳"], answer: 2, cat: "冷笑话", hint: "冰箱后面摸摸看" },
+      { q: "一年四季都盛开的花是什么？", options: ["桂花", "梅花", "塑料花"], answer: 2, cat: "冷笑话", hint: "不是真花" },
+      { q: "什么东西你明明有，却总说“没有”？", options: ["时间", "钱", "没有（这个词）"], answer: 2, cat: "逻辑", hint: "文字游戏" },
+      { q: "铅笔姓什么？", options: ["王", "萧（削）", "李"], answer: 1, cat: "谐音", hint: "用前要先……" },
+      { q: "什么东西越挤越多？", options: ["牙膏", "人", "奶茶"], answer: 1, cat: "冷笑话", hint: "早高峰地铁" },
+      { q: "什么东西晚上才生出尾巴？", options: ["流星", "小猫", "彗星图"], answer: 0, cat: "经典", hint: "许愿的时候" },
+      { q: "什么竹子不长在土里？", options: ["爆竹", "斑竹", "毛竹"], answer: 0, cat: "谐音", hint: "过年点的" },
+      { q: "黑人和白人生下的婴儿，牙齿是什么颜色？", options: ["婴儿没有牙", "黑色", "白色"], answer: 0, cat: "逻辑", hint: "刚出生" },
+      { q: "什么东西有面无口，有脚无手，却能吃饭？", options: ["桌子", "锅", "碗"], answer: 0, cat: "经典", hint: "饭放在它上面" },
+      { q: "什么袋子每个人都有，却很少借给别人？", options: ["口袋", "塑料袋", "脑袋"], answer: 2, cat: "谐音", hint: "长在脖子上" },
+      { q: "天上有多少颗星星？", options: ["数不清", "八颗", "一万颗"], answer: 0, cat: "冷笑话", hint: "你数数看" },
+      { q: "哪种动物最没方向感？", options: ["鸽子", "麋鹿（迷路）", "蜜蜂"], answer: 1, cat: "谐音", hint: "谐音梗" },
+      { q: "什么水永远用不完？", options: ["海水", "自来水", "薪水"], answer: 2, cat: "谐音", hint: "每个月都发" },
+      { q: "什么东西长得像熊猫，颜色像熊猫，却不是熊猫？", options: ["熊猫的照片", "斑马", "奶牛"], answer: 0, cat: "逻辑", hint: "手机里存着" },
+      { q: "什么数字最勤劳？", options: ["一（一不做二不休）", "八", "零"], answer: 0, cat: "冷笑话", hint: "成语里找" },
+      { q: "什么东西有时有，有时无，越是需要越难找？", options: ["灵感", "钥匙", "作业"], answer: 0, cat: "冷笑话", hint: "写作文时" },
+      { q: "太平洋的中间是什么？", options: ["岛", "水", "平（字）"], answer: 2, cat: "逻辑", hint: "看字" },
+      { q: "什么字全世界通用？", options: ["英文", "阿拉伯数字", "汉字"], answer: 1, cat: "逻辑", hint: "1 2 3" },
+      { q: "什么动物天天熬夜？", options: ["猫头鹰", "熊猫（黑眼圈）", "蝙蝠"], answer: 1, cat: "冷笑话", hint: "看眼睛" },
+      { q: "什么东西洗好了却不能吃？", options: ["青菜", "扑克牌", "水果"], answer: 1, cat: "冷笑话", hint: "打牌前要做的" },
+      { q: "哪个月有 28 天？", options: ["没有", "二月", "每个月都有"], answer: 2, cat: "逻辑", hint: "至少 28 天" },
+      { q: "什么照片看不出照的是谁？", options: ["证件照", "合照", "X 光片"], answer: 2, cat: "冷笑话", hint: "医院拍的" },
+      { q: "什么人最喜欢别人给他“添麻烦”？", options: ["卖麻糖的人", "宿管", "老师"], answer: 0, cat: "谐音", hint: "麻……" },
+      { q: "左手永远抓不到什么？", options: ["杯子", "左手", "右手"], answer: 1, cat: "逻辑", hint: "自己抓自己" },
+      { q: "什么东西经常从天上掉下来，却从不摔坏？", options: ["鸟", "飞机", "雨"], answer: 2, cat: "经典", hint: "下雨天" },
+      { q: "宿舍里什么东西最容易“失踪”？", options: ["充电线", "门", "床"], answer: 0, cat: "冷笑话", hint: "每个宿舍都在找" },
+      { q: "什么帽子大家都不想戴，却人人都戴过？", options: ["绿帽子", "安全帽", "高帽子（被夸）"], answer: 2, cat: "冷笑话", hint: "被人捧的时候" },
     ];
     const RIDDLE_TIME = 20; // 每题 20 秒
     let riddleBest = loadBest(RIDDLE_KEY);
@@ -8587,7 +8635,7 @@
     }
     function riddleStart() {
       riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleAnswered = false; // r18：开局解锁作答
-      riddleOrder = shuffle(riddleFiltered());
+      riddleOrder = shuffle(riddleFiltered()).slice(0, 10); // v4.0：题库 60 道，每局随机抽 10 道
       riddleStartTimer();
       riddleRender();
     }
@@ -8598,7 +8646,7 @@
     // 分类按钮
     const catWrap = $("riddleCats");
     if (catWrap) {
-      ["全部", "经典", "冷笑话", "逻辑"].forEach((c) => {
+      ["全部", "经典", "谐音", "冷笑话", "逻辑"].forEach((c) => {
         const b = document.createElement("button");
         b.className = "btn ghost-btn small" + (c === riddleCat ? " active" : "");
         b.textContent = c;
@@ -8612,7 +8660,7 @@
         catWrap.appendChild(b);
       });
     }
-    riddleOrder = RIDDLES.map((_, i) => i); riddleRender();
+    riddleOrder = shuffle(RIDDLES.map((_, i) => i)).slice(0, 10); riddleRender();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get riddle() { return { index: riddleIdx, score: riddleScore, total: riddleOrder.length, over: riddleOver, best: riddleBest, current: riddleOrder.length > 0 ? RIDDLES[riddleOrder[riddleIdx]] : null }; },
         riddleSet(order) { riddleStarted = true; riddleOver = false; riddleIdx = 0; riddleScore = 0; riddleHintUsed = false; riddleAnswered = false; riddleOrder = order.slice(); riddleStopTimer(); riddleRender(); },

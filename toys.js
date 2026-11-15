@@ -6527,29 +6527,51 @@
       });
       return best;
     }
+    // v4.0：五元组窗口评分——每个经过该点的 5 格窗口里只有一种颜色时按子数计分，攻防相加
+    const G_WIN = [0, 2, 25, 400, 9000, 2000000];
+    function gWindowScore(idx, color) {
+      const N = GOMOKU_SIZE, r0 = Math.floor(idx / N), c0 = idx % N, opp = color === 1 ? 2 : 1;
+      let total = 0, fours = 0, threes = 0;
+      for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+        let dirBest = 0;
+        for (let off = -4; off <= 0; off++) {
+          let mine = 0, ok = true;
+          for (let k = 0; k < 5; k++) {
+            const r = r0 + dr * (off + k), c = c0 + dc * (off + k);
+            if (r < 0 || r >= N || c < 0 || c >= N) { ok = false; break; }
+            const v = r === r0 && c === c0 ? color : gBoard[r * N + c];
+            if (v === opp) { ok = false; break; }
+            if (v === color) mine++;
+          }
+          if (ok) { total += G_WIN[mine]; if (mine > dirBest) dirBest = mine; }
+        }
+        if (dirBest >= 4) fours++; else if (dirBest === 3) threes++;
+      }
+      // 双四、四三、双三这种组合棋额外加权
+      if (fours >= 2 || (fours && threes)) total += 60000;
+      else if (threes >= 2) total += 6000;
+      return total;
+    }
     function gomokuScoreCell(idx) {
-      // 电脑（白）落这里的分数：能赢最高，必须堵黑的五连次之，其余按连子数
-      const saved = gBoard[idx];
-      gBoard[idx] = 2;
-      const w = gomokuLineLen(idx, 2);
-      gBoard[idx] = 1;
-      const b = gomokuLineLen(idx, 1);
-      gBoard[idx] = saved;
-      if (w >= 5) return 1000000;
-      if (b >= 5) return 900000;
-      if (w === 4) return 50000;
-      if (b === 4) return 45000;
-      if (w === 3) return 5000;
-      if (b === 3) return 4500;
-      if (w === 2) return 500;
-      if (b === 2) return 450;
-      return 10 + Math.random() * 5;
+      const atk = gWindowScore(idx, 2), def = gWindowScore(idx, 1);
+      return atk + def * 0.9 + Math.random() * 3;
     }
     function gomokuAiMove() {
       if (gWinner !== 0 || gTurn !== 2) return;
+      const N = GOMOKU_SIZE;
       let bestIdx = -1, bestScore = -1;
+      const any = gBoard.some((v) => v !== 0);
       for (let i = 0; i < gBoard.length; i++) {
         if (gBoard[i] !== 0) continue;
+        if (any) {
+          // 只看已有棋子两格以内的点
+          const r = Math.floor(i / N), c = i % N; let near = false;
+          for (let dr = -2; dr <= 2 && !near; dr++) for (let dc = -2; dc <= 2; dc++) {
+            const rr = r + dr, cc = c + dc;
+            if (rr >= 0 && rr < N && cc >= 0 && cc < N && gBoard[rr * N + cc] !== 0) { near = true; break; }
+          }
+          if (!near) continue;
+        } else if (i !== Math.floor(N / 2) * N + Math.floor(N / 2)) continue;
         const s = gomokuScoreCell(i);
         if (s > bestScore) { bestScore = s; bestIdx = i; }
       }

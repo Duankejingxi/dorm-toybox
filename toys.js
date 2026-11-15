@@ -7014,11 +7014,25 @@
       ["#######", "#     #", "# ..  #", "# $$  #", "#  @  #", "#     #", "#######"],
       ["########", "#      #", "# .  . #", "# $  $ #", "#   $  #", "#  .@  #", "#      #", "########"],
       ["#########", "#       #", "# . . . #", "# $ $ $ #", "#    #  #", "#  @    #", "#########"],
+      ["######", "#. #.#", "#  # #", "# $$ #", "# @  #", "######"],
+      ["#######", "# #   #", "#@$  .#", "# $#  #", "##   .#", "#######"],
+      ["#######", "#   # #", "#   $@#", "#  #$ #", "#..  ##", "#######"],
+      ["#######", "#     #", "#   $ #", "#  ## #", "##**  #", "#.@ # #", "#######"],
+      ["#######", "##    #", "#@$   #", "#  #  #", "# $#  #", "## .. #", "#######"],
+      ["########", "# .   .#", "# ## $ #", "### #  #", "#@$   ##", "# $  . #", "########"],
+      ["########", "#  # . #", "# .    #", "#   #$ #", "# # #  #", "#$## $ #", "#+#    #", "########"],
+      ["########", "#  .. ##", "#  # $ #", "#  ##  #", "## $+$ #", "#      #", "########"],
+      ["#########", "#   #   #", "# $  $  #", "# .$ # ##", "#    #. #", "# ## # ##", "#. #  $+#", "#########"],
+      ["########", "#   ## #", "#  $@$ #", "#   $  #", "#  # # #", "#    . #", "#.#  . #", "########"],
+      ["########", "###    #", "#@$ .  #", "# $ # .#", "# $ #$ #", "# #  ..#", "# #    #", "########"],
+      ["#########", "#   #  .#", "##  $ # #", "# $ #   #", "#+$     #", "#.# $  ##", "#. ##   #", "#########"],
     ];
     let sokobanLevel = 0, sokobanW = 0, sokobanH = 0;
     let sokobanWalls = null, sokobanTargets = null, sokobanBoxes = [], sokobanPlayer = null;
     let sokobanMoves = 0, sokobanWon = false;
     let sokobanHistory = []; // v3.0-r15：悔棋栈。箱子推到墙角会卡死，以前只能重开本关
+    const SOKO_KEY = "dorm-toybox-sokoban-unlock-v1";
+    let sokobanUnlocked = Math.max(2, parseInt(lsGet(SOKO_KEY, "2"), 10) || 2);
     function sokobanLoad(level) {
       sokobanLevel = level;
       const rows = SOKOBAN_LEVELS[level];
@@ -7033,7 +7047,10 @@
       }); });
       sokobanMoves = 0; sokobanWon = false;
       sokobanHistory = [];
-      ["sokobanL1Btn", "sokobanL2Btn", "sokobanL3Btn"].forEach((id, i) => $(id).classList.toggle("picked", i === level));
+      // v4.0：15 关，上一关/下一关导航，记住解锁进度
+      if ($("sokobanLevelLabel")) $("sokobanLevelLabel").textContent = "第 " + (level + 1) + " / " + SOKOBAN_LEVELS.length + " 关";
+      if ($("sokobanPrevBtn")) $("sokobanPrevBtn").disabled = level <= 0;
+      if ($("sokobanNextBtn")) $("sokobanNextBtn").disabled = level >= SOKOBAN_LEVELS.length - 1 || level >= sokobanUnlocked;
       sokobanRender();
       $("sokobanStatus").textContent = "第 " + (level + 1) + " 关：把所有箱子推到🎯上。";
       $("sokobanStats").textContent = "已走 0 步";
@@ -7086,8 +7103,10 @@
       if (sokobanBoxes.every((b) => sokobanTargets.has(b.x + "," + b.y))) {
         sokobanWon = true;
         SFX.win();
+        if (sokobanLevel + 1 > sokobanUnlocked) { sokobanUnlocked = sokobanLevel + 1; lsSet(SOKO_KEY, String(sokobanUnlocked)); }
         $("sokobanStatus").textContent = "🎉 第 " + (sokobanLevel + 1) + " 关通过！用了 " + sokobanMoves + " 步。"
-          + (sokobanLevel < 2 ? " 点第 " + (sokobanLevel + 2) + " 关继续。" : " 三关全通，你是推箱子大师！");
+          + (sokobanLevel < SOKOBAN_LEVELS.length - 1 ? " 点「下一关」继续。" : " 全部通关，你是推箱子大师！");
+        if ($("sokobanNextBtn")) $("sokobanNextBtn").disabled = sokobanLevel >= SOKOBAN_LEVELS.length - 1;
       }
       sokobanRender();
     }
@@ -7110,12 +7129,12 @@
         if (k) { sokobanMove(k); if (e.preventDefault) e.preventDefault(); }
       });
     }
-    $("sokobanL1Btn").addEventListener("click", () => sokobanLoad(0));
-    $("sokobanL2Btn").addEventListener("click", () => sokobanLoad(1));
-    $("sokobanL3Btn").addEventListener("click", () => sokobanLoad(2));
+    $("sokobanPrevBtn").addEventListener("click", () => { if (sokobanLevel > 0) sokobanLoad(sokobanLevel - 1); });
+    $("sokobanNextBtn").addEventListener("click", () => { if (sokobanLevel < SOKOBAN_LEVELS.length - 1) sokobanLoad(sokobanLevel + 1); });
+    document.querySelectorAll("#sokobanPad [data-dir]").forEach((b) => b.addEventListener("click", () => sokobanMove(b.getAttribute("data-dir"))));
     $("sokobanResetBtn").addEventListener("click", () => sokobanLoad(sokobanLevel));
     $("sokobanUndoBtn").addEventListener("click", sokobanUndo);
-    sokobanLoad(0);
+    sokobanLoad(lsGet(SOKO_KEY, null) === null ? 0 : Math.min(sokobanUnlocked, SOKOBAN_LEVELS.length - 1));
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get sokoban() { return { level: sokobanLevel, player: { x: sokobanPlayer.x, y: sokobanPlayer.y }, boxes: sokobanBoxes.map((b) => ({ x: b.x, y: b.y })), moves: sokobanMoves, won: sokobanWon, canUndo: sokobanHistory.length > 0 }; },
         sokobanLoad(level) { sokobanLoad(level); },

@@ -1913,3 +1913,5 @@ body:not(.in-toy) .howto-more { display: none; }
 .uno-hand { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; justify-content: center; }
 .uno-card.playable { cursor: pointer; transform: translateY(-6px); box-shadow: 0 0 0 2px #fff, 0 6px 14px rgba(255, 255, 255, .35); }
 .uno-card.dim { filter: saturate(.35) brightness(.7); }
+.level-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 10px; font-weight: 700; }
+.level-nav .btn { min-width: 52px; margin: 0; }

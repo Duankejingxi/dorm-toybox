@@ -957,15 +957,12 @@
   <!-- 推箱子 -->
   <section class="panel toy hidden" id="toy-sokoban">
     <h2>📦 推箱子</h2>
-    <p class="hint">把所有箱子推到🎯上。手指滑动或方向键移动，箱子只能推不能拉，别推到墙角卡死，推错了点悔棋。共 3 关。</p>
-    <div class="seg-row" id="sokobanLevelRow">
-      <button class="btn seg-btn picked" id="sokobanL1Btn">第 1 关</button>
-      <button class="btn seg-btn" id="sokobanL2Btn">第 2 关</button>
-      <button class="btn seg-btn" id="sokobanL3Btn">第 3 关</button>
-    </div>
+    <p class="hint">把所有箱子推到🎯上。手指滑动、方向键或下面的按钮移动，箱子只能推不能拉，别推到墙角卡死，推错了点悔棋。共 15 关，通关解锁下一关。</p>
+    <div class="level-nav"><button class="btn ghost-btn small" id="sokobanPrevBtn" aria-label="上一关">◀</button><span id="sokobanLevelLabel">第 1 关</span><button class="btn ghost-btn small" id="sokobanNextBtn" aria-label="下一关">▶</button></div>
     <div class="sokoban-grid" id="sokobanGrid"></div>
     <p class="result-line" id="sokobanStatus">滑动或按方向键，开始推箱子。</p>
     <p class="count-line" id="sokobanStats">已走 0 步</p>
+    <div class="dpad" id="sokobanPad"><button class="btn ghost-btn" data-dir="up" aria-label="上">▲</button><button class="btn ghost-btn" data-dir="left" aria-label="左">◀</button><button class="btn ghost-btn" data-dir="down" aria-label="下">▼</button><button class="btn ghost-btn" data-dir="right" aria-label="右">▶</button></div>
     <div class="btn-row">
       <button class="btn ghost-btn small" id="sokobanUndoBtn">悔棋 ↩</button>
       <button class="btn gold-btn small" id="sokobanResetBtn">重开本关 ↺</button>

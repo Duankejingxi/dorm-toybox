@@ -51,7 +51,7 @@ const TOYS = [
   { id: "gomoku", label: "⚫ 五子棋", howto: "五子棋：你执黑先下，横竖斜连成5个就赢；可切双人对战，黑白轮流落子。", py: "wzq", cat: "game" },
   { id: "piano", label: "🎹 迷你钢琴", howto: "迷你钢琴：点琴键弹，可录下来回放。", py: "mngq", cat: "tool" },
   { id: "gacha", label: "🎴 抽卡模拟器", howto: "抽卡模拟器：单抽/十连，SSR保底90抽，集图鉴。", py: "ckmnq", cat: "game" },
-  { id: "sokoban", label: "📦 推箱子", howto: "推箱子：在棋盘上滑动（或方向键）推箱子，箱子只能推不能拉，全部推到目标点就赢。", py: "txz", cat: "game" },
+  { id: "sokoban", label: "📦 推箱子", howto: "推箱子：滑动或方向键把箱子推到🎯上，只能推不能拉，推错了能悔棋，共 15 关。", py: "txz", cat: "game" },
   { id: "breakout", label: "🧱 打砖块", howto: "打砖块：手指在画布上左右拖动挡板（或方向键），弹球消灭所有砖块，别让球掉下去。", py: "dzk", cat: "game" },
   { id: "tictactoe", label: "⭕ 井字棋", howto: "井字棋：你画叉叉（❌）电脑画圈圈（⭕），连成3个就赢；可切简单/中等/困难、可选谁先手，困难的电脑算满所有走法。", py: "jzq", cat: "game" },
   { id: "linkup", label: "🔗 连连看", howto: "连连看：点两张相同的牌，折线不超过3段就能消。", py: "llk", cat: "game" },

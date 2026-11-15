@@ -40,10 +40,11 @@ const path = require('node:path');
     assert.match(await page.locator('#tomatoCount').textContent(), /1 个番茄/);
     await page.locator('#timerResetBtn').click();
     assert.equal(await page.locator('#timerDisplay').textContent(), '15:00');
+    await page.locator('#homeBtn').click(); // v4.0：玩具页顶栏收起了搜索框，回主页再搜
     await page.locator('#toySearch').fill('数独');
-    assert.equal(await page.locator('#searchResults .tile').count(), 1);
+    assert.equal(await page.locator('#homeAllGrid .tile:visible').count(), 1);
     assert.equal(await page.locator('#sideDrawer').evaluate(el => el.inert), true);
-    await page.locator('#searchResults .tile').click();
+    await page.locator('#homeAllGrid .tile:visible').click();
     assert.equal(await page.locator('#toy-sudoku').isVisible(), true);
     await page.locator('#menuBtn').click();
     await page.keyboard.press('Escape');

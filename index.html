@@ -16,8 +16,10 @@
   <h1>宿舍<span class="gold">玩具盒</span></h1>
   <p class="subtitle">八十个小玩意，<span class="nw">宿舍夜话</span>、<span class="nw">社团破冰</span>、<span class="nw">课间摸鱼</span>都够用。<br>不靠任何真实数据，全凭运气和胆量。</p>
   <div class="nav-top">
-    <button class="btn ghost-btn small" id="homeBtn">🏠 主页</button>
-    <button class="btn ghost-btn small" id="menuBtn">☰ 全部玩具</button>
+    <button class="btn ghost-btn small" id="homeBtn"><span class="home-ico">🏠</span><span class="home-txt"> 主页</span></button>
+    <span class="toybar-title" id="toyBarTitle"></span>
+    <button class="btn ghost-btn small" id="menuBtn" aria-label="全部玩具">☰<span class="menu-txt"> 全部玩具</span></button>
+    <button class="btn ghost-btn small toybar-help" id="toyHelpBtn" aria-label="怎么玩">？</button>
     <button class="btn ghost-btn small" id="sfxBtn" aria-label="音效开关">🔊</button>
   </div>
   <input id="toySearch" type="search" placeholder="🔍 搜玩具，比如：数独、记分、wzxq…" aria-label="搜索玩具">
@@ -1283,10 +1285,11 @@
   </section>
   <section class="panel toy hidden" id="toy-chess">
     <h2>♟️ 象棋</h2>
-    <p class="hint">你执红先走。点棋子再点目标格，吃掉黑将就赢（简化规则：没有将军判定）。</p>
-    <canvas id="chessCanvas" width="320" height="352" style="width:100%;max-width:320px"></canvas>
+    <p class="hint">你执红先走。点棋子再点落点（蓝点可走，红圈可吃）。完整规则：要应将、不能送将、将帅不照面，将死或困毙对方就赢。</p>
+    <div class="seg" id="chessLevels" role="group" aria-label="AI 难度"><button class="seg-btn" data-lv="easy">简单</button><button class="seg-btn" data-lv="normal">中等</button><button class="seg-btn" data-lv="hard">困难</button></div>
+    <canvas id="chessCanvas" width="320" height="352" style="width:100%;max-width:360px"></canvas>
     <p class="result-line" id="chessMsg">轮到你走</p>
-    <div class="btn-row"><button class="btn ghost-btn small" id="chessResetBtn">重开 ↺</button></div>
+    <div class="btn-row"><button class="btn ghost-btn small" id="chessUndoBtn">悔棋 ↩</button><button class="btn ghost-btn small" id="chessResetBtn">重开 ↺</button></div>
   </section>
   <section class="panel toy hidden" id="toy-go">
     <h2>⚫ 围棋9路</h2>
@@ -1310,22 +1313,22 @@
     </div>
   </section>
   <section class="panel toy hidden" id="toy-mahjong">
-    <h2>🀄 简化麻将</h2>
-    <p class="hint">筒条万 1-9。点一张打出，凑 4 副刻子/顺子 + 1 对就胡。</p>
-    <div id="mjHand" class="mj-hand"></div>
+    <h2>🀄 麻将</h2>
+    <p class="hint">你和三家电脑打四人麻将，万条筒共 108 张。轮到你时点一张牌打出；凑齐 4 副（刻子或顺子）加 1 对就胡，七对也算。别人打出的牌能胡就点「胡」，手里有一对就能「碰」。</p>
+    <div id="mjTable" class="mj-table"></div>
+    <div class="btn-row mj-actions hidden" id="mjActions"></div>
     <p class="result-line" id="mjMsg">轮到你打牌</p>
-    <div class="btn-row"><button class="btn ghost-btn small" id="mjResetBtn">重开 ↺</button></div>
+    <div class="btn-row"><button class="btn ghost-btn small" id="mjResetBtn">新一局 ↺</button></div>
+    <p class="count-line" id="mjStats"></p>
   </section>
   <section class="panel toy hidden" id="toy-poker">
     <h2>♠️ 德州扑克</h2>
-    <p class="hint">2 张底牌 + 5 张公共牌，和 AI 比牌型。100 筹码，赢光 AI 就赢。</p>
+    <p class="hint">单挑无限注德州：各 1000 筹码，盲注 5/10 每手轮换。两张底牌 + 五张公共牌凑最大的五张。能过牌、跟注、加注、全下，把 AI 赢光算你赢。</p>
     <div id="pokerTable" class="poker-table"></div>
-    <p class="result-line" id="pokerMsg">你的回合</p>
-    <div class="btn-row">
-      <button class="btn gold-btn small" id="pokerCallBtn">跟注</button>
-      <button class="btn ghost-btn small" id="pokerFoldBtn">弃牌</button>
-      <button class="btn ghost-btn small" id="pokerResetBtn">重开 ↺</button>
-    </div>
+    <p class="result-line" id="pokerMsg">点「开始发牌」</p>
+    <div class="btn-row pk-actions" id="pokerActions"></div>
+    <div class="btn-row"><button class="btn ghost-btn small" id="pokerResetBtn">筹码重置 ↺</button></div>
+    <p class="count-line" id="pokerBest"></p>
   </section>
   <section class="panel toy hidden" id="toy-rhythm">
     <h2>🎵 音游</h2>

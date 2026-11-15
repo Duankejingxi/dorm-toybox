@@ -93,6 +93,53 @@
   function allHomeTiles() {
     return [...homePinnedGrid.querySelectorAll(".tile"), ...homeAllGrid.querySelectorAll(".tile")];
   }
+  /* ---------- v4.0：Canvas 高清屏适配 ----------
+     原来所有画布都按 CSS 像素画，手机（2–3 倍屏）上全是糊的。
+     这里把画布的真实像素放大 dpr 倍，但对游戏代码保持“逻辑尺寸”：
+     cv.width / cv.height 读写的仍是原来的数值，2D 上下文自动带上 dpr 缩放，
+     所以各游戏的绘制、碰撞、坐标换算代码一行都不用改。
+     读写像素（getImageData）的画布（拼豆、涂鸦、表情包）不走这里。 */
+  const HD_DPR = Math.min(3, Math.max(1, Math.round((window.devicePixelRatio || 1) * 4) / 4));
+  function hidpi(cv) {
+    if (!cv || cv._hd || HD_DPR === 1 || typeof cv.getContext !== "function") return cv;
+    const proto = Object.getPrototypeOf(cv);
+    const wd = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "width");
+    const hd = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "height");
+    if (!wd || !hd || proto !== HTMLCanvasElement.prototype) return cv;
+    let lw = wd.get.call(cv), lh = hd.get.call(cv);
+    let ctx = null;
+    const applyScale = () => { if (ctx) ctx.setTransform(HD_DPR, 0, 0, HD_DPR, 0, 0); };
+    cv._hd = true;
+    Object.defineProperty(cv, "width", { configurable: true, get: () => lw, set: (v) => { lw = Number(v) || 0; wd.set.call(cv, Math.round(lw * HD_DPR)); applyScale(); } });
+    Object.defineProperty(cv, "height", { configurable: true, get: () => lh, set: (v) => { lh = Number(v) || 0; hd.set.call(cv, Math.round(lh * HD_DPR)); applyScale(); } });
+    const rawGet = cv.getContext.bind(cv);
+    cv.getContext = function (type, opts) {
+      const c = rawGet(type, opts);
+      if (type !== "2d" || !c) return c;
+      if (!ctx) {
+        ctx = c;
+        const rawSet = c.setTransform.bind(c);
+        c.setTransform = function (a, b, cc, d, e, f) {
+          if (typeof a === "object" && a) { const m = a; return rawSet(m.a * HD_DPR, m.b * HD_DPR, m.c * HD_DPR, m.d * HD_DPR, m.e * HD_DPR, m.f * HD_DPR); }
+          return rawSet(a * HD_DPR, b * HD_DPR, cc * HD_DPR, d * HD_DPR, e * HD_DPR, f * HD_DPR);
+        };
+        c.resetTransform = function () { rawSet(HD_DPR, 0, 0, HD_DPR, 0, 0); };
+        rawSet(HD_DPR, 0, 0, HD_DPR, 0, 0);
+      }
+      return c;
+    };
+    // 没有任何 CSS 宽度时，显示尺寸按逻辑尺寸来（否则会按放大后的像素显示成 3 倍大）
+    if (!cv.style.width && !/(shooter|fruitslice|archery)-canvas/.test(cv.className || "")) { cv.style.width = lw + "px"; cv.style.maxWidth = "100%"; }
+    if (!cv.style.height) cv.style.height = "auto";
+    if (cv.parentNode && cv.parentNode.classList && cv.parentNode.classList.contains("timer-ring-wrap")) { cv.style.width = lw + "px"; cv.style.height = lh + "px"; }
+    wd.set.call(cv, Math.round(lw * HD_DPR)); hd.set.call(cv, Math.round(lh * HD_DPR));
+    return cv;
+  }
+  ["wheelCanvas", "timerRing", "cuRing", "ledgerChart", "bmiGauge", "compassDialCanvas", "noiseGauge", "noiseHist",
+   "snakeCanvas", "tetrisCanvas", "tetrisNext", "breakoutCanvas", "linkupPath", "shooterCanvas", "fruitsliceCanvas",
+   "archeryCanvas", "flappyCanvas", "snake2Canvas", "pongCanvas", "arkanoidCanvas", "chessCanvas", "goCanvas",
+   "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
+
   /* ---------- v1.30 后端优化：懒初始化框架 + 通用工具 ---------- */
   const toyInitFns = {};  // 玩具 id -> 初始化函数（各段落注册）
   const toyInited = {};   // 玩具 id -> 是否已初始化
@@ -369,6 +416,8 @@
     allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     currentToy = id;
+    currentClicked = clickedId;
+    setToyChrome(clickedId);
     if (toyEnterResume[id]) toyEnterResume[id]();
     showHowtoBar(clickedId); // v1.33：新手引导（首次打开显示怎么玩）
     if (window.location.hash !== "#" + clickedId) window.location.hash = clickedId;
@@ -407,6 +456,14 @@
     bar.className = "howto-bar";
     var txt = document.createElement("span");
     txt.textContent = "💡 " + toy.howto;
+    var intro = panel.querySelector(".toy-intro");
+    if (intro && intro.textContent.trim()) {
+      var more = document.createElement("small");
+      more.className = "howto-more";
+      more.textContent = intro.textContent.trim();
+      txt.appendChild(document.createElement("br"));
+      txt.appendChild(more);
+    }
     var x = document.createElement("button");
     x.className = "howto-close";
     x.setAttribute("aria-label", "关闭提示");
@@ -453,6 +510,37 @@
     }
     b.setAttribute("data-tid", tid);
   }
+  /* v4.0：紧凑顶栏——进玩具后顶栏只剩 ← / 名字 / ？ / 🔊，开头说明收进“？” */
+  let currentClicked = null;
+  document.querySelectorAll(".toy").forEach((panel) => {
+    const kids = Array.from(panel.children);
+    const h = kids.findIndex((k) => k.tagName === "H2");
+    for (let i = h + 1; h >= 0 && i < kids.length; i++) {
+      const k = kids[i];
+      if (k.classList.contains("howto-bar")) continue;
+      if (k.tagName === "P" && k.classList.contains("hint") && !k.id) k.classList.add("toy-intro");
+      break;
+    }
+  });
+  function setToyChrome(tid) {
+    try {
+      document.body.classList.toggle("in-toy", !!tid);
+      const t = tid && TOYS.find((x) => x.id === tid);
+      const title = $("toyBarTitle");
+      if (title) title.textContent = t ? t.label : "";
+      const hb = $("homeBtn");
+      if (hb) hb.setAttribute("aria-label", tid ? "返回全部玩具" : "主页");
+      document.title = t ? splitLabel(t.label).name + " · 宿舍玩具盒" : "宿舍玩具盒 · 打开就能玩";
+    } catch (e) { /* 忽略 */ }
+  }
+  if ($("toyHelpBtn")) $("toyHelpBtn").addEventListener("click", () => {
+    if (!currentClicked) return;
+    const panel = $("toy-" + (TOOLBOX_REDIRECT[currentClicked] || currentClicked));
+    const open = panel && panel.querySelector(".howto-bar");
+    if (open) { open.remove(); markHowtoSeen(currentClicked); return; }
+    showHowtoBar(currentClicked, true);
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+  });
   /* v1.27：回主页——藏起所有玩具，露出置顶 + 全部游戏 */
   function showHome(toTop) {
     const fromToy = !!currentToy; // v3.0 第7轮：是否从玩具返回（决定滚动行为）
@@ -463,6 +551,7 @@
     allTiles().forEach((b) => b.classList.remove("active"));
     allHomeTiles().forEach((b) => b.classList.remove("active"));
     currentToy = null;
+    setToyChrome(null);
     try {
       if (window.history && window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
       else window.location.hash = "";
@@ -475,26 +564,36 @@
   }
   function openDrawer() {
     $("sideDrawer").classList.add("open");
+    $("sideDrawer").inert = false;
+    $("menuBtn").setAttribute("aria-expanded", "true");
     $("drawerOverlay").classList.remove("hidden");
     // v3.0 第7轮：打开抽屉时清空抽屉搜索，恢复主过滤状态
     if ($("drawerSearch")) $("drawerSearch").value = "";
     refreshDrawerFilter();
   }
-  function closeDrawer() {
+  function closeDrawer(restoreFocus) {
+    const wasOpen = $("sideDrawer").classList.contains("open");
     $("sideDrawer").classList.remove("open");
+    $("sideDrawer").inert = true;
+    $("menuBtn").setAttribute("aria-expanded", "false");
+    if (wasOpen && restoreFocus === true) { try { $("menuBtn").focus(); } catch (e) {} }
     $("drawerOverlay").classList.add("hidden");
     // v3.0 第7轮：关闭时清空抽屉搜索，下次打开是干净状态
     if ($("drawerSearch")) $("drawerSearch").value = "";
     refreshDrawerFilter();
   }
+  $("sideDrawer").inert = true;
+  $("menuBtn").setAttribute("aria-expanded", "false");
+  $("menuBtn").setAttribute("aria-controls", "sideDrawer");
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("sideDrawer").classList.contains("open")) closeDrawer(true); });
   $("menuBtn").addEventListener("click", openDrawer);
   $("homeBtn").addEventListener("click", () => {
     // v3.0 第7轮：在玩具里点主页→恢复滚动位置；在主页点→回顶部
     if (currentToy) showHome();
     else { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} }
   });
-  $("drawerCloseBtn").addEventListener("click", closeDrawer);
-  $("drawerOverlay").addEventListener("click", closeDrawer);
+  $("drawerCloseBtn").addEventListener("click", () => closeDrawer(true));
+  $("drawerOverlay").addEventListener("click", () => closeDrawer(true));
   // v1.32：音效开关
   const sfxBtn = $("sfxBtn");
   if (sfxBtn) {
@@ -862,6 +961,7 @@
       diceCanvas = document.createElement("canvas");
       diceCanvas.width = 320; diceCanvas.height = 160;
       diceCanvas.className = "dice-canvas";
+      hidpi(diceCanvas);
       stage.appendChild(diceCanvas);
       diceCtx = diceCanvas.getContext("2d");
       return true;
@@ -1233,6 +1333,7 @@
       fortuneCanvas.width = 280; fortuneCanvas.height = 280;
       fortuneCanvas.className = "fortune-radar";
       fortuneCanvas.setAttribute("aria-label", "运势雷达图");
+      hidpi(fortuneCanvas);
       fortuneSec.appendChild(fortuneCanvas);
     }
     function drawFortuneRadar(dims) {
@@ -1503,7 +1604,7 @@
       drawTimerRing();
     }
     function saveTomatoes() {
-      localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday }));
+      try { localStorage.setItem(TOMATO_KEY, JSON.stringify({ day: todayStr(), count: tomatoesToday })); } catch (e) { /* 存储不可用时只在内存里计数 */ }
     }
     // 时长可改：15 / 25 / 45 / 60 分钟，改了就重置
     [15, 25, 45, 60].forEach((m) => {
@@ -10261,8 +10362,10 @@
       board.forEach((c, i) => {
         const d = document.createElement("div");
         const x = i % N, y = Math.floor(i / N);
-        d.style.cssText = "aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;border-radius:2px;" +
-          (c.open ? (c.mine ? "background:#e5484d;color:#fff;" : "background:#2a2f42;color:#fff;") : "background:#1e2230;");
+        const NUMC = ["", "#6ea8ff", "#5fd38d", "#ff7b72", "#c792ea", "#ffb86b", "#56d4dd", "#e6e6e6", "#a0a0a0"];
+        d.style.cssText = "aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;cursor:pointer;border-radius:3px;line-height:1;" +
+          (c.open ? (c.mine ? "background:#e5484d;color:#fff;" : "background:#151925;color:" + (NUMC[c.num] || "#fff") + ";")
+            : "background:linear-gradient(180deg,#4a5578,#363f5c);box-shadow:inset 0 1px 0 rgba(255,255,255,.18);");
         if (c.open) d.textContent = c.mine ? "💣" : (c.num > 0 ? c.num : "");
         else if (c.flag) d.textContent = "🚩";
         d.addEventListener("click", () => { if (mines2SuppressClick) { mines2SuppressClick = false; return; } SFX.unlock(); flagMode ? toggleFlag(x, y) : open(x, y); }); // R19：长按刚结束的这次 click 是同一按压的尾巴，吞掉（格子重建后 click 会落到新格子上，per-cell 标记拦不住，必须用共享标记）
@@ -10301,9 +10404,8 @@
   };
   /* ---- 6. chess 象棋（简化） ---- */
   toyInitFns["chess"] = function () {
-    // 9x10 棋盘，简化规则：车/马/炮/兵/将/士/象
-    const W = 320, H = 352, CW = 320 / 9, CH = H / 10; // R26：行高按画布实高 352/10=35.2（原来 320/10=32：棋画在 320 高里，点击却按 352 高映射，下半区点兵点成上一行、红将几乎点不中）
-    let board = [], sel = null, turn = "red", over = false, msg = "";
+    // v4.0 重写：完整规则（将军、不能送将、将帅照面、将死/困毙判负）+ α-β 搜索 AI + 悔棋
+    const W = 320, H = 352, CW = W / 9, CH = H / 10;
     const INIT = [
       ["bR", "bN", "bB", "bA", "bK", "bA", "bB", "bN", "bR"],
       [null, null, null, null, null, null, null, null, null],
@@ -10316,235 +10418,321 @@
       [null, null, null, null, null, null, null, null, null],
       ["rR", "rN", "rB", "rA", "rK", "rA", "rB", "rN", "rR"],
     ];
-    const NAMES = { K: "将", A: "士", B: "象", R: "车", N: "马", C: "炮", P: "兵" };
+    const NAME_R = { K: "帅", A: "仕", B: "相", R: "车", N: "马", C: "炮", P: "兵" };
+    const NAME_B = { K: "将", A: "士", B: "象", R: "车", N: "马", C: "炮", P: "卒" };
+    const VAL = { K: 10000, R: 600, N: 270, C: 285, B: 120, A: 120, P: 30 };
+    const LEVELS = { easy: { depth: 1, noise: 120, name: "简单" }, normal: { depth: 2, noise: 25, name: "中等" }, hard: { depth: 4, noise: 4, name: "困难" } };
+    const LV_KEY = "dorm-toybox-chess-level-v1";
+    let level = lsGet(LV_KEY, "normal"); if (!LEVELS[level]) level = "normal";
+    let board = [], sel = null, turn = "r", over = false, msg = "", last = null, history = [], thinking = false, checkFlash = 0;
     function reset() {
       board = INIT.map((r) => r.slice());
-      sel = null; turn = "red"; over = false; msg = "轮到你走（红）";
+      sel = null; turn = "r"; over = false; last = null; history = []; thinking = false;
+      msg = "你执红先走 · AI " + LEVELS[level].name;
       draw(); render();
     }
-    function inPalace(x, y, red) {
-      return x >= 3 && x <= 5 && (red ? y >= 7 : y <= 2);
-    }
-    function moves(x, y) {
-      const p = board[y][x];
+    const inB = (x, y) => x >= 0 && x <= 8 && y >= 0 && y <= 9;
+    const inPalace = (x, y, red) => x >= 3 && x <= 5 && (red ? y >= 7 : y <= 2);
+    // 伪合法着法（不检查送将）
+    function pseudo(b, x, y) {
+      const p = b[y][x];
       if (!p) return [];
       const red = p[0] === "r", t = p[1], out = [];
-      const add = (nx, ny) => {
-        if (nx < 0 || nx > 8 || ny < 0 || ny > 9) return;
-        const q = board[ny][nx];
-        if (!q || (q[0] === "r") !== red) out.push([nx, ny]);
-      };
-      const addEmpty = (nx, ny) => {
-        if (nx < 0 || nx > 8 || ny < 0 || ny > 9) return false;
-        if (!board[ny][nx]) { out.push([nx, ny]); return true; }
-        return false;
-      };
-      if (t === "R") {
+      const add = (nx, ny) => { if (!inB(nx, ny)) return; const q = b[ny][nx]; if (!q || (q[0] === "r") !== red) out.push([nx, ny]); };
+      if (t === "R" || t === "C") {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          let nx = x + dx, ny = y + dy;
-          while (nx >= 0 && nx <= 8 && ny >= 0 && ny <= 9) {
-            const q = board[ny][nx];
-            if (!q) out.push([nx, ny]);
-            else { if ((q[0] === "r") !== red) out.push([nx, ny]); break; }
+          let nx = x + dx, ny = y + dy, jumped = false;
+          while (inB(nx, ny)) {
+            const q = b[ny][nx];
+            if (t === "R") { if (!q) out.push([nx, ny]); else { if ((q[0] === "r") !== red) out.push([nx, ny]); break; } }
+            else if (!jumped) { if (!q) out.push([nx, ny]); else jumped = true; }
+            else if (q) { if ((q[0] === "r") !== red) out.push([nx, ny]); break; }
             nx += dx; ny += dy;
           }
         }
       } else if (t === "N") {
         for (const [dx, dy, lx, ly] of [[1, 2, 0, 1], [-1, 2, 0, 1], [1, -2, 0, -1], [-1, -2, 0, -1], [2, 1, 1, 0], [2, -1, 1, 0], [-2, 1, -1, 0], [-2, -1, -1, 0]]) {
-          if (board[y + ly] && board[y + ly][x + lx]) continue; // 蹩腿
+          if (!inB(x + dx, y + dy) || b[y + ly][x + lx]) continue;
           add(x + dx, y + dy);
         }
       } else if (t === "B") {
         for (const [dx, dy] of [[2, 2], [-2, 2], [2, -2], [-2, -2]]) {
-          const mx = x + dx / 2, my = y + dy / 2;
-          if (board[my] && board[my][mx]) continue; // 塞象眼
           const nx = x + dx, ny = y + dy;
-          if (nx < 0 || nx > 8 || ny < 0 || ny > 9) continue;
-          if (red && ny < 5) continue; if (!red && ny > 4) continue; // 不过河
+          if (!inB(nx, ny) || b[y + dy / 2][x + dx / 2]) continue;
+          if (red ? ny < 5 : ny > 4) continue;
           add(nx, ny);
         }
       } else if (t === "A") {
-        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-          const nx = x + dx, ny = y + dy;
-          if (inPalace(nx, ny, red)) add(nx, ny);
-        }
+        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) if (inPalace(x + dx, y + dy, red)) add(x + dx, y + dy);
       } else if (t === "K") {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = x + dx, ny = y + dy;
-          if (inPalace(nx, ny, red)) add(nx, ny);
-        }
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (inPalace(x + dx, y + dy, red)) add(x + dx, y + dy);
       } else if (t === "P") {
-        const fwd = red ? -1 : 1;
-        addEmpty(x, y + fwd);
-        const crossed = red ? y <= 4 : y >= 5;
-        if (crossed) { addEmpty(x + 1, y); addEmpty(x - 1, y); }
-        // 吃子
-        for (const [dx, dy] of [[0, fwd], [1, 0], [-1, 0]]) {
-          if (dy === 0 && !crossed) continue;
-          const nx = x + dx, ny = y + dy;
-          if (nx < 0 || nx > 8 || ny < 0 || ny > 9) continue;
-          const q = board[ny][nx];
-          if (q && (q[0] === "r") !== red) out.push([nx, ny]);
-        }
-      } else if (t === "C") {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          let nx = x + dx, ny = y + dy, jumped = false;
-          while (nx >= 0 && nx <= 8 && ny >= 0 && ny <= 9) {
-            const q = board[ny][nx];
-            if (!jumped) {
-              if (!q) out.push([nx, ny]);
-              else jumped = true;
-            } else {
-              if (q) { if ((q[0] === "r") !== red) out.push([nx, ny]); break; }
-            }
-            nx += dx; ny += dy;
-          }
-        }
+        const fwd = red ? -1 : 1, crossed = red ? y <= 4 : y >= 5;
+        add(x, y + fwd);
+        if (crossed) { add(x + 1, y); add(x - 1, y); }
       }
       return out;
     }
-    function kingsFace() {
-      // 将帅不能照面：同一列且中间无子
-      let rk = null, bk = null;
+    function findK(b, c) { for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) if (b[y][x] === c + "K") return [x, y]; return null; }
+    function attacked(b, tx, ty, byColor) {
       for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
-        const p = board[y][x];
-        if (p === "rK") rk = [x, y];
-        if (p === "bK") bk = [x, y];
+        const p = b[y][x];
+        if (!p || p[0] !== byColor) continue;
+        if (pseudo(b, x, y).some(([mx, my]) => mx === tx && my === ty)) return true;
       }
+      return false;
+    }
+    function kingsFace(b) {
+      const rk = findK(b, "r"), bk = findK(b, "b");
       if (!rk || !bk || rk[0] !== bk[0]) return false;
-      const x = rk[0], y1 = Math.min(rk[1], bk[1]), y2 = Math.max(rk[1], bk[1]);
-      for (let y = y1 + 1; y < y2; y++) if (board[y][x]) return false;
+      for (let y = bk[1] + 1; y < rk[1]; y++) if (b[y][rk[0]]) return false;
       return true;
     }
-    function doMove(fx, fy, tx, ty) {
-      const p = board[fy][fx];
-      const target = board[ty][tx];
-      // 试走：检查是否导致将帅照面
-      board[ty][tx] = p; board[fy][fx] = null;
-      if (kingsFace()) {
-        board[fy][fx] = p; board[ty][tx] = target; // 撤销
-        return "illegal";
-      }
-      if (SFX.enabled) SFX.click();
-      if (target && target[1] === "K") {
-        over = true;
-        msg = target[0] === "b" ? "🎉 你赢了！" : "😅 AI 赢了";
-        if (SFX.enabled) { if (target[0] === "b") SFX.win(); else SFX.lose(); }
-      }
-      return target;
+    function inCheck(b, c) {
+      const k = findK(b, c);
+      if (!k) return true;
+      return kingsFace(b) || attacked(b, k[0], k[1], c === "r" ? "b" : "r");
     }
-    function aiMove() {
-      if (over || turn !== "black") return;
-      const all = [];
+    function legalFrom(b, x, y) {
+      const p = b[y][x];
+      if (!p) return [];
+      return pseudo(b, x, y).filter(([tx, ty]) => {
+        const cap = b[ty][tx];
+        b[ty][tx] = p; b[y][x] = null;
+        const bad = inCheck(b, p[0]);
+        b[y][x] = p; b[ty][tx] = cap;
+        return !bad;
+      });
+    }
+    function allLegal(b, c) {
+      const out = [];
       for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
-        const p = board[y][x];
-        if (p && p[0] === "b") {
-          for (const [tx, ty] of moves(x, y)) {
-            const t = board[ty][tx];
-            all.push({ fx: x, fy: y, tx, ty, cap: t ? 1 : 0, val: t ? { K: 99, R: 9, N: 4, C: 4, B: 2, A: 2, P: 1 }[t[1]] : 0 });
-          }
+        const p = b[y][x];
+        if (p && p[0] === c) for (const [tx, ty] of legalFrom(b, x, y)) out.push([x, y, tx, ty]);
+      }
+      return out;
+    }
+    // ---- AI：负极大值 + α-β，伪合法着法里吃将即胜 ----
+    function posBonus(t, red, x, y) {
+      const fy = red ? 9 - y : y; // 前进步数（0=己方底线）
+      if (t === "P") return fy >= 5 ? 40 + (x >= 2 && x <= 6 ? 20 : 0) + (fy >= 7 ? 10 : 0) : fy * 4;
+      if (t === "N" || t === "C") return (x >= 2 && x <= 6 ? 12 : 0) + Math.min(fy, 6) * 3;
+      if (t === "R") return Math.min(fy, 6) * 4;
+      return 0;
+    }
+    function evaluate(b) { // 黑方视角
+      let s = 0;
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+        const p = b[y][x]; if (!p) continue;
+        const v = VAL[p[1]] + posBonus(p[1], p[0] === "r", x, y);
+        s += p[0] === "b" ? v : -v;
+      }
+      return s;
+    }
+    function genOrdered(b, c) {
+      const ms = [];
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+        const p = b[y][x];
+        if (!p || p[0] !== c) continue;
+        for (const [tx, ty] of pseudo(b, x, y)) {
+          const cap = b[ty][tx];
+          ms.push([x, y, tx, ty, cap ? VAL[cap[1]] * 10 - VAL[p[1]] / 10 : 0]);
         }
       }
-      if (!all.length) { over = true; msg = "🎉 你赢了！AI 无棋可走"; return; }
-      // 吃子优先；无吃子时偏好向前走（黑方 y 增大为前进），带小随机
-      for (const m of all) m.score = m.val * 10 + Math.max(-2, Math.min(2, m.ty - m.fy)) + Math.random() * 2;
-      all.sort((a, b) => b.score - a.score);
-      const pick = all[0];
-      const r = doMove(pick.fx, pick.fy, pick.tx, pick.ty);
-      if (r === "illegal") {
-        // AI 误走照面，换个走法
-        const alt = all.find((m) => { const t = board[m.ty][m.tx]; board[m.ty][m.tx] = board[m.fy][m.fx]; board[m.fy][m.fx] = null; const bad = kingsFace(); board[m.fy][m.fx] = board[m.ty][m.tx]; board[m.ty][m.tx] = t; return !bad; });
-        if (alt) doMove(alt.fx, alt.fy, alt.tx, alt.ty);
+      ms.sort((a, z) => z[4] - a[4]);
+      return ms;
+    }
+    let nodes = 0;
+    function search(b, c, depth, alpha, beta) {
+      nodes++;
+      if (!findK(b, c)) return -100000 - depth;
+      if (depth === 0) return (c === "b" ? 1 : -1) * evaluate(b);
+      const opp = c === "r" ? "b" : "r";
+      let best = -Infinity, any = false;
+      for (const [x, y, tx, ty] of genOrdered(b, c)) {
+        const p = b[y][x], cap = b[ty][tx];
+        if (cap && cap[1] === "K") return 100000 + depth;
+        b[ty][tx] = p; b[y][x] = null;
+        if (kingsFace(b)) { b[y][x] = p; b[ty][tx] = cap; continue; }
+        any = true;
+        const v = -search(b, opp, depth - 1, -beta, -alpha);
+        b[y][x] = p; b[ty][tx] = cap;
+        if (v > best) best = v;
+        if (v > alpha) alpha = v;
+        if (alpha >= beta) break;
       }
-      turn = "red";
-      if (!over) msg = "轮到你走（红）";
-      draw(); render();
+      return any ? best : -100000;
+    }
+    function aiPick() {
+      const b = board.map((r) => r.slice());
+      const lv = LEVELS[level];
+      const moves = allLegal(b, "b");
+      if (!moves.length) return null;
+      nodes = 0;
+      // 吃子着法排前面，根节点也用 α 剪枝（留出随机扰动的余量）
+      moves.sort((a, z) => (b[z[3]][z[2]] ? VAL[b[z[3]][z[2]][1]] : 0) - (b[a[3]][a[2]] ? VAL[b[a[3]][a[2]][1]] : 0));
+      let bestV = -Infinity;
+      let scored = moves.map(([x, y, tx, ty]) => {
+        const p = b[y][x], cap = b[ty][tx];
+        b[ty][tx] = p; b[y][x] = null;
+        const v = -search(b, "r", lv.depth - 1, -Infinity, -(bestV - lv.noise - 1));
+        b[y][x] = p; b[ty][tx] = cap;
+        if (v > bestV) bestV = v;
+        return { m: [x, y, tx, ty], v: v + Math.random() * lv.noise };
+      });
+      scored.sort((a, z) => z.v - a.v);
+      return scored[0].m;
+    }
+    function applyMove(fx, fy, tx, ty) {
+      history.push({ board: board.map((r) => r.slice()), last, turn });
+      const cap = board[ty][tx];
+      board[ty][tx] = board[fy][fx]; board[fy][fx] = null;
+      last = { fx, fy, tx, ty };
+      turn = turn === "r" ? "b" : "r";
+      if (SFX.enabled) { if (cap) SFX.pop ? SFX.pop() : SFX.click(); else SFX.click(); }
+      // 终局与将军
+      const moves = allLegal(board, turn);
+      const chk = inCheck(board, turn);
+      if (!moves.length) {
+        over = true;
+        const redWins = turn === "b";
+        msg = redWins ? (chk ? "🎉 将死！你赢了" : "🎉 黑方困毙，你赢了") : (chk ? "😵 被将死了，AI 赢" : "😵 你无子可动（困毙），AI 赢");
+        if (SFX.enabled) { if (redWins) SFX.win(); else SFX.lose(); }
+      } else if (chk) {
+        msg = turn === "r" ? "⚠️ 将军！快应将" : "将军！";
+        checkFlash = Date.now();
+      } else {
+        msg = turn === "r" ? "轮到你走（红）" : "AI 思考中…";
+      }
+    }
+    function aiTurn() {
+      if (over || turn !== "b") return;
+      thinking = true; render();
+      setTimeout(() => {
+        const m = aiPick();
+        thinking = false;
+        if (!m) { over = true; msg = "🎉 你赢了！"; draw(); render(); return; }
+        applyMove(m[0], m[1], m[2], m[3]);
+        draw(); render();
+      }, 60);
     }
     function onTap(x, y) {
-      if (over || turn !== "red") return;
+      if (over || turn !== "r" || thinking) return;
       SFX.unlock();
       if (sel) {
-        const ms = moves(sel.x, sel.y);
+        const ms = legalFrom(board, sel.x, sel.y);
         if (ms.some(([mx, my]) => mx === x && my === y)) {
-          const r = doMove(sel.x, sel.y, x, y);
-          if (r === "illegal") { msg = "⚠️ 将帅不能照面！"; draw(); render(); return; }
           sel = null;
-          if (!over) { turn = "black"; msg = "AI 思考中…"; draw(); render(); setTimeout(aiMove, 500); return; }
+          applyMove(sel0.x, sel0.y, x, y);
+          draw(); render();
+          if (!over) setTimeout(aiTurn, 250);
+          return;
+        }
+        // 点了不能走的地方：要是送将的走法给个提示
+        if (pseudo(board, sel.x, sel.y).some(([mx, my]) => mx === x && my === y)) {
+          msg = inCheck(board, "r") ? "⚠️ 正被将军，这步解不了将" : "⚠️ 这步会送将，不能走";
           draw(); render(); return;
         }
       }
       const p = board[y] && board[y][x];
-      if (p && p[0] === "r") { sel = { x, y }; if (SFX.enabled) SFX.click(); }
+      if (p && p[0] === "r") { sel = { x, y }; sel0 = sel; if (SFX.enabled) SFX.click(); msg = inCheck(board, "r") ? "⚠️ 将军！快应将" : "轮到你走（红）"; }
       else sel = null;
+      draw(); render();
+    }
+    let sel0 = null;
+    function undo() {
+      if (thinking || !history.length) return;
+      let h = history.pop();
+      while (h.turn !== "r" && history.length) h = history.pop();
+      if (h.turn !== "r") return;
+      board = h.board; last = h.last; turn = "r"; over = false; sel = null;
+      msg = "已悔棋，轮到你走";
       draw(); render();
     }
     function draw() {
       const cv = $("chessCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
       try {
-        ctx.fillStyle = "#e8c98a"; ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = "#8b5a2b"; ctx.lineWidth = 1;
-        for (let i = 0; i < 10; i++) {
-          ctx.beginPath(); ctx.moveTo(CW / 2, i * CH + CH / 2); ctx.lineTo(W - CW / 2, i * CH + CH / 2); ctx.stroke();
-        }
+        const g = ctx.createLinearGradient ? ctx.createLinearGradient(0, 0, W, H) : null;
+        if (g) { g.addColorStop(0, "#f1d49c"); g.addColorStop(1, "#dcb26e"); ctx.fillStyle = g; } else ctx.fillStyle = "#e8c98a";
+        ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = "#7a4a1e"; ctx.lineWidth = 1;
+        const X = (i) => i * CW + CW / 2, Y = (i) => i * CH + CH / 2;
+        ctx.strokeRect(X(0) - 4, Y(0) - 4, X(8) - X(0) + 8, Y(9) - Y(0) + 8);
+        for (let i = 0; i < 10; i++) { ctx.beginPath(); ctx.moveTo(X(0), Y(i)); ctx.lineTo(X(8), Y(i)); ctx.stroke(); }
         for (let i = 0; i < 9; i++) {
-          ctx.beginPath(); ctx.moveTo(i * CW + CW / 2, CH / 2);
-          ctx.lineTo(i * CW + CW / 2, 4 * CH + CH / 2); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(i * CW + CW / 2, 5 * CH + CH / 2);
-          ctx.lineTo(i * CW + CW / 2, 9 * CH + CH / 2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(X(i), Y(0)); ctx.lineTo(X(i), Y(i === 0 || i === 8 ? 9 : 4)); ctx.stroke();
+          if (i > 0 && i < 8) { ctx.beginPath(); ctx.moveTo(X(i), Y(5)); ctx.lineTo(X(i), Y(9)); ctx.stroke(); }
         }
-        // 楚河汉界
-        ctx.fillStyle = "#8b5a2b"; ctx.font = "14px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("楚 河            汉 界", W / 2, 5 * CH - 4);
-        // 九宫斜线
         for (const [y0, y1] of [[0, 2], [7, 9]]) {
-          for (const [x0, x1] of [[3, 5]]) {
-            ctx.beginPath(); ctx.moveTo(x0 * CW + CW / 2, y0 * CH + CH / 2); ctx.lineTo(x1 * CW + CW / 2, y1 * CH + CH / 2); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(x1 * CW + CW / 2, y0 * CH + CH / 2); ctx.lineTo(x0 * CW + CW / 2, y1 * CH + CH / 2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(X(3), Y(y0)); ctx.lineTo(X(5), Y(y1)); ctx.moveTo(X(5), Y(y0)); ctx.lineTo(X(3), Y(y1)); ctx.stroke();
+        }
+        ctx.fillStyle = "#7a4a1e"; ctx.font = "bold 16px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("楚 河", X(2), (Y(4) + Y(5)) / 2); ctx.fillText("汉 界", X(6), (Y(4) + Y(5)) / 2);
+        if (last) {
+          ctx.strokeStyle = "rgba(30,110,255,.85)"; ctx.lineWidth = 2;
+          for (const [lx, ly] of [[last.fx, last.fy], [last.tx, last.ty]]) {
+            const cx = X(lx), cy = Y(ly), r = 16, k = 5;
+            ctx.beginPath();
+            for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+              ctx.moveTo(cx + sx * r, cy + sy * (r - k)); ctx.lineTo(cx + sx * r, cy + sy * r); ctx.lineTo(cx + sx * (r - k), cy + sy * r);
+            }
+            ctx.stroke();
           }
         }
-        const ms = sel ? moves(sel.x, sel.y) : [];
+        const ms = sel ? legalFrom(board, sel.x, sel.y) : [];
+        const chk = !over && inCheck(board, turn) ? findK(board, turn) : null;
         for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
           const p = board[y][x];
-          const cx = x * CW + CW / 2, cy = y * CH + CH / 2;
-          if (ms.some(([mx, my]) => mx === x && my === y)) {
-            ctx.fillStyle = "rgba(79,124,255,0.35)";
-            ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.fill();
-          }
+          const cx = X(x), cy = Y(y);
           if (!p) continue;
           const red = p[0] === "r";
-          if (sel && sel.x === x && sel.y === y) {
-            ctx.fillStyle = "rgba(79,124,255,0.5)";
-            ctx.beginPath(); ctx.arc(cx, cy, 15, 0, 7); ctx.fill();
-          }
-          ctx.fillStyle = "#f5e6c8";
-          ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill();
-          ctx.strokeStyle = red ? "#c0392b" : "#222"; ctx.lineWidth = 2; ctx.stroke();
-          ctx.fillStyle = red ? "#c0392b" : "#222";
-          ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(NAMES[p[1]], cx, cy + 1);
+          ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.arc(cx + 1.5, cy + 2.5, 15, 0, 7); ctx.fill();
+          ctx.fillStyle = sel && sel.x === x && sel.y === y ? "#fff3c4" : "#f7e7c6";
+          ctx.beginPath(); ctx.arc(cx, cy - (sel && sel.x === x && sel.y === y ? 2 : 0), 15, 0, 7); ctx.fill();
+          ctx.strokeStyle = red ? "#b8261b" : "#1d1d1d"; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(cx, cy - (sel && sel.x === x && sel.y === y ? 2 : 0), 12.5, 0, 7); ctx.stroke();
+          if (chk && chk[0] === x && chk[1] === y) { ctx.strokeStyle = "#ff2d2d"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 17, 0, 7); ctx.stroke(); }
+          ctx.fillStyle = red ? "#b8261b" : "#1d1d1d";
+          ctx.font = "bold 16px 'KaiTi','STKaiti',serif";
+          ctx.fillText((red ? NAME_R : NAME_B)[p[1]], cx, cy + 1 - (sel && sel.x === x && sel.y === y ? 2 : 0));
+        }
+        for (const [mx, my] of ms) {
+          const cx = X(mx), cy = Y(my);
+          if (board[my][mx]) { ctx.strokeStyle = "rgba(220,40,40,.9)"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, 16, 0, 7); ctx.stroke(); }
+          else { ctx.fillStyle = "rgba(30,110,255,.55)"; ctx.beginPath(); ctx.arc(cx, cy, 5.5, 0, 7); ctx.fill(); }
         }
         ctx.textBaseline = "alphabetic";
       } catch (e) {}
     }
-    function render() { $("chessMsg").textContent = msg; }
+    function render() {
+      $("chessMsg").textContent = thinking ? "AI 思考中…" : msg;
+      document.querySelectorAll("#chessLevels [data-lv]").forEach((b) => b.classList.toggle("active", b.getAttribute("data-lv") === level));
+    }
     const cv = $("chessCanvas");
     if (cv) cv.addEventListener("pointerdown", (e) => {
-      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 352 };
-      const x = Math.floor((e.clientX - rect.left) * 9 / (rect.width || 320));
-      const y = Math.floor((e.clientY - rect.top) * 10 / (rect.height || 352));
-      if (x >= 0 && x < 9 && y >= 0 && y < 10) onTap(x, y);
+      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: W, height: H };
+      const x = Math.floor((e.clientX - rect.left) * 9 / (rect.width || W));
+      const y = Math.floor((e.clientY - rect.top) * 10 / (rect.height || H));
+      if (inB(x, y)) onTap(x, y);
     });
     $("chessResetBtn").addEventListener("click", reset);
+    if ($("chessUndoBtn")) $("chessUndoBtn").addEventListener("click", undo);
+    document.querySelectorAll("#chessLevels [data-lv]").forEach((b) => b.addEventListener("click", () => {
+      level = b.getAttribute("data-lv"); lsSet(LV_KEY, level); reset();
+    }));
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get chess() { return { turn, over, msg }; },
+      get chess() { return { turn: turn === "r" ? "red" : "black", over, msg, level, nodes }; },
       chessMove(fx, fy, tx, ty) {
-        const ms = moves(fx, fy);
-        if (ms.some(([mx, my]) => mx === tx && my === ty)) { doMove(fx, fy, tx, ty); turn = "black"; draw(); render(); return true; }
-        return false;
+        if (over || turn !== "r") return false;
+        if (!legalFrom(board, fx, fy).some(([mx, my]) => mx === tx && my === ty)) return false;
+        applyMove(fx, fy, tx, ty); draw(); render(); return true;
       },
-      chessAi() { aiMove(); },
+      chessAi() { if (turn === "b" && !over) { const m = aiPick(); if (m) applyMove(m[0], m[1], m[2], m[3]); draw(); render(); } },
+      chessSet(rows, t) { board = rows.map((r) => r.slice()); turn = t || "r"; over = false; history = []; last = null; draw(); render(); },
+      chessLegal(c) { return allLegal(board, c || turn).length; },
+      chessInCheck(c) { return inCheck(board, c || turn); },
     }));
   };
 
@@ -10963,258 +11151,521 @@
 
   /* ---- 9. mahjong 简化麻将 ---- */
   toyInitFns["mahjong"] = function () {
-    // 筒=0-8, 条=9-17, 万=18-26
-    const SUITS = ["筒", "条", "万"];
-    let wall = [], hand = [], over = false, msg = "";
-    function tileName(t) { return SUITS[Math.floor(t / 9)] + ((t % 9) + 1); }
+    // v4.0 重写：你 + 3 家 AI 的四人麻将（万条筒 108 张，可碰、点炮胡、自摸、七对，带听牌提示）
+    const SUIT = ["万", "条", "筒"], SUIT_CLS = ["mj-wan", "mj-tiao", "mj-tong"];
+    const NUM = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
+    const SEAT = ["你", "下家", "对家", "上家"];
+    const STAT_KEY = "dorm-toybox-mj-stats-v1";
+    let stats = (() => { try { const v = JSON.parse(lsGet(STAT_KEY, "{}")); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })();
+    stats = { games: stats.games | 0, wins: stats.wins | 0, deals: stats.deals | 0 };
+    let wall = [], P = [], cur = 0, phase = "over", last = null, drawn = -1, msg = "", claim = null, timer = null, result = null;
+    const tName = (t) => NUM[t % 9] + SUIT[Math.floor(t / 9)];
+    const counts = (arr) => { const c = new Array(27).fill(0); for (const t of arr) c[t]++; return c; };
+    function canMeld(c, i) {
+      while (i < 27 && !c[i]) i++;
+      if (i >= 27) return true;
+      if (c[i] >= 3) { c[i] -= 3; const ok = canMeld(c, i); c[i] += 3; if (ok) return true; }
+      if (i % 9 <= 6 && c[i + 1] && c[i + 2]) { c[i]--; c[i + 1]--; c[i + 2]--; const ok = canMeld(c, i); c[i]++; c[i + 1]++; c[i + 2]++; if (ok) return true; }
+      return false;
+    }
+    function isWin(hand) {
+      if (hand.length % 3 !== 2) return false;
+      const c = counts(hand);
+      if (hand.length === 14 && c.every((n) => n === 0 || n === 2 || n === 4)) return true; // 七对
+      for (let t = 0; t < 27; t++) if (c[t] >= 2) { c[t] -= 2; const ok = canMeld(c, 0); c[t] += 2; if (ok) return true; }
+      return false;
+    }
+    function waits(hand) { const out = []; for (let t = 0; t < 27; t++) if (isWin(hand.concat([t]))) out.push(t); return out; }
+    // 向听数（普通型），AI 用来挑打哪张
+    function shanten(hand, melds) {
+      const c = counts(hand); let best = 8;
+      (function rec(i, m, t, p) {
+        while (i < 27 && !c[i]) i++;
+        if (i >= 27) { const mm = m + melds; const s = 8 - 2 * mm - Math.min(t, 4 - mm) - p; if (s < best) best = s; return; }
+        if (c[i] >= 3) { c[i] -= 3; rec(i, m + 1, t, p); c[i] += 3; }
+        if (i % 9 <= 6 && c[i + 1] && c[i + 2]) { c[i]--; c[i + 1]--; c[i + 2]--; rec(i, m + 1, t, p); c[i]++; c[i + 1]++; c[i + 2]++; }
+        if (c[i] >= 2) { c[i] -= 2; if (!p) rec(i, m, t, 1); rec(i, m, t + 1, p); c[i] += 2; }
+        if (i % 9 <= 7 && c[i + 1]) { c[i]--; c[i + 1]--; rec(i, m, t + 1, p); c[i]++; c[i + 1]++; }
+        if (i % 9 <= 6 && c[i + 2]) { c[i]--; c[i + 2]--; rec(i, m, t + 1, p); c[i]++; c[i + 2]++; }
+        c[i]--; rec(i + 1, m, t, p); c[i]++;
+      })(0, 0, 0, 0);
+      return best;
+    }
+    function isolation(hand, t) {
+      const c = counts(hand); let s = 0;
+      if (c[t] >= 2) s += 3;
+      const r = t % 9;
+      for (const d of [-2, -1, 1, 2]) { const u = t + d; if (r + d >= 0 && r + d <= 8 && c[u]) s += Math.abs(d) === 1 ? 2 : 1; }
+      if (r === 0 || r === 8) s -= 1;
+      return s;
+    }
+    function aiChooseDiscard(p) {
+      let best = null;
+      const seen = new Set();
+      p.hand.forEach((t, i) => {
+        if (seen.has(t)) return; seen.add(t);
+        const rest = p.hand.slice(); rest.splice(i, 1);
+        const sh = shanten(rest, p.melds.length);
+        const score = sh * 100 + isolation(rest, t) + Math.random();
+        if (!best || score < best.score) best = { i, score };
+      });
+      return best.i;
+    }
+    function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+    function later(fn, ms) { clearTimer(); timer = setTimeout(() => { timer = null; fn(); }, ms); }
     function reset() {
+      clearTimer();
       wall = [];
       for (let t = 0; t < 27; t++) for (let k = 0; k < 4; k++) wall.push(t);
       shuffle(wall);
-      hand = [];
-      for (let i = 0; i < 13; i++) hand.push(wall.pop());
-      sortHand();
-      over = false;
-      // 开局摸一张
-      hand.push(wall.pop()); sortHand();
-      msg = checkWin() ? "🎉 天胡！" : "轮到你打牌（点一张打出）";
-      if (checkWin()) { over = true; if (SFX.enabled) SFX.win(); }
-      draw(); render();
+      P = [0, 1, 2, 3].map(() => ({ hand: [], melds: [], river: [] }));
+      for (let r = 0; r < 13; r++) for (const p of P) p.hand.push(wall.pop());
+      P.forEach((p) => p.hand.sort((a, b) => a - b));
+      last = null; claim = null; result = null; drawn = -1;
+      stats.deals++; saveStats();
+      drawFor(0);
     }
-    function sortHand() { hand.sort((a, b) => a - b); }
-    function checkWin() {
-      // 4 副 + 1 对
-      const c = {};
-      for (const t of hand) c[t] = (c[t] || 0) + 1;
-      for (let pair = 0; pair < 27; pair++) {
-        if ((c[pair] || 0) < 2) continue;
-        const rc = Object.assign({}, c);
-        rc[pair] -= 2;
-        if (canMeld(rc)) return true;
-      }
-      return false;
+    function saveStats() { lsSet(STAT_KEY, JSON.stringify(stats)); }
+    function endGame(winner, how, from) {
+      clearTimer(); phase = "over"; claim = null;
+      result = { winner, how, from };
+      if (winner === 0) { stats.wins++; if (SFX.enabled) SFX.win(); }
+      else if (SFX.enabled && winner >= 0) SFX.lose();
+      stats.games++; saveStats();
+      if (winner < 0) msg = "😅 牌摸完了，流局";
+      else if (winner === 0) msg = how === "tsumo" ? "🎉 自摸！你胡了" : "🎉 胡了！" + SEAT[from] + "点炮";
+      else msg = how === "tsumo" ? "😵 " + SEAT[winner] + "自摸胡了" : (from === 0 ? "😵 你点炮了，" + SEAT[winner] + "胡" : "😐 " + SEAT[winner] + "胡了（" + SEAT[from] + "点炮）");
+      draw();
     }
-    function canMeld(c) {
-      for (let t = 0; t < 27; t++) {
-        while ((c[t] || 0) > 0) {
-          // 刻子
-          if (c[t] >= 3) { c[t] -= 3; continue; }
-          // 顺子
-          const s = t % 9;
-          if (s <= 6 && (c[t + 1] || 0) > 0 && (c[t + 2] || 0) > 0) { c[t]--; c[t + 1]--; c[t + 2]--; continue; }
-          return false;
-        }
-      }
-      return true;
-    }
-    function discard(i) {
-      if (over) return;
-      SFX.unlock();
-      hand.splice(i, 1);
-      if (SFX.enabled) SFX.click();
-      // AI 回合：简化，AI 直接摸打
-      if (wall.length === 0) { over = true; msg = "😅 牌墙空了，流局"; draw(); render(); return; }
-      // 玩家摸牌
-      hand.push(wall.pop()); sortHand();
-      if (checkWin()) {
-        over = true; msg = "🎉 胡了！" + hand.map(tileName).join(" ");
-        if (SFX.enabled) SFX.win();
+    function drawFor(i) {
+      if (!wall.length) { endGame(-1); return; }
+      cur = i;
+      const t = wall.pop();
+      const p = P[i];
+      if (i === 0) {
+        p.hand.sort((a, b) => a - b);
+        p.hand.push(t); drawn = p.hand.length - 1;
+        phase = "discard";
+        msg = isWin(p.hand) ? "可以自摸！点「胡」，或者继续打一张" : "摸到 " + tName(t) + "，打一张";
+        draw();
       } else {
-        msg = "轮到你打牌（剩 " + wall.length + " 张）";
+        p.hand.push(t);
+        phase = "ai";
+        draw();
+        later(() => {
+          if (isWin(p.hand)) { endGame(i, "tsumo"); return; }
+          aiDiscard(i);
+        }, 520);
       }
-      draw(); render();
     }
+    function aiDiscard(i) {
+      const p = P[i];
+      const k = aiChooseDiscard(p);
+      const t = p.hand.splice(k, 1)[0];
+      p.hand.sort((a, b) => a - b);
+      afterDiscard(i, t);
+    }
+    function afterDiscard(i, t) {
+      P[i].river.push(t);
+      last = { tile: t, from: i };
+      if (SFX.enabled) SFX.click();
+      resolveClaims(i, t, false);
+    }
+    function resolveClaims(i, t, skipUser) {
+      // 1) 胡（按出牌后的座次优先）
+      for (let k = 1; k <= 3; k++) {
+        const j = (i + k) % 4;
+        if (!isWin(P[j].hand.concat([t]))) continue;
+        if (j === 0) { if (skipUser) continue; offer(i, t, true, P[0].hand.filter((x) => x === t).length >= 2); return; }
+        P[j].hand.push(t); P[i].river.pop(); endGame(j, "ron", i); return;
+      }
+      // 2) 碰
+      for (let k = 1; k <= 3; k++) {
+        const j = (i + k) % 4;
+        if (P[j].hand.filter((x) => x === t).length < 2) continue;
+        if (j === 0) { if (skipUser) continue; offer(i, t, false, true); return; }
+        // AI：碰了能降向听才碰
+        const p = P[j], rest = p.hand.slice();
+        rest.splice(rest.indexOf(t), 1); rest.splice(rest.indexOf(t), 1);
+        const before = shanten(p.hand, p.melds.length);
+        let after = 9;
+        for (let q = 0; q < rest.length; q++) { const r2 = rest.slice(); r2.splice(q, 1); after = Math.min(after, shanten(r2, p.melds.length + 1)); }
+        if (after < before || Math.random() < 0.25) { doPung(j, i, t); return; }
+      }
+      // 3) 没人要，下家摸牌
+      phase = "ai"; draw();
+      later(() => drawFor((i + 1) % 4), i === 0 ? 260 : 380);
+    }
+    function offer(from, t, canRon, canPung) {
+      claim = { from, tile: t, canRon, canPung };
+      phase = "claim";
+      msg = SEAT[from] + "打出 " + tName(t) + (canRon ? "，你能胡！" : "，要碰吗？");
+      draw();
+    }
+    function doPung(j, from, t) {
+      const p = P[j];
+      p.hand.splice(p.hand.indexOf(t), 1); p.hand.splice(p.hand.indexOf(t), 1);
+      p.melds.push([t, t, t]);
+      P[from].river.pop();
+      last = null; cur = j; claim = null;
+      if (SFX.enabled) SFX.pop ? SFX.pop() : SFX.click();
+      if (j === 0) { phase = "discard"; drawn = -1; msg = "碰！打一张"; draw(); }
+      else { phase = "ai"; msg = SEAT[j] + "碰了 " + tName(t); draw(); later(() => aiDiscard(j), 650); }
+    }
+    function userDiscard(k) {
+      if (phase !== "discard" || cur !== 0) return;
+      SFX.unlock();
+      const p = P[0];
+      const t = p.hand.splice(k, 1)[0];
+      p.hand.sort((a, b) => a - b); drawn = -1;
+      phase = "ai";
+      msg = "你打出 " + tName(t);
+      afterDiscard(0, t);
+    }
+    function userTsumo() { if (phase === "discard" && cur === 0 && isWin(P[0].hand)) endGame(0, "tsumo"); }
+    function userClaim(kind) {
+      if (phase !== "claim" || !claim) return;
+      SFX.unlock();
+      const c = claim; claim = null;
+      if (kind === "ron") { P[0].hand.push(c.tile); P[c.from].river.pop(); endGame(0, "ron", c.from); return; }
+      if (kind === "pung") { doPung(0, c.from, c.tile); return; }
+      phase = "ai"; resolveClaims(c.from, c.tile, true);
+    }
+    // ---- 画面 ----
+    function tileEl(t, cls) {
+      const d = document.createElement("span");
+      d.className = "mj-tile " + SUIT_CLS[Math.floor(t / 9)] + (cls ? " " + cls : "");
+      const n = document.createElement("b"); n.textContent = NUM[t % 9];
+      const u = document.createElement("i"); u.textContent = SUIT[Math.floor(t / 9)];
+      d.appendChild(n); d.appendChild(u);
+      d.setAttribute("aria-label", tName(t));
+      return d;
+    }
+    function backEl() { const d = document.createElement("span"); d.className = "mj-tile mj-back"; return d; }
     function draw() {
-      const h = $("mjHand");
-      if (!h) return;
-      h.innerHTML = "";
-      h.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:340px;margin:0 auto;";
-      hand.forEach((t, i) => {
-        const d = document.createElement("div");
-        d.textContent = tileName(t);
-        d.style.cssText = "width:38px;height:52px;background:#fff;border:1px solid #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;" + (over ? "" : "");
-        if (!over) d.addEventListener("click", () => discard(i));
-        h.appendChild(d);
+      const root = $("mjTable"); if (!root) return;
+      root.innerHTML = "";
+      const showAll = phase === "over";
+      // 三家对手
+      const opps = document.createElement("div"); opps.className = "mj-opps";
+      for (const i of [3, 2, 1]) {
+        const p = P[i]; if (!p) continue;
+        const box = document.createElement("div");
+        box.className = "mj-opp" + (cur === i && phase !== "over" ? " on" : "") + (result && result.winner === i ? " win" : "");
+        const h = document.createElement("div"); h.className = "mj-opp-h";
+        h.textContent = SEAT[i] + " · " + p.hand.length + "张" + (p.melds.length ? " · 碰" + p.melds.length : "");
+        box.appendChild(h);
+        if (showAll) { const hh = document.createElement("div"); hh.className = "mj-mini"; p.hand.slice().sort((a, b) => a - b).forEach((t) => hh.appendChild(tileEl(t))); box.appendChild(hh); }
+        if (p.melds.length) { const m = document.createElement("div"); m.className = "mj-mini"; p.melds.forEach((ml) => ml.forEach((t) => m.appendChild(tileEl(t)))); box.appendChild(m); }
+        const rv = document.createElement("div"); rv.className = "mj-mini mj-river";
+        p.river.forEach((t, k) => rv.appendChild(tileEl(t, last && last.from === i && k === p.river.length - 1 ? "last" : "")));
+        box.appendChild(rv);
+        opps.appendChild(box);
+      }
+      root.appendChild(opps);
+      // 中间信息
+      const mid = document.createElement("div"); mid.className = "mj-mid";
+      const info = document.createElement("span"); info.textContent = "牌墙 " + wall.length + " · " + (phase === "over" ? "本局结束" : "轮到" + SEAT[cur]);
+      mid.appendChild(info);
+      if (last && phase !== "over") { const lt = document.createElement("span"); lt.className = "mj-lastwrap"; lt.textContent = SEAT[last.from] + "打 "; lt.appendChild(tileEl(last.tile, "big")); mid.appendChild(lt); }
+      root.appendChild(mid);
+      // 自己的牌河
+      const myRiver = document.createElement("div"); myRiver.className = "mj-mini mj-river mine";
+      P[0].river.forEach((t, k) => myRiver.appendChild(tileEl(t, last && last.from === 0 && k === P[0].river.length - 1 ? "last" : "")));
+      if (P[0].river.length) root.appendChild(myRiver);
+      // 自己的副露 + 手牌
+      const me = document.createElement("div"); me.className = "mj-me";
+      if (P[0].melds.length) { const m = document.createElement("div"); m.className = "mj-melds"; P[0].melds.forEach((ml) => { const g = document.createElement("span"); g.className = "mj-meld"; ml.forEach((t) => g.appendChild(tileEl(t))); m.appendChild(g); }); me.appendChild(m); }
+      const hand = document.createElement("div"); hand.className = "mj-hand";
+      const myTurn = phase === "discard" && cur === 0;
+      // 打哪张能听牌：标个小点
+      const tingIdx = new Set();
+      let tingText = "";
+      if (myTurn) {
+        P[0].hand.forEach((t, k) => { const rest = P[0].hand.slice(); rest.splice(k, 1); if (waits(rest).length) tingIdx.add(k); });
+      } else if (phase !== "over") {
+        const w = waits(P[0].hand); if (w.length) tingText = "听：" + w.map(tName).join(" ");
+      }
+      P[0].hand.forEach((t, k) => {
+        const el = tileEl(t, (k === drawn ? "drawn" : "") + (tingIdx.has(k) ? " ting" : "") + (myTurn ? " can" : ""));
+        if (myTurn) { el.setAttribute("role", "button"); el.addEventListener("click", () => userDiscard(k)); }
+        hand.appendChild(el);
       });
+      me.appendChild(hand);
+      root.appendChild(me);
+      // 操作
+      const act = $("mjActions");
+      if (act) {
+        act.innerHTML = "";
+        const mk = (txt, cls, fn) => { const b = document.createElement("button"); b.className = "btn small " + cls; b.textContent = txt; b.addEventListener("click", fn); act.appendChild(b); };
+        if (phase === "claim" && claim) {
+          if (claim.canRon) mk("胡 🎉", "gold-btn", () => userClaim("ron"));
+          if (claim.canPung) mk("碰", "gold-btn", () => userClaim("pung"));
+          mk("过", "ghost-btn", () => userClaim("pass"));
+        } else if (myTurn && isWin(P[0].hand)) mk("自摸 胡 🎉", "gold-btn", userTsumo);
+        act.classList.toggle("hidden", !act.children.length);
+      }
+      $("mjMsg").textContent = msg + (tingText ? " · " + tingText : "") + (myTurn && tingIdx.size && !isWin(P[0].hand) ? " · 带点的牌打出去就听牌" : "");
+      $("mjStats").textContent = "胡牌 " + stats.wins + " / " + stats.games + " 局";
     }
-    function render() { $("mjMsg").textContent = msg; }
     $("mjResetBtn").addEventListener("click", reset);
+    toyLeaveCleanup["mahjong"] = () => { /* 离开时暂停 AI 计时，回来续上 */ if (timer) { clearTimer(); pendingResume = true; } };
+    let pendingResume = false;
+    toyEnterResume["mahjong"] = () => {
+      if (!pendingResume) return; pendingResume = false;
+      if (phase === "ai") {
+        if (P[cur] && P[cur].hand.length % 3 === 2 && cur !== 0) later(() => { if (isWin(P[cur].hand)) endGame(cur, "tsumo"); else aiDiscard(cur); }, 400);
+        else if (last) later(() => drawFor((last.from + 1) % 4), 300);
+      }
+    };
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get mahjong() { return { count: hand.length, over, win: checkWin(), hand: hand.slice() }; },
-      mahjongDiscard(i) { discard(i); },
-      mahjongSet(h) { hand = h.slice().sort((a, b) => a - b); over = false; draw(); render(); }, // R21：探针用
+      get mahjong() { return { count: P[0].hand.length, over: phase === "over", win: isWin(P[0].hand), hand: P[0].hand.slice(), phase, cur, wall: wall.length, result }; },
+      mahjongDiscard(i) { userDiscard(i); },
+      mahjongSet(h) { P[0].hand = h.slice().sort((a, b) => a - b); cur = 0; phase = "discard"; drawn = -1; draw(); },
+      mahjongWin(h) { return isWin(h); },
+      mahjongShanten(h, m) { return shanten(h, m || 0); },
     }));
   };
 
   /* ---- 10. poker 德州扑克 ---- */
   toyInitFns["poker"] = function () {
+    // v4.0 重写：单挑无限注德州。盲注 5/10 轮换，过牌/跟注/加注/全下，四条街，AI 用蒙特卡洛胜率决策。
     const SUITS = ["♠", "♥", "♦", "♣"];
     const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
-    let deck = [], pHole = [], aHole = [], comm = [], pChips = 100, aChips = 100, pot = 0, over = false, stage = 0;
-    function newDeck() {
-      const d = [];
-      for (const s of SUITS) for (let r = 0; r < 13; r++) d.push({ s, r });
-      return shuffle(d);
-    }
-    function reset() {
-      let note = ""; // R21：hint 说“赢光 AI 就赢”，原来输光/赢光后重开悄悄满血复活、没有任何交代
-      if (pChips <= 0) { pChips = 100; note = "你上局输光了，重新买入 100 筹码。"; }
-      if (aChips <= 0) { aChips = 100; note = "🏆 你赢光了 AI！AI 重新买入 100 筹码，再来一局。"; }
-      deck = newDeck();
-      pHole = [deck.pop(), deck.pop()];
-      aHole = [deck.pop(), deck.pop()];
-      comm = []; pot = 0; over = false; stage = 0;
-      // 盲注（筹码不足时按小的收，不透支）
-      const bb = Math.min(5, pChips, aChips);
-      pChips -= bb; aChips -= bb; pot = bb * 2;
-      draw(); render((note ? note + " " : "") + "你的回合：跟注 " + bb + " 或弃牌");
-    }
-    // 牌型评估：返回 [rank, tiebreak...]
-    function eval7(cards) {
-      // 简化：7 选 5 最优
-      let best = null;
-      const combos = [];
-      const idx = [0, 1, 2, 3, 4, 5, 6];
-      for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) for (let c = b + 1; c < 5; c++)
-        for (let d = c + 1; d < 6; d++) for (let e = d + 1; e < 7; e++)
-          combos.push([cards[a], cards[b], cards[c], cards[d], cards[e]]);
-      for (const h of combos) {
-        const v = eval5(h);
-        if (!best || cmpHands(v, best) > 0) best = v;
-      }
-      return best;
-    }
+    const HNAMES = ["高牌", "一对", "两对", "三条", "顺子", "同花", "葫芦", "四条", "同花顺"];
+    const SB = 5, BB = 10, START = 1000;
+    const BEST_KEY = "dorm-toybox-poker-best-v1";
+    let best = parseInt(lsGet(BEST_KEY, "0"), 10) || 0;
+    let deck = [], hole = [[], []], comm = [], chips = [START, START], bets = [0, 0], pot = 0;
+    let button = 1, street = 0, toAct = 0, acted = [false, false], folded = -1, over = true, raises = 0, lastRaise = BB;
+    let msg = "", reveal = false, handNo = 0, aiTimer = null, lastAi = "", winInfo = null;
+    function newDeck() { const d = []; for (const s of SUITS) for (let r = 0; r < 13; r++) d.push({ s, r }); return shuffle(d); }
     function eval5(h) {
       const rs = h.map((c) => c.r).sort((a, b) => b - a);
       const flush = h.every((c) => c.s === h[0].s);
-      let straight = true;
-      for (let i = 1; i < 5; i++) if (rs[i] !== rs[0] - i) straight = false;
-      // A-5 顺子
-      if (!straight && rs.join() === "12,3,2,1,0") { straight = true; rs.push(rs.shift()); }
-      const cnt = {};
-      for (const r of rs) cnt[r] = (cnt[r] || 0) + 1;
-      const groups = Object.entries(cnt).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
-      if (flush && straight) return [8, rs[0]];
-      if (groups[0][1] === 4) return [7, +groups[0][0], +groups[1][0]];
-      if (groups[0][1] === 3 && groups[1][1] === 2) return [6, +groups[0][0], +groups[1][0]];
-      if (flush) return [5, ...rs];
-      if (straight) return [4, rs[0]];
-      if (groups[0][1] === 3) return [3, +groups[0][0], ...groups.slice(1).map((g) => +g[0])];
-      if (groups[0][1] === 2 && groups[1][1] === 2) return [2, +groups[0][0], +groups[1][0], +groups[2][0]];
-      if (groups[0][1] === 2) return [1, +groups[0][0], ...groups.slice(1).map((g) => +g[0])];
-      return [0, ...rs];
-    }
-    function cmpHands(a, b) {
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        const x = a[i] || 0, y = b[i] || 0;
-        if (x !== y) return x - y;
+      const uniq = [...new Set(rs)];
+      let straightHi = -1;
+      if (uniq.length === 5) {
+        if (rs[0] - rs[4] === 4) straightHi = rs[0];
+        else if (rs[0] === 12 && rs[1] === 3) straightHi = 3; // A2345
       }
-      return 0;
+      const cnt = {}; rs.forEach((r) => { cnt[r] = (cnt[r] || 0) + 1; });
+      const groups = Object.keys(cnt).map(Number).sort((a, b) => cnt[b] - cnt[a] || b - a);
+      const shape = groups.map((g) => cnt[g]).join("");
+      if (straightHi >= 0 && flush) return [8, straightHi];
+      if (shape === "41") return [7].concat(groups);
+      if (shape === "32") return [6].concat(groups);
+      if (flush) return [5].concat(rs);
+      if (straightHi >= 0) return [4, straightHi];
+      if (shape === "311") return [3].concat(groups);
+      if (shape === "221") return [2].concat(groups);
+      if (shape === "2111") return [1].concat(groups);
+      return [0].concat(rs);
     }
-    const HNAMES = ["高牌", "一对", "两对", "三条", "顺子", "同花", "葫芦", "四条", "同花顺"];
-    // AI 手牌强度 0..1（用于弃牌决策）
-    function bestOf(cards) {
-      let best = null;
-      const n = cards.length, idx = [];
-      (function rec(start, depth) {
-        if (depth === 5) {
-          const v = eval5(idx.map((i) => cards[i]));
-          if (!best || cmpHands(v, best) > 0) best = v;
-          return;
-        }
-        for (let i = start; i < n; i++) { idx.push(i); rec(i + 1, depth + 1); idx.pop(); }
-      })(0, 0);
-      return best;
-    }
-    function aiStrength() {
-      if (comm.length === 0) {
-        const r0 = aHole[0].r, r1 = aHole[1].r;
-        if (r0 === r1) return 0.55 + r0 / 30;
-        const hi = Math.max(r0, r1) / 12;
-        const suited = aHole[0].s === aHole[1].s ? 0.06 : 0;
-        const conn = Math.abs(r0 - r1) <= 2 ? 0.05 : 0;
-        return Math.min(0.95, hi * 0.55 + suited + conn);
+    function cmpHands(a, b) { for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x - y; } return 0; }
+    function eval7(cards) {
+      // 任意 5–7 张里挑最大的 5 张
+      const n = cards.length;
+      if (n <= 5) return eval5(cards);
+      let bestV = null;
+      const skip = n - 5;
+      for (let a = 0; a < n; a++) for (let b = skip === 2 ? a + 1 : n; b <= (skip === 2 ? n - 1 : n); b++) {
+        const h = cards.filter((_, i) => i !== a && i !== b);
+        const v = eval5(h);
+        if (!bestV || cmpHands(v, bestV) > 0) bestV = v;
       }
-      const v = bestOf(aHole.concat(comm));
-      return Math.min(0.98, 0.12 + v[0] * 0.11);
+      return bestV;
     }
-    function showdown() {
+    // AI 胜率：蒙特卡洛模拟，对手随机两张
+    function equity(my, board, iters) {
+      const used = new Set(my.concat(board).map((c) => c.s + c.r));
+      const rest = []; for (const s of SUITS) for (let r = 0; r < 13; r++) if (!used.has(s + r)) rest.push({ s, r });
+      let win = 0;
+      for (let k = 0; k < iters; k++) {
+        for (let i = 0; i < 2 + 5 - board.length; i++) { const j = i + Math.floor(Math.random() * (rest.length - i)); const t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+        const opp = [rest[0], rest[1]];
+        const full = board.concat(rest.slice(2, 2 + 5 - board.length));
+        const c = cmpHands(eval7(my.concat(full)), eval7(opp.concat(full)));
+        win += c > 0 ? 1 : c === 0 ? 0.5 : 0;
+      }
+      return win / iters;
+    }
+    const other = (i) => 1 - i;
+    const toCall = (i) => Math.max(0, bets[other(i)] - bets[i]);
+    const potTotal = () => pot + bets[0] + bets[1];
+    let contrib = [0, 0];
+    function put(i, amt) { amt = Math.max(0, Math.min(amt, chips[i])); chips[i] -= amt; bets[i] += amt; contrib[i] += amt; return amt; }
+    function newHand() {
+      clearAi();
+      if (chips[0] <= 0 || chips[1] <= 0) {
+        const youBust = chips[0] <= 0;
+        chips = [START, START];
+        msg = youBust ? "你输光了，重新买入 1000。" : "🏆 你把 AI 赢光了！双方重新买入。";
+      } else msg = "";
+      handNo++;
+      button = other(button);
+      deck = newDeck();
+      hole = [[deck.pop(), deck.pop()], [deck.pop(), deck.pop()]];
+      comm = []; pot = 0; bets = [0, 0]; contrib = [0, 0]; street = 0; folded = -1; over = false; reveal = false; raises = 0; lastRaise = BB; lastAi = ""; winInfo = null;
+      // 单挑：庄家下小盲，翻牌前先行动
+      put(button, SB); put(other(button), BB);
+      acted = [false, false];
+      toAct = button;
+      if (SFX.enabled) SFX.click();
+      step();
+    }
+    function clearAi() { if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; } }
+    function act(i, kind, amount) {
+      if (over || i !== toAct) return;
+      const opp = other(i);
+      const need = toCall(i);
+      if (kind === "fold") { folded = i; finish(); return; }
+      if (kind === "check" && need > 0) kind = "call";
+      if (kind === "call") { put(i, need); if (SFX.enabled && need > 0) SFX.coin(); }
+      if (kind === "raise") {
+        // amount = 加注到的总额（本街）
+        const minTo = bets[opp] + Math.max(lastRaise, BB);
+        let to = Math.max(minTo, amount);
+        to = Math.min(to, bets[i] + chips[i]); // 不够就全下
+        const raiseBy = to - bets[opp];
+        if (raiseBy > 0 && to - bets[opp] >= lastRaise) lastRaise = raiseBy;
+        put(i, to - bets[i]);
+        raises++;
+        acted[opp] = false;
+        if (SFX.enabled) SFX.coin();
+      }
+      acted[i] = true;
+      if (i === 1) lastAi = kind === "fold" ? "弃牌" : kind === "check" ? "过牌" : kind === "call" ? (need > 0 ? "跟注 " + need : "过牌") : (chips[1] === 0 ? "全下！" : "加注到 " + bets[1]);
+      // 本街结束？
+      const allInSomeone = chips[0] === 0 || chips[1] === 0;
+      if (acted[0] && acted[1] && bets[0] === bets[1]) { nextStreet(); return; }
+      if (allInSomeone && bets[0] === bets[1]) { nextStreet(); return; }
+      if (allInSomeone && toCall(opp) === 0 && acted[opp]) { nextStreet(); return; }
+      toAct = opp;
+      step();
+    }
+    function nextStreet() {
+      pot += bets[0] + bets[1]; bets = [0, 0];
+      // 退还超额（一方全下不够跟时）在 put 时已限制，这里不需要
+      if (street === 3) { finish(); return; }
+      street++;
+      if (street === 1) comm.push(deck.pop(), deck.pop(), deck.pop());
+      else comm.push(deck.pop());
+      acted = [false, false]; raises = 0; lastRaise = BB;
+      toAct = other(button); // 翻牌后大盲先行动
+      if (chips[0] === 0 || chips[1] === 0) { reveal = true; draw(); aiTimer = setTimeout(nextStreet, 700); return; }
+      step();
+    }
+    function finish() {
+      clearAi();
       over = true;
-      while (comm.length < 5) comm.push(deck.pop());
-      const pv = eval7(pHole.concat(comm));
-      const av = eval7(aHole.concat(comm));
-      const cmp = cmpHands(pv, av);
-      let m;
-      if (cmp > 0) { pChips += pot; m = "🎉 你赢！" + HNAMES[pv[0]] + " 大过 " + HNAMES[av[0]] + "，+" + pot; if (SFX.enabled) SFX.win(); }
-      else if (cmp < 0) { aChips += pot; m = "😅 AI 赢，" + HNAMES[av[0]] + " 大过 " + HNAMES[pv[0]]; if (SFX.enabled) SFX.lose(); }
-      else { pChips += pot / 2; aChips += pot / 2; m = "🤝 平局，" + HNAMES[pv[0]]; }
+      pot += bets[0] + bets[1]; bets = [0, 0];
+      let won = 0;
+      if (folded >= 0) {
+        const w = other(folded); chips[w] += pot; won = w === 0 ? pot : -pot;
+        msg = folded === 0 ? "你弃牌，输掉 " + contrib[0] : "🎉 AI 弃牌，你赢 +" + contrib[1];
+        if (SFX.enabled) { if (w === 0) SFX.win(); else SFX.lose(); }
+      } else {
+        while (comm.length < 5) comm.push(deck.pop());
+        reveal = true;
+        const pv = eval7(hole[0].concat(comm)), av = eval7(hole[1].concat(comm));
+        const c = cmpHands(pv, av);
+        winInfo = { you: HNAMES[pv[0]], ai: HNAMES[av[0]] };
+        if (c > 0) { chips[0] += pot; msg = "🎉 你赢 +" + (pot - contrib[0]) + "！" + HNAMES[pv[0]] + " 胜 " + HNAMES[av[0]]; if (SFX.enabled) SFX.win(); }
+        else if (c < 0) { chips[1] += pot; msg = "😅 你输 " + contrib[0] + "，" + HNAMES[av[0]] + " 胜 " + HNAMES[pv[0]]; if (SFX.enabled) SFX.lose(); }
+        else { const h = Math.floor(pot / 2); chips[0] += h; chips[1] += pot - h; msg = "🤝 平分底池，都是" + HNAMES[pv[0]]; }
+      }
       pot = 0;
-      draw(); render(m + "（AI 底牌 " + aHole.map(cardStr).join(" ") + "）");
+      if (chips[0] > best) { best = chips[0]; lsSet(BEST_KEY, String(best)); }
+      draw();
     }
-    function cardStr(c) { return c.s + RANKS[c.r]; }
-    function pCall() {
-      if (over) return;
-      SFX.unlock();
-      const bet = Math.min(5, pChips, aChips);
-      if (bet <= 0) { showdown(); return; }
-      pChips -= bet; aChips -= bet; pot += bet * 2;
-      if (SFX.enabled) SFX.coin();
-      stage++;
-      if (stage === 1) { comm.push(deck.pop(), deck.pop(), deck.pop()); }
-      else if (stage <= 3) { comm.push(deck.pop()); }
-      if (stage >= 4 || aChips <= 0 || pChips <= 0) { showdown(); return; }
-      // AI 策略：按手牌强度决定弃牌（强牌几乎不弃，弱牌常弃）
-      const foldP = Math.max(0.02, 0.30 - aiStrength() * 0.5);
-      if (Math.random() < foldP) {
-        over = true;
-        const won = pot;
-        pChips += pot; pot = 0;
-        if (SFX.enabled) SFX.win();
-        draw(); render("🎉 AI 弃牌，你赢 +" + won);
-        return;
+    function aiDecide() {
+      const need = toCall(1);
+      const P = potTotal();
+      const e = equity(hole[1], comm, comm.length === 0 ? 260 : 360);
+      const odds = need / (P + need || 1);
+      const r = Math.random();
+      const canRaise = raises < 3 && chips[1] > need && chips[0] > 0;
+      const sizeTo = (frac) => bets[0] + Math.max(BB, Math.round((P + need) * frac / 5) * 5);
+      if (need > 0) {
+        if (e < odds - 0.04 && !(r < 0.08 && need <= BB * 2)) return ["fold"];
+        if (canRaise && (e > 0.72 || (e > 0.6 && r < 0.3) || (r < 0.05))) return ["raise", e > 0.85 && r < 0.4 ? bets[1] + chips[1] : sizeTo(0.75)];
+        return ["call"];
       }
-      draw(); render("第 " + (stage + 1) + " 轮：跟注或弃牌（底池 " + pot + "）");
+      if (canRaise && (e > 0.62 || (e > 0.5 && r < 0.4) || (e < 0.35 && r < 0.12))) return ["raise", sizeTo(e > 0.8 ? 0.8 : 0.55)];
+      return ["check"];
     }
-    function pFold() {
+    function step() {
+      draw();
       if (over) return;
-      over = true;
-      aChips += pot; pot = 0;
-      if (SFX.enabled) SFX.lose();
-      draw(); render("你弃牌了，AI 赢走底池");
+      if (toAct === 1) {
+        clearAi();
+        aiTimer = setTimeout(() => { aiTimer = null; const d = aiDecide(); act(1, d[0], d[1]); }, 650);
+      }
+    }
+    // ---- 画面 ----
+    function cardEl(c, hidden, small) {
+      const d = document.createElement("span");
+      if (hidden) { d.className = "pk-card back" + (small ? " sm" : ""); return d; }
+      const red = c.s === "♥" || c.s === "♦";
+      d.className = "pk-card" + (red ? " red" : "") + (small ? " sm" : "");
+      const r = document.createElement("b"); r.textContent = RANKS[c.r];
+      const s = document.createElement("i"); s.textContent = c.s;
+      d.appendChild(r); d.appendChild(s);
+      return d;
     }
     function draw() {
-      const t = $("pokerTable");
-      if (!t) return;
+      const t = $("pokerTable"); if (!t) return;
       t.innerHTML = "";
-      t.style.cssText = "background:#0d5c2e;border-radius:12px;padding:12px;max-width:340px;margin:0 auto;text-align:center;";
-      const mk = (cards, label) => {
-        const d = document.createElement("div");
-        d.style.cssText = "margin:6px 0;color:#fff;font-size:14px;";
-        d.innerHTML = label + " " + cards.map((c) =>
-          '<span style="display:inline-block;background:#fff;color:' + (c.s === "♥" || c.s === "♦" ? "#c0392b" : "#222") +
-          ';border-radius:4px;padding:2px 6px;margin:0 2px;font-weight:bold;">' + cardStr(c) + "</span>").join("");
-        return d;
-      };
-      t.appendChild(mk([], "AI（" + aChips + "):"));
-      // AI 显示背面
-      t.children[0].innerHTML = "AI（" + aChips + '): <span style="display:inline-block;background:#1a1e2e;color:#888;border-radius:4px;padding:2px 6px;margin:0 2px;">??</span> <span style="display:inline-block;background:#1a1e2e;color:#888;border-radius:4px;padding:2px 6px;margin:0 2px;">??</span>';
-      t.appendChild(mk(comm, "公共牌："));
-      t.appendChild(mk(pHole, "你（" + pChips + "):"));
-      const potD = document.createElement("div");
-      potD.style.cssText = "color:#f5c542;font-weight:bold;margin-top:6px;";
-      potD.textContent = "底池 " + pot;
-      t.appendChild(potD);
+      const row = (cls) => { const d = document.createElement("div"); d.className = cls; t.appendChild(d); return d; };
+      const aiRow = row("pk-seat");
+      aiRow.innerHTML = '<span class="pk-name">🤖 AI' + (button === 1 ? ' <em class="pk-btn">D</em>' : "") + '</span><span class="pk-chips">' + chips[1] + "</span>";
+      const aiCards = row("pk-cards");
+      hole[1].forEach((c) => aiCards.appendChild(cardEl(c, !reveal)));
+      const aiBet = row("pk-bet"); aiBet.textContent = bets[1] ? "下注 " + bets[1] : (lastAi && !over ? lastAi : "");
+      const board = row("pk-board");
+      for (let i = 0; i < 5; i++) { if (comm[i]) board.appendChild(cardEl(comm[i])); else { const e = document.createElement("span"); e.className = "pk-card slot"; board.appendChild(e); } }
+      const potEl = row("pk-pot"); potEl.textContent = "底池 " + potTotal();
+      const meBet = row("pk-bet"); meBet.textContent = bets[0] ? "下注 " + bets[0] : "";
+      const myCards = row("pk-cards");
+      hole[0].forEach((c) => myCards.appendChild(cardEl(c)));
+      const meRow = row("pk-seat");
+      let hn = "";
+      if (hole[0].length && comm.length >= 3) hn = " · " + HNAMES[eval7(hole[0].concat(comm))[0]];
+      meRow.innerHTML = '<span class="pk-name">🙂 你' + (button === 0 ? ' <em class="pk-btn">D</em>' : "") + hn + '</span><span class="pk-chips">' + chips[0] + "</span>";
+      // 操作按钮
+      const a = $("pokerActions"); if (!a) return;
+      a.innerHTML = "";
+      const mk = (txt, cls, fn, dis) => { const b = document.createElement("button"); b.className = "btn small " + cls; b.textContent = txt; b.disabled = !!dis; b.addEventListener("click", () => { SFX.unlock(); fn(); }); a.appendChild(b); };
+      if (over) { mk(handNo ? "下一手 ▶" : "开始发牌 ▶", "gold-btn", newHand); }
+      else {
+        const mine = toAct === 0;
+        const need = toCall(0), P = potTotal();
+        mk("弃牌", "ghost-btn", () => act(0, "fold"), !mine || need === 0);
+        mk(need > 0 ? "跟注 " + Math.min(need, chips[0]) : "过牌", "ghost-btn", () => act(0, need > 0 ? "call" : "check"), !mine);
+        const canRaise = mine && chips[0] > need && chips[1] > 0;
+        const half = bets[1] + Math.max(Math.max(lastRaise, BB), Math.round((P + need) * 0.5 / 5) * 5);
+        const full = bets[1] + Math.max(Math.max(lastRaise, BB), Math.round((P + need) / 5) * 5);
+        mk((need > 0 ? "加注" : "下注") + " ½池", "ghost-btn", () => act(0, "raise", half), !canRaise || half >= bets[0] + chips[0]);
+        mk((need > 0 ? "加注" : "下注") + " 1池", "ghost-btn", () => act(0, "raise", full), !canRaise || full >= bets[0] + chips[0]);
+        mk("全下 " + (bets[0] + chips[0]), "gold-btn", () => act(0, "raise", bets[0] + chips[0]), !canRaise);
+      }
+      const STREETS = ["翻牌前", "翻牌", "转牌", "河牌"];
+      $("pokerMsg").textContent = over ? (msg || "点「开始发牌」，盲注 5/10，各 1000 筹码") : (toAct === 0 ? STREETS[street] + " · 轮到你" + (toCall(0) ? "，要跟 " + toCall(0) : "") : STREETS[street] + " · AI 思考中…");
+      $("pokerBest").textContent = "第 " + handNo + " 手 · 本机最高筹码 " + Math.max(best, START);
     }
-    function render(m) { $("pokerMsg").textContent = m; }
-    $("pokerCallBtn").addEventListener("click", pCall);
-    $("pokerFoldBtn").addEventListener("click", pFold);
-    $("pokerResetBtn").addEventListener("click", reset);
-    reset();
+    $("pokerResetBtn").addEventListener("click", () => { clearAi(); chips = [START, START]; handNo = 0; button = 1; over = true; hole = [[], []]; comm = []; bets = [0, 0]; pot = 0; msg = "重新开始，各 1000 筹码"; draw(); });
+    toyLeaveCleanup["poker"] = () => { if (aiTimer) { clearAi(); pokerPaused = true; } };
+    let pokerPaused = false;
+    toyEnterResume["poker"] = () => { if (pokerPaused) { pokerPaused = false; if (!over && toAct === 1) step(); else if (!over && (chips[0] === 0 || chips[1] === 0)) nextStreet(); } };
+    draw();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get poker() { return { pChips, aChips, pot, over, stage, comm: comm.length }; },
-      pokerCall() { pCall(); },
+      get poker() { return { chips: chips.slice(), pot: potTotal(), over, street, toAct, comm: comm.length, bets: bets.slice() }; },
+      pokerNew() { newHand(); },
+      pokerAct(kind, amt) { act(0, kind, amt); },
       pokerEval(cards) { return eval5(cards); },
+      pokerEquity(my, board, n) { return equity(my, board || [], n || 500); },
     }));
   };
   /* ---- 11. rhythm 音游 ---- */

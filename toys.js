@@ -10831,7 +10831,7 @@
     function goKey(b) { return b.map((row) => row.map((v) => (v === "black" ? "B" : v === "white" ? "W" : ".")).join("")).join("/"); }
     function reset() {
       board = Array.from({ length: N }, () => Array(N).fill(null));
-      turn = "black"; over = false; passes = 0; capB = 0; capW = 0;
+      turn = "black"; over = false; passes = 0; capB = 0; capW = 0; lastAi = null;
       goHistory = [goKey(board)];
       draw(); render();
     }
@@ -10892,41 +10892,81 @@
       return true;
     }
     function aiMove() {
-      // v3.0-r15：只在轮到白时走。原来只判 over，玩家在 AI 思考的 400ms 里点“停一手”或重开，待执行的 AI 仍会在黑方回合落子
+      // v4.0：启发式 AI——提子 > 救自己被打吃的子 > 打吃对方 > 占要点；不填自己的眼、不自紧气；没有好棋就停一手
       if (over || turn !== "white") return;
-      // 简单 AI：找有气的空点，优先靠近已有棋子
-      const cands = [];
+      const best = aiPick();
+      if (best && play(best.x, best.y, "white")) { passes = 0; turn = "black"; lastAi = [best.x, best.y]; draw(); render(); return; }
+      doPass();
+    }
+    let lastAi = null;
+    function regionOwner(x, y) {
+      // 空点所在的空域只被一种颜色包围时返回那个颜色
+      const seen = new Set([x + "," + y]), stack = [[x, y]], borders = new Set();
+      let size = 0;
+      while (stack.length) {
+        const [cx, cy] = stack.pop(); size++;
+        for (const [nx, ny] of neighbors(cx, cy)) {
+          const v = board[ny][nx];
+          if (v === null) { const k = nx + "," + ny; if (!seen.has(k)) { seen.add(k); stack.push([nx, ny]); } }
+          else borders.add(v);
+        }
+      }
+      return borders.size === 1 ? { owner: [...borders][0], size } : { owner: null, size };
+    }
+    function isEyeOf(x, y, color) {
+      if (!neighbors(x, y).every(([nx, ny]) => board[ny][nx] === color)) return false;
+      let bad = 0, edge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
+      for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue;
+        if (board[ny][nx] && board[ny][nx] !== color) bad++;
+      }
+      return edge ? bad === 0 : bad <= 1;
+    }
+    function aiPick() {
+      const me = "white", opp = "black";
+      const stones = board.flat().filter(Boolean).length;
+      // 先记下双方处于危险（1-2 气）的棋块
+      const atari = { white: [], black: [] }, seenG = new Set();
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const v = board[y][x]; if (!v || seenG.has(x + "," + y)) continue;
+        const g = group(x, y, v); g.stones.forEach(([sx, sy]) => seenG.add(sx + "," + sy));
+        if (g.libs <= 2) atari[v].push(g);
+      }
+      let bestM = null;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
         if (board[y][x]) continue;
-        let near = 0;
-        for (const [nx, ny] of neighbors(x, y)) if (board[ny][nx]) near++;
+        if (isEyeOf(x, y, me)) continue; // 不填自己的眼
+        const reg = regionOwner(x, y);
         // 试下
-        board[y][x] = "white";
-        const opp = "black";
-        let ok = true, cap = 0;
+        board[y][x] = me;
+        let cap = 0, ataris = 0;
         for (const [nx, ny] of neighbors(x, y)) {
-          if (board[ny][nx] === opp) {
-            const g = group(nx, ny, opp);
-            if (g.libs === 0) cap += g.stones.length;
-          }
+          if (board[ny][nx] === opp) { const g = group(nx, ny, opp); if (g.libs === 0) cap += g.stones.length; else if (g.libs === 1) ataris += g.stones.length; }
         }
-        const self = group(x, y, "white");
-        if (self.libs === 0 && cap === 0) ok = false;
+        const self = group(x, y, me);
         board[y][x] = null;
-        if (ok) cands.push({ x, y, score: near * 2 + Math.random() });
+        if (self.libs === 0 && cap === 0) continue; // 自杀
+        let sc = cap * 30 + ataris * 7;
+        // 救被打吃的己方棋块
+        for (const g of atari.white) if (g.libs === 1 && g.stones.some(([sx, sy]) => Math.abs(sx - x) + Math.abs(sy - y) === 1)) sc += self.libs >= 3 ? 26 * g.stones.length : self.libs === 2 ? 8 : 0;
+        if (self.libs === 1 && cap === 0) sc -= 45; // 自己往打吃里送
+        else if (self.libs === 2 && self.stones.length > 2 && cap === 0) sc -= 6;
+        // 己方领地里落子没意义；对方领地里（小空域）也多半是送死
+        if (reg.owner === me && reg.size <= 12) sc -= 40;
+        if (reg.owner === opp && reg.size <= 4 && cap === 0) sc -= 25;
+        // 位置：开局重视三、四线，中盘看接触
+        const line = Math.min(x, y, N - 1 - x, N - 1 - y);
+        if (stones < 12) sc += [-6, 1, 6, 5, 4][line] || 0;
+        let nearMe = 0, nearOpp = 0;
+        for (const [nx, ny] of neighbors(x, y)) { if (board[ny][nx] === me) nearMe++; else if (board[ny][nx] === opp) nearOpp++; }
+        sc += nearOpp * 2 + Math.min(nearMe, 1) * 1.5 - (nearMe >= 3 ? 4 : 0);
+        sc += Math.random() * 2.5;
+        if (!bestM || sc > bestM.sc) bestM = { x, y, sc };
       }
-      if (!cands.length) { doPass(); return; }
-      cands.sort((a, b) => b.score - a.score);
-      // R23：按分试下，play() 失败（打劫禁手）就试下一个，都不行才停一手。
-      // 原来不看返回值：禁手时白棋空过一手还把 passes 清零，双停终局永远到不了
-      for (const p of cands) {
-        if (play(p.x, p.y, "white")) {
-          passes = 0; turn = "black";
-          draw(); render();
-          return;
-        }
-      }
-      doPass();
+      // 没有正分的棋：停一手（中盘以后）
+      if (!bestM || (bestM.sc < 2.5 && stones > 20)) return null;
+      return bestM;
     }
     function doPass() {
       passes++;
@@ -11003,6 +11043,7 @@
           else ctx.fillStyle = s === "black" ? "#111" : "#fff";
           ctx.beginPath(); ctx.arc(cx, cy, 13, 0, 7); ctx.fill();
           ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.stroke();
+          if (lastAi && lastAi[0] === x && lastAi[1] === y) { ctx.fillStyle = "#e5484d"; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 7); ctx.fill(); }
         }
       } catch (e) {}
     }

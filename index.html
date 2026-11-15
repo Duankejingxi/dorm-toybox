@@ -796,7 +796,7 @@
   <!-- 俄罗斯方块 -->
   <section class="panel toy hidden" id="toy-tetris">
     <h2>🧱 俄罗斯方块</h2>
-    <p class="hint">方向键左右移动、下键加速下落、上键旋转、空格直接掉到底。屏幕按钮也能玩。消一行 100 分，消得越多越快，最高分存在本机。</p>
+    <p class="hint">手机：在方块区左右拖动移动、轻点旋转、快速下滑直接落底；也可以用下面的按钮（按住连发）。电脑：方向键移动/旋转，空格落底。消一行 100 分，消得越多越快，最高分存在本机。</p>
     <div class="tetris-wrap">
       <canvas id="tetrisCanvas" width="240" height="480"></canvas>
       <div class="tetris-side">
@@ -805,17 +805,17 @@
         <p class="result-line" id="tetrisScore">得分 0</p>
         <p class="result-line" id="tetrisLevel">第 1 关</p>
         <p class="result-line" id="tetrisBest">最高 0</p>
+        <button class="btn gold-btn small" id="tetrisStartBtn">开始 ▶</button>
+        <button class="btn ghost-btn small" id="tetrisPauseBtn">暂停 ⏸</button>
       </div>
     </div>
     <p class="result-line" id="tetrisStatus">点开始，方块就掉下来。</p>
-    <div class="beads-controls">
-      <button class="btn gold-btn small" id="tetrisStartBtn">开始 ▶</button>
-      <button class="btn ghost-btn small" id="tetrisPauseBtn">暂停 ⏸</button>
-    </div>
-    <div class="snake-dpad">
-      <span></span><button class="btn ghost-btn" id="tetrisRotBtn" aria-label="旋转">↻</button><span></span>
-      <button class="btn ghost-btn" id="tetrisLeftBtn" aria-label="向左">◀</button><button class="btn ghost-btn" id="tetrisDownBtn" aria-label="下落">▼</button><button class="btn ghost-btn" id="tetrisRightBtn" aria-label="向右">▶</button>
-      <span></span><button class="btn ghost-btn" id="tetrisDropBtn" aria-label="直接掉落">⤓</button><span></span>
+    <div class="pad-row" id="tetrisPad">
+      <button class="btn ghost-btn" id="tetrisRotBtn" aria-label="旋转">↻</button>
+      <button class="btn ghost-btn" id="tetrisLeftBtn" aria-label="向左">◀</button>
+      <button class="btn ghost-btn" id="tetrisDownBtn" aria-label="加速下落">▼</button>
+      <button class="btn ghost-btn" id="tetrisRightBtn" aria-label="向右">▶</button>
+      <button class="btn ghost-btn" id="tetrisDropBtn" aria-label="直接掉落">⤓</button>
     </div>
   </section>
 

@@ -140,6 +140,16 @@
    "archeryCanvas", "flappyCanvas", "snake2Canvas", "pongCanvas", "arkanoidCanvas", "chessCanvas", "goCanvas",
    "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas", "mazeCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
 
+  /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
+  function holdRepeat(btn, fn, interval) {
+    if (!btn) return;
+    let t1 = null, t2 = null, fired = false;
+    const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
+    btn.addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); stop(); fired = true; fn(); t1 = setTimeout(() => { t2 = setInterval(fn, interval || 90); }, 260); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
+    btn.addEventListener("click", (e) => { if (fired) { fired = false; return; } fn(); }); // 键盘回车/读屏点击
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
   /* ---------- v1.30 后端优化：懒初始化框架 + 通用工具 ---------- */
   const toyInitFns = {};  // 玩具 id -> 初始化函数（各段落注册）
   const toyInited = {};   // 玩具 id -> 是否已初始化
@@ -5936,9 +5946,31 @@
     function tHardDrop() { if (!tCur || tState !== "running") return; while (!tCollide(tCur.m, tCur.x, tCur.y + 1)) tCur.y++; tLock(); tDraw(); }
     $("tetrisStartBtn").addEventListener("click", () => { if (tState === "running") tPause(); else tStart(); });
     $("tetrisPauseBtn").addEventListener("click", tPause);
-    $("tetrisLeftBtn").addEventListener("click", () => tMove(-1));
-    $("tetrisRightBtn").addEventListener("click", () => tMove(1));
-    $("tetrisDownBtn").addEventListener("click", tSoftDrop);
+    // v4.0：◀ ▶ ▼ 按住连发（原来只能一下一下点）
+    holdRepeat($("tetrisLeftBtn"), () => tMove(-1));
+    holdRepeat($("tetrisRightBtn"), () => tMove(1));
+    holdRepeat($("tetrisDownBtn"), tSoftDrop, 60);
+    // v4.0：画布手势——左右拖动跟手移动，轻点旋转，快速下滑直接落底
+    (function () {
+      const cv = $("tetrisCanvas"); if (!cv) return;
+      let sx = 0, sy = 0, lastCol = 0, t0 = 0, moved = false, active = false;
+      cv.addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); active = true; sx = e.clientX; sy = e.clientY; lastCol = 0; t0 = Date.now(); moved = false; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
+      cv.addEventListener("pointermove", (e) => {
+        if (!active || tState !== "running") return;
+        const cell = cv.getBoundingClientRect().width / 10;
+        const col = Math.round((e.clientX - sx) / cell);
+        while (col > lastCol) { tMove(1); lastCol++; moved = true; }
+        while (col < lastCol) { tMove(-1); lastCol--; moved = true; }
+      });
+      cv.addEventListener("pointerup", (e) => {
+        if (!active) return; active = false;
+        const dy = e.clientY - sy, dx = e.clientX - sx, dt = Date.now() - t0;
+        if (tState !== "running") { if (Math.hypot(dx, dy) < 10) $("tetrisStartBtn").click(); return; }
+        if (dy > 60 && dy > Math.abs(dx) * 1.5 && dt < 400) { tHardDrop(); return; }
+        if (!moved && Math.hypot(dx, dy) < 12) tRotate();
+      });
+      cv.addEventListener("pointercancel", () => { active = false; });
+    })();
     $("tetrisRotBtn").addEventListener("click", tRotate);
     $("tetrisDropBtn").addEventListener("click", tHardDrop);
     if (document.addEventListener) {

@@ -1919,3 +1919,9 @@ body:not(.in-toy) .howto-more { display: none; }
 .onestroke-line.todo { background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .35) 0 8px, transparent 8px 14px); height: 3px; }
 .onestroke-line.done { background: #7ec8ff; height: 5px; box-shadow: 0 0 8px rgba(126, 200, 255, .7); }
 .onestroke-dot.cur { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(126, 200, 255, .5); }
+/* v4.0：俄罗斯方块——画布按屏幕高度自适应，操作按钮一排放在画布下方 */
+#tetrisCanvas { height: min(480px, calc(100svh - 300px)); width: auto; aspect-ratio: 1 / 2; max-width: 62vw; touch-action: none; }
+.tetris-side .btn { margin: 4px 0 0; width: 100%; }
+.pad-row { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+.pad-row .btn { flex: 1; max-width: 72px; min-height: 52px; font-size: 20px; padding: 0; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#tetrisPauseBtn { display: none !important; } /* 开始键本身就会切换暂停/继续 */

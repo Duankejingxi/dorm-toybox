@@ -6510,13 +6510,26 @@
       const b = document.createElement("button");
       b.className = "gomoku-cell";
       b.setAttribute("aria-label", "第 " + (Math.floor(i / GOMOKU_SIZE) + 1) + " 行第 " + (i % GOMOKU_SIZE + 1) + " 列");
-      b.addEventListener("click", () => gomokuPlace(i));
+      // v4.0：触屏格子只有 22px，先点出预览、再点同一格才落子；鼠标直接落子
+      b.addEventListener("pointerup", (e) => { gLastPointer = e.pointerType || "mouse"; });
+      b.addEventListener("click", () => {
+        if (gLastPointer === "touch" || gLastPointer === "pen") {
+          if (gPending !== i) { if (gWinner === 0 && gBoard[i] === 0 && !(gMode === "solo" && gTurn !== 1)) { gPending = i; gomokuRender(); } return; }
+        }
+        gPending = -1; gomokuPlace(i);
+      });
       gomokuBoardEl.appendChild(b);
       gomokuCells.push(b);
     }
+    let gPending = -1, gLastPointer = "mouse";
     function gomokuRender() {
       gomokuCells.forEach((cell, i) => {
         cell.innerHTML = "";
+        if (i === gPending && gBoard[i] === 0 && gWinner === 0) {
+          const g = document.createElement("span");
+          g.className = "gomoku-stone ghost " + (gTurn === 1 ? "black" : "white");
+          cell.appendChild(g);
+        }
         if (gBoard[i] !== 0) {
           const s = document.createElement("span");
           s.className = "gomoku-stone " + (gBoard[i] === 1 ? "black" : "white") + (i === gLast ? " last" : "");
@@ -6534,7 +6547,7 @@
         $("gomokuResult").textContent = gTurn === 1 ? "轮到黑方落子。" : "轮到白方落子。";
         turnEl.textContent = gTurn === 1 ? "⚫ 轮到黑方落子" : "⚪ 轮到白方落子";
       } else {
-        $("gomokuResult").textContent = gTurn === 1 ? "轮到你落子（黑）。" : "电脑思考中……";
+        $("gomokuResult").textContent = gTurn === 1 ? (gPending >= 0 ? "再点一次虚影确认落子。" : "轮到你落子（黑）。") : "电脑思考中……";
         turnEl.textContent = gTurn === 1 ? "⚫ 轮到你（黑）" : "⚪ 电脑（白）思考中";
       }
     }
@@ -6632,6 +6645,7 @@
       if (gMode === "solo") setTimeout(gomokuAiMove, 250);
     }
     function gomokuReset() {
+      gPending = -1;
       gBoard = new Array(GOMOKU_SIZE * GOMOKU_SIZE).fill(0);
       gTurn = 1; gWinner = 0; gMoves = 0; gLast = -1;
       gomokuRender();

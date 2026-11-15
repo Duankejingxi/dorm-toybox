@@ -1925,3 +1925,21 @@ body:not(.in-toy) .howto-more { display: none; }
 .pad-row { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
 .pad-row .btn { flex: 1; max-width: 72px; min-height: 52px; font-size: 20px; padding: 0; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 #tetrisPauseBtn { display: none !important; } /* 开始键本身就会切换暂停/继续 */
+/* v4.0：黑话词条紧凑化（原来每条 300px 高，50 条要滑 15000px） */
+.slang-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.slang-card { padding: 8px 10px !important; margin: 0 !important; }
+.slang-zh { font-size: 17px !important; margin: 0 0 2px !important; padding: 0 0 4px !important; display: flex; align-items: center; justify-content: space-between; }
+.slang-row { padding: 1px 0 !important; min-height: 0 !important; border: 0 !important; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.slang-speak { min-height: 32px !important; height: 32px; width: 36px; padding: 0 !important; margin: 0 !important; font-size: 14px !important; flex: none; }
+/* v4.0：溢出修正（面板内边距改成 14px 后，鼓机的出血宽度要跟着变；记分牌两队按钮挤出屏幕） */
+body.in-toy .drums-grid { margin-left: -10px; margin-right: -10px; }
+.score-team { min-width: 0; }
+.score-btns { flex-wrap: wrap; }
+.score-btns .btn { min-width: 0; flex: 1 1 30%; padding: 0 4px; }
+/* v4.0：输入控件统一放大到手指好点的尺寸 */
+.toy input[type="text"], .toy input[type="number"], .toy input[type="search"], .toy input[type="date"], .toy input[type="time"], .toy input:not([type]), .toy select {
+  min-height: 42px; font-size: 16px; /* 16px 防止 iOS 聚焦时页面放大 */
+}
+.toy input[type="checkbox"], .toy input[type="radio"] { width: 20px; height: 20px; accent-color: #4f7cff; vertical-align: middle; }
+.toy input[type="range"] { height: 28px; accent-color: #4f7cff; }
+.gomoku-stone.ghost { opacity: .45; outline: 2px dashed #4f7cff; outline-offset: 1px; }

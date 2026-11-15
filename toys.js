@@ -9868,8 +9868,12 @@
       GAP = 120; SPEED = 2.2; isNewBest = false;
       render();
     }
+    let deadAt = 0;
     function flap() {
-      if (!running) { reset(); return; }
+      if (!running) {
+        if (Date.now() - deadAt < 600) return; // v4.0：刚撞死时手还在狂点，别立刻误开下一局
+        reset(); // v4.0：开局这一下也要起飞，原来只重置不起飞，鸟直接往下掉
+      }
       bird.vy = FLAP;
       if (SFX.enabled) SFX.jump();
     }
@@ -9910,7 +9914,7 @@
         }
       }
       if (dead) {
-        running = false;
+        running = false; deadAt = Date.now();
         raf = null; // R21：死后把 raf 置空——原来残留已跑完的旧 id，点屏/空格重开时 !raf 为假、新的 requestAnimationFrame 排不上，鸟定在开局位置不动（画布还写着“点屏幕再来”）
         if (score > best) { best = score; saveBest(KEY, best); isNewBest = score > 0; }
         if (SFX.enabled) { if (isNewBest) SFX.win(); else SFX.lose(); }
@@ -13037,6 +13041,19 @@
       if (typeof k === "string" && __toyboxToyOfKey[k]) ensureToyInit(__toyboxToyOfKey[k]);
       return Reflect.has(t, k);
     },
+  });
+
+  // v4.0：点游戏画面就能开始——原来这几个游戏只能去找画面下方的「开始」按钮，点画面没反应
+  [["snakeCanvas", "snakeStartBtn", null], ["breakoutCanvas", "breakoutStartBtn", "breakout"], ["shooterCanvas", "shooterStartBtn", "shooter"],
+   ["catchStage", "catchStartBtn", "catchGame"], ["fruitsliceCanvas", "fruitsliceStartBtn", "fruit"], ["spotdiffGrid", "spotdiffStartBtn", "spotdiff"]].forEach(([area, btn, key]) => {
+    const el = $(area), b = $(btn);
+    if (!el || !b) return;
+    el.addEventListener("pointerdown", () => {
+      let running;
+      if (key) { try { const st = __toyboxHandle[key]; running = !!(st && st.running); } catch (e) { running = true; } }
+      else running = /暂停/.test(b.textContent || "");
+      if (!running) setTimeout(() => { b.click(); }, 0);
+    }, true);
   });
 
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ

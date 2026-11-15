@@ -11732,135 +11732,243 @@
   };
   /* ---- 11. rhythm 音游 ---- */
   toyInitFns["rhythm"] = function () {
-    const KEY = "dorm-toybox-rhythm-best-v1";
-    const W = 320, H = 420, LANES = 4, LW = W / LANES;
-    const JUDGE_Y = H - 80, SPEED = 3.2;
-    let best = loadBest(KEY);
-    let notes = [], score = 0, combo = 0, maxCombo = 0, running = false, raf = null, frame = 0, counts = { p: 0, g: 0, m: 0 };
-    let startT = 0, lastT = 0, nextSpawn = 0, nextChord = 0, rank = "", isNewBest = false;
+    // v4.0 重写：WebAudio 现场合成一首歌（鼓 + 贝斯 + 旋律），谱面就是旋律音符，按音频时钟同步、按毫秒判定。
+    const KEY = "dorm-toybox-rhythm-v2";
+    const W = 320, H = 420, LANES = 4, LW = W / LANES, JUDGE_Y = H - 70;
     const KEYS = ["d", "f", "j", "k"];
-    const NOTE_TRAVEL_MS = 1875; // 音符从顶部到判定线的时长（ms），与帧率无关
-    const SONG_LEN_MS = 60000;
-    function reset() {
-      notes = []; score = 0; combo = 0; maxCombo = 0; counts = { p: 0, g: 0, m: 0 };
-      running = true; frame = 0; startT = 0; lastT = 0; nextSpawn = 0; nextChord = 0; rank = ""; isNewBest = false;
+    const LANE_COL = ["#ff6b8b", "#ffb84d", "#4dd0a5", "#5aa8ff"];
+    const DIFF = {
+      easy: { name: "简单", bpm: 96, dens: 0.42, travel: 1.9 },
+      normal: { name: "普通", bpm: 112, dens: 0.6, travel: 1.55 },
+      hard: { name: "困难", bpm: 128, dens: 0.8, travel: 1.25 },
+    };
+    const BARS = 16, LEAD = 2.2;
+    let save = (() => { try { const v = JSON.parse(lsGet(KEY, "{}")); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })();
+    let diff = DIFF[save.diff] ? save.diff : "normal";
+    let notes = [], state = "idle", t0 = 0, useAudio = false, master = null, raf = null, songLen = 0;
+    let score = 0, combo = 0, maxCombo = 0, cnt = { p: 0, g: 0, m: 0 }, judge = null, laneFlash = [0, 0, 0, 0], sparks = [];
+    const SCALE = [0, 2, 4, 7, 9]; // 五声音阶
+    const PROG = [0, 7, 9, 5]; // I V vi IV（半音）
+    const BASE = 261.63; // C4
+    const freq = (semi) => BASE * Math.pow(2, semi / 12);
+    function now() {
+      if (useAudio) { const c = SFX.ctx(); return c ? c.currentTime - t0 : 0; }
+      return performance.now() / 1000 - t0;
+    }
+    function buildSong() {
+      const d = DIFF[diff], beat = 60 / d.bpm, step = beat / 2; // 八分音符
+      const out = [];
+      let deg = 2, lastLane = -1;
+      for (let bar = 0; bar < BARS; bar++) {
+        for (let k = 0; k < 8; k++) {
+          const t = LEAD + (bar * 8 + k) * step;
+          const strong = k % 2 === 0, down = k === 0 || k === 4;
+          const p = d.dens * (down ? 1.35 : strong ? 0.95 : 0.55) * (bar < 2 ? 0.6 : 1);
+          if (Math.random() < p) {
+            deg = Math.max(0, Math.min(9, deg + Math.floor(Math.random() * 5) - 2));
+            let lane = Math.min(3, Math.floor(deg / 2.5));
+            if (lane === lastLane && Math.random() < 0.5) lane = (lane + 1 + Math.floor(Math.random() * 3)) % 4;
+            lastLane = lane;
+            const semi = PROG[bar % 4] % 12 === 0 ? 0 : 0; // 旋律走五声音阶，和弦只给贝斯
+            out.push({ t, lane, semi: 12 + SCALE[deg % 5] + 12 * Math.floor(deg / 5) + semi, hit: false, res: null });
+            // 困难：偶尔加双押
+            if (diff === "hard" && down && Math.random() < 0.18) out.push({ t, lane: (lane + 2) % 4, semi: 12 + SCALE[(deg + 2) % 5], hit: false, res: null });
+          }
+        }
+      }
+      songLen = LEAD + BARS * 8 * step + 1.2;
+      return out;
+    }
+    function scheduleAudio() {
+      const c = SFX.ctx(); if (!c) return false;
+      const d = DIFF[diff], beat = 60 / d.bpm, step = beat / 2;
+      master = c.createGain(); master.gain.value = 0.55; master.connect(c.destination);
+      const base0 = c.currentTime + 0.12; t0 = base0;
+      const tone = (f, at, dur, type, vol) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, base0 + at); g.gain.exponentialRampToValueAtTime(vol, base0 + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, base0 + at + dur);
+        o.connect(g); g.connect(master); o.start(base0 + at); o.stop(base0 + at + dur + 0.05);
+      };
+      const nb = (() => { const len = Math.floor(c.sampleRate * 0.2), b = c.createBuffer(1, len, c.sampleRate), x = b.getChannelData(0); for (let i = 0; i < len; i++) x[i] = Math.random() * 2 - 1; return b; })();
+      const noise = (at, dur, vol, hp) => {
+        const src = c.createBufferSource(); src.buffer = nb;
+        const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
+        const g = c.createGain(); g.gain.setValueAtTime(vol, base0 + at); g.gain.exponentialRampToValueAtTime(0.0001, base0 + at + dur);
+        src.connect(f); f.connect(g); g.connect(master); src.start(base0 + at); src.stop(base0 + at + dur + 0.02);
+      };
+      const kick = (at) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.frequency.setValueAtTime(140, base0 + at); o.frequency.exponentialRampToValueAtTime(45, base0 + at + 0.12);
+        g.gain.setValueAtTime(0.9, base0 + at); g.gain.exponentialRampToValueAtTime(0.0001, base0 + at + 0.18);
+        o.connect(g); g.connect(master); o.start(base0 + at); o.stop(base0 + at + 0.2);
+      };
+      // 预备拍：4 下嗒嗒
+      for (let i = 0; i < 4; i++) tone(i === 0 ? 1320 : 990, LEAD - 4 * beat + i * beat, 0.05, "square", 0.08);
+      for (let bar = 0; bar < BARS; bar++) {
+        const root = PROG[bar % 4];
+        for (let k = 0; k < 8; k++) {
+          const at = LEAD + (bar * 8 + k) * step;
+          if (k === 0 || k === 4) kick(at);
+          if (k === 2 || k === 6) noise(at, 0.12, 0.35, 1500);
+          noise(at, 0.03, 0.08, 7000);
+          if (k % 2 === 0) tone(freq(root - 24 + (k === 6 ? 7 : 0)), at, step * 1.6, "triangle", 0.22);
+        }
+        // 和弦垫底
+        [0, 4, 7].forEach((iv) => tone(freq(root - 12 + iv + (iv === 4 && (root === 9) ? -1 : 0)), LEAD + bar * 8 * step, step * 7.5, "sine", 0.035));
+      }
+      for (const n of notes) tone(freq(n.semi), n.t, 0.22, "square", 0.05);
+      return true;
+    }
+    function stopAudio() { if (master) { try { master.disconnect(); } catch (e) {} master = null; } }
+    function start() {
+      SFX.unlock();
+      stopAudio();
+      notes = buildSong();
+      score = 0; combo = 0; maxCombo = 0; cnt = { p: 0, g: 0, m: 0 }; judge = null; sparks = []; laneFlash = [0, 0, 0, 0];
+      useAudio = SFX.enabled && !!SFX.ctx() && scheduleAudio();
+      if (!useAudio) t0 = performance.now() / 1000;
+      state = "play";
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(loop);
       render();
     }
-    function spawn(now) {
-      // 谱面：按真实时间生成，不随帧率变化
-      if (now >= nextSpawn && Math.random() < 0.75) {
-        notes.push({ lane: Math.floor(Math.random() * LANES), y: -20, hit: false });
-        nextSpawn = now + 467; // 约 28 帧 @60fps
-      } else if (now >= nextSpawn) {
-        nextSpawn = now + 467;
-      }
-      if (now >= nextChord) { // 和弦
-        const l = Math.floor(Math.random() * LANES);
-        notes.push({ lane: (l + 2) % LANES, y: -20, hit: false });
-        nextChord = now + 1867; // 约 112 帧 @60fps
-      }
+    function finish() {
+      state = "result";
+      const total = notes.length || 1;
+      const acc = (cnt.p + cnt.g * 0.6) / total;
+      const rank = acc >= 0.95 ? "S" : acc >= 0.85 ? "A" : acc >= 0.7 ? "B" : acc >= 0.5 ? "C" : "D";
+      const k = "best_" + diff;
+      const isNew = score > (save[k] || 0);
+      if (isNew) save[k] = score;
+      lsSet(KEY, JSON.stringify(save));
+      judge = { rank, acc, isNew };
+      if (SFX.enabled && !useAudio) SFX.win();
+      render();
     }
     function hit(lane) {
-      if (!running) return;
-      SFX.unlock();
-      // 找最近的未击中音符
-      let bestN = null, bestD = 1e9;
-      for (const n of notes) {
-        if (n.lane !== lane || n.hit) continue;
-        const d = Math.abs(n.y - JUDGE_Y);
-        if (d < bestD) { bestD = d; bestN = n; }
-      }
-      if (!bestN || bestD > 70) { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); render(); return; }
-      bestN.hit = true; // 坏区命中也消耗音符，不会重复计 miss（R19 复查确认）
-      // R19：连击只在 Perfect/Good 时涨。原来先 combo++ 再判 miss，白白把“最大连击”抬高 1（2 连击后 1 次坏区 miss，结算显示 3）
-      if (bestD < 22) { combo++; maxCombo = Math.max(maxCombo, combo); score += 300; counts.p++; if (SFX.enabled) SFX.pop(0.9); }
-      else if (bestD < 48) { combo++; maxCombo = Math.max(maxCombo, combo); score += 100; counts.g++; if (SFX.enabled) SFX.pop(0.5); }
-      else { combo = 0; counts.m++; if (SFX.enabled) SFX.lose(); }
+      if (state !== "play" || lane < 0 || lane > 3) return;
+      laneFlash[lane] = 1;
+      const t = now();
+      let bestN = null, bd = 1e9;
+      for (const n of notes) { if (n.lane !== lane || n.hit) continue; const d = Math.abs(n.t - t); if (d < bd) { bd = d; bestN = n; } }
+      if (!bestN || bd > 0.16) return; // 空按不扣分
+      bestN.hit = true;
+      if (bd <= 0.055) { bestN.res = "p"; cnt.p++; combo++; score += 300 + Math.min(combo, 50) * 4; judge = { txt: "PERFECT", col: "#ffe066", at: t }; }
+      else if (bd <= 0.11) { bestN.res = "g"; cnt.g++; combo++; score += 120 + Math.min(combo, 50) * 2; judge = { txt: "GREAT", col: "#7fd4ff", at: t }; }
+      else { bestN.res = "m"; cnt.m++; combo = 0; judge = { txt: "BAD", col: "#ff7a7a", at: t }; }
+      maxCombo = Math.max(maxCombo, combo);
+      if (bestN.res !== "m") for (let i = 0; i < 8; i++) sparks.push({ x: lane * LW + LW / 2, y: JUDGE_Y, vx: (Math.random() - 0.5) * 220, vy: -Math.random() * 260, life: 0.45, col: LANE_COL[lane] });
       render();
     }
-    function step(now) {
-      if (!running) return;
-      if (!startT) { startT = now; lastT = now; nextSpawn = now; nextChord = now; }
-      const dt = Math.min(100, now - lastT); // ms，防切后台跳变
-      lastT = now;
-      const elapsed = now - startT;
-      spawn(now);
-      const pxPerMs = (JUDGE_Y + 20) / NOTE_TRAVEL_MS; // 与帧率无关的下落速度
-      for (const n of notes) n.y += pxPerMs * dt;
-      // miss
-      for (const n of notes) {
-        if (!n.hit && n.y > JUDGE_Y + 70) { n.hit = true; n.missed = true; combo = 0; counts.m++; }
+    let lastFrame = 0;
+    function loop(ts) {
+      const dt = Math.min(0.05, (ts - (lastFrame || ts)) / 1000); lastFrame = ts;
+      if (state === "play") {
+        const t = now();
+        for (const n of notes) if (!n.hit && t - n.t > 0.16) { n.hit = true; n.res = "x"; cnt.m++; combo = 0; judge = { txt: "MISS", col: "#888", at: t }; render(); }
+        if (t > songLen) finish();
       }
-      notes = notes.filter((n) => n.y < H + 20 && !(n.hit && n.y > JUDGE_Y + 40));
-      if (elapsed > SONG_LEN_MS) { // 60 秒结束（真实时间）
-        running = false;
-        const total = counts.p + counts.g + counts.m;
-        const acc = total ? (counts.p + counts.g * 0.5) / total : 0;
-        // 评级：SSS≥95% / S≥90% / A≥80% / B≥65% / C<65%
-        rank = acc >= 0.95 ? "SSS" : acc >= 0.9 ? "S" : acc >= 0.8 ? "A" : acc >= 0.65 ? "B" : "C";
-        isNewBest = score > best && score > 0;
-        if (isNewBest) { best = score; saveBest(KEY, best); }
-        if (SFX.enabled) { if (rank === "SSS" || rank === "S" || isNewBest) SFX.win(); else if (rank === "C") SFX.lose(); else SFX.pop(0.6); }
-      }
-      draw(); render();
-      if (running) raf = requestAnimationFrame(step);
+      for (let i = 0; i < 4; i++) laneFlash[i] = Math.max(0, laneFlash[i] - dt * 5);
+      sparks.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.life -= dt; });
+      sparks = sparks.filter((p) => p.life > 0);
+      draw();
+      if (state === "play" || sparks.length || laneFlash.some((v) => v > 0)) raf = requestAnimationFrame(loop); else raf = null;
     }
     function draw() {
       const cv = $("rhythmCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
       try {
-        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b0d1a"); g.addColorStop(1, "#1a1036");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
         for (let i = 0; i < LANES; i++) {
-          ctx.fillStyle = i % 2 ? "#1a1e2e" : "#161a28";
-          ctx.fillRect(i * LW, 0, LW, H);
-          ctx.strokeStyle = "rgba(255,255,255,0.08)";
-          ctx.beginPath(); ctx.moveTo(i * LW, 0); ctx.lineTo(i * LW, H); ctx.stroke();
-          ctx.fillStyle = "rgba(255,255,255,0.15)";
-          ctx.font = "12px sans-serif"; ctx.textAlign = "center";
-          ctx.fillText(KEYS[i].toUpperCase(), i * LW + LW / 2, H - 12);
+          if (laneFlash[i] > 0) { const lg = ctx.createLinearGradient(0, JUDGE_Y, 0, 0); lg.addColorStop(0, LANE_COL[i] + "88"); lg.addColorStop(1, LANE_COL[i] + "00"); ctx.globalAlpha = laneFlash[i]; ctx.fillStyle = lg; ctx.fillRect(i * LW, 0, LW, JUDGE_Y); ctx.globalAlpha = 1; }
+          ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.beginPath(); ctx.moveTo(i * LW, 0); ctx.lineTo(i * LW, H); ctx.stroke();
+          // 底部按键垫
+          ctx.fillStyle = laneFlash[i] > 0.3 ? LANE_COL[i] : "rgba(255,255,255,0.06)";
+          ctx.beginPath(); ctx.arc(i * LW + LW / 2, JUDGE_Y, 22, 0, 7); ctx.fill();
+          ctx.strokeStyle = LANE_COL[i]; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(KEYS[i].toUpperCase(), i * LW + LW / 2, H - 22);
         }
-        // 判定线
-        ctx.fillStyle = "#4f7cff"; ctx.fillRect(0, JUDGE_Y - 2, W, 4);
-        for (const n of notes) {
-          if (n.hit && !n.missed) continue;
-          const x = n.lane * LW + LW / 2;
-          ctx.fillStyle = n.missed ? "#555" : "#f5c542";
-          ctx.beginPath(); ctx.arc(x, n.y, 14, 0, 7); ctx.fill();
-          ctx.fillStyle = "#12141c";
-          ctx.beginPath(); ctx.arc(x, n.y, 8, 0, 7); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(0, JUDGE_Y - 1, W, 2);
+        const tt = state === "play" ? now() : 0, travel = DIFF[diff].travel;
+        if (state === "play") {
+          for (const n of notes) {
+            if (n.hit && n.res !== "x") continue;
+            const y = JUDGE_Y - (n.t - tt) / travel * JUDGE_Y;
+            if (y < -30 || y > H + 30) continue;
+            const x = n.lane * LW + LW / 2;
+            ctx.fillStyle = n.res === "x" ? "#444" : LANE_COL[n.lane];
+            ctx.shadowColor = LANE_COL[n.lane]; ctx.shadowBlur = n.res === "x" ? 0 : 12;
+            const w = LW - 18, h = 16;
+            ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, 8); else ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(x - w / 2 + 8, y - 4, w - 16, 3);
+          }
+          // 进度条
+          ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(0, 0, W, 4);
+          ctx.fillStyle = "#7c5cff"; ctx.fillRect(0, 0, W * Math.max(0, Math.min(1, tt / songLen)), 4);
+          if (tt < LEAD - 0.1) { ctx.fillStyle = "#fff"; ctx.font = "bold 44px sans-serif"; ctx.fillText(String(Math.ceil((LEAD - tt) / (60 / DIFF[diff].bpm))), W / 2, H / 2 - 40); }
         }
-        // 连击
-        if (combo > 1) {
-          ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
-          ctx.fillText(combo + " 连击", W / 2, 60);
+        sparks.forEach((p) => { ctx.globalAlpha = Math.max(0, p.life / 0.45); ctx.fillStyle = p.col; ctx.fillRect(p.x - 2, p.y - 2, 4, 4); });
+        ctx.globalAlpha = 1;
+        if (state === "play" && judge && judge.txt && tt - judge.at < 0.5) {
+          ctx.fillStyle = judge.col; ctx.font = "900 28px sans-serif"; ctx.fillText(judge.txt, W / 2, JUDGE_Y - 120);
         }
+        if (state === "play" && combo >= 3) { ctx.fillStyle = "#fff"; ctx.font = "900 34px sans-serif"; ctx.fillText(String(combo), W / 2, 70); ctx.font = "12px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.fillText("COMBO", W / 2, 96); }
+        if (state === "idle") {
+          ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.fillText("👆 点这里开始", W / 2, H / 2 - 30);
+          ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)";
+          ctx.fillText("音符落到圆圈时点对应的轨道", W / 2, H / 2 + 6);
+          ctx.fillText("电脑：D F J K · 建议开声音", W / 2, H / 2 + 30);
+        }
+        if (state === "result" && judge) {
+          ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = { S: "#ffe066", A: "#7fffb0", B: "#7fd4ff", C: "#ffb37f", D: "#ff7a7a" }[judge.rank];
+          ctx.font = "900 86px sans-serif"; ctx.fillText(judge.rank, W / 2, H / 2 - 70);
+          ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif"; ctx.fillText(score + " 分" + (judge.isNew ? "  🎉新纪录" : ""), W / 2, H / 2);
+          ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.8)";
+          ctx.fillText("准确率 " + Math.round(judge.acc * 100) + "% · 最大连击 " + maxCombo, W / 2, H / 2 + 30);
+          ctx.fillText("Perfect " + cnt.p + " · Great " + cnt.g + " · Miss " + cnt.m, W / 2, H / 2 + 52);
+          ctx.fillText("点一下再来一首", W / 2, H / 2 + 92);
+        }
+        ctx.textBaseline = "alphabetic";
       } catch (e) {}
     }
     function render() {
-      $("rhythmScore").textContent = running
-        ? "分 " + score + " · 连击 " + combo + " · P" + counts.p + "/G" + counts.g + "/M" + counts.m + " · 最好 " + best
-        : "评级 " + rank + (isNewBest ? " 🎉新纪录！" : "") + " · 分 " + score + " · 最大连击 " + maxCombo + " · P" + counts.p + "/G" + counts.g + "/M" + counts.m + " · 最好 " + best;
+      $("rhythmScore").textContent = state === "play"
+        ? "分 " + score + " · 连击 " + combo + " · P" + cnt.p + " / G" + cnt.g + " / M" + cnt.m
+        : DIFF[diff].name + " · 最好 " + (save["best_" + diff] || 0) + " 分";
+      document.querySelectorAll("#rhythmDiff [data-d]").forEach((b) => { b.classList.toggle("active", b.getAttribute("data-d") === diff); b.disabled = state === "play"; });
     }
-    if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function rhythmKeys(e) {
-      if ($("toy-rhythm") && $("toy-rhythm").classList.contains("hidden")) return;
-      const k = e.key.toLowerCase();
-      const i = KEYS.indexOf(k);
-      if (i >= 0) { hit(i); e.preventDefault(); }
+    document.addEventListener("keydown", (e) => {
+      if ($("toy-rhythm").classList.contains("hidden") || e.repeat) return;
+      const i = KEYS.indexOf((e.key || "").toLowerCase());
+      if (i >= 0) { e.preventDefault(); if (state !== "play") start(); else hit(i); }
+      else if (e.key === " " && state !== "play") { e.preventDefault(); start(); }
     });
     const cv = $("rhythmCanvas");
     if (cv) cv.addEventListener("pointerdown", (e) => {
-      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 320 };
-      const x = (e.clientX - rect.left) * 320 / (rect.width || 320);
-      hit(Math.floor(x / LW));
+      e.preventDefault();
+      if (state !== "play") { start(); return; }
+      const rect = cv.getBoundingClientRect();
+      hit(Math.floor((e.clientX - rect.left) / (rect.width || W) * LANES));
+      if (!raf) raf = requestAnimationFrame(loop);
     });
-    $("rhythmResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
-    toyLeaveCleanup.rhythm = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
-    reset(); running = false; draw(); render();
+    document.querySelectorAll("#rhythmDiff [data-d]").forEach((b) => b.addEventListener("click", () => {
+      if (state === "play") return;
+      diff = b.getAttribute("data-d"); save.diff = diff; lsSet(KEY, JSON.stringify(save)); state = "idle"; draw(); render();
+    }));
+    $("rhythmResetBtn").addEventListener("click", () => start());
+    toyLeaveCleanup.rhythm = () => { if (raf) cancelAnimationFrame(raf); raf = null; stopAudio(); if (state === "play") { state = "idle"; } draw(); render(); };
+    draw(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-      get rhythm() { return { score, combo, maxCombo, best, running, counts }; }, // R19：补 maxCombo 供回归测试（原来结算屏才看得到）
+      get rhythm() { return { score, combo, maxCombo, running: state === "play", state, counts: cnt, notes: notes.length }; },
       rhythmHit(lane) { hit(lane); },
-      rhythmStart() { if (!running) { reset(); raf = requestAnimationFrame(step); } },
-      rhythmNotes() { const n = notes.find((x) => !x.hit); return n ? { y: Math.round(n.y * 10) / 10, count: notes.length } : { y: -999, count: notes.length }; },
+      rhythmStart() { start(); },
+      rhythmNotes() { const t = now(); const n = notes.find((x) => !x.hit); return n ? { dt: n.t - t, lane: n.lane, count: notes.length } : null; },
     }));
   };
 

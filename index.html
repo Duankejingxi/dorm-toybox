@@ -1335,10 +1335,11 @@
   </section>
   <section class="panel toy hidden" id="toy-rhythm">
     <h2>🎵 音游</h2>
-    <p class="hint">音符掉到判定线时按 D F J K（或点轨道），Perfect+300 Good+100。</p>
-    <canvas id="rhythmCanvas" width="320" height="420" style="width:100%;max-width:320px"></canvas>
-    <p class="result-line" id="rhythmScore">分 0 · 连击 0 · 最好 0</p>
-    <div class="btn-row"><button class="btn ghost-btn small" id="rhythmResetBtn">重开 ↺</button></div>
+    <p class="hint">每局现场合成一首曲子，音符就是旋律。音符落到底部圆圈时点对应的轨道（电脑按 D F J K），踩准了会发出旋律音。建议打开声音。</p>
+    <div class="seg" id="rhythmDiff"><button class="seg-btn" data-d="easy">简单</button><button class="seg-btn" data-d="normal">普通</button><button class="seg-btn" data-d="hard">困难</button></div>
+    <canvas id="rhythmCanvas" width="320" height="420" style="width:100%;max-width:360px;touch-action:none"></canvas>
+    <p class="result-line" id="rhythmScore">点画面开始</p>
+    <div class="btn-row"><button class="btn ghost-btn small" id="rhythmResetBtn">重新开始 ↺</button></div>
   </section>
   <section class="panel toy hidden" id="toy-tower">
     <h2>🏗️ 叠塔</h2>

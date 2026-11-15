@@ -8846,30 +8846,62 @@
       { name: "小房子", nodes: [[150, 40], [70, 120], [230, 120], [230, 210], [70, 210]],
         edges: [[0, 1], [0, 2], [1, 2], [1, 4], [4, 3], [3, 2]] },
     ];
+    // v4.0：第 4 关起随机生成——在 4×4 点阵上随机走一条不重复的路，走过的边就是题目，保证能一笔画完
+    function onestrokeGen(level) {
+      const want = Math.min(22, 5 + level * 1.3 | 0);
+      const COLS = 4, ROWS = 4, X0 = 45, Y0 = 35, DX = 70, DY = 63;
+      for (let tries = 0; tries < 200; tries++) {
+        const used = new Set(), diagCells = new Set(), path = [];
+        let cur = [Math.floor(Math.random() * COLS), Math.floor(Math.random() * ROWS)];
+        path.push(cur);
+        for (let k = 0; k < want; k++) {
+          const opts = [];
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+            const nx = cur[0] + dx, ny = cur[1] + dy;
+            if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+            const key = Math.min(cur[1] * COLS + cur[0], ny * COLS + nx) + "-" + Math.max(cur[1] * COLS + cur[0], ny * COLS + nx);
+            if (used.has(key)) continue;
+            if (dx && dy) { const cell = Math.min(cur[0], nx) + "," + Math.min(cur[1], ny); if (diagCells.has(cell)) continue; }
+            opts.push([nx, ny, key, dx && dy ? Math.min(cur[0], nx) + "," + Math.min(cur[1], ny) : null]);
+          }
+          if (!opts.length) break;
+          const [nx, ny, key, cell] = opts[Math.floor(Math.random() * opts.length)];
+          used.add(key); if (cell) diagCells.add(cell);
+          cur = [nx, ny]; path.push(cur);
+        }
+        if (used.size < want - 1) continue;
+        const ids = {}, nodes = [];
+        path.forEach(([x, y]) => { const k = y * COLS + x; if (!(k in ids)) { ids[k] = nodes.length; nodes.push([X0 + x * DX, Y0 + y * DY]); } });
+        const edges = [...used].map((k) => k.split("-").map((v) => ids[+v]));
+        return { name: edges.length + " 条线", nodes, edges };
+      }
+      return ONESTROKE_LEVELS[2];
+    }
+    function onestrokeLv(i) { while (ONESTROKE_LEVELS.length <= i) ONESTROKE_LEVELS.push(onestrokeGen(ONESTROKE_LEVELS.length)); return ONESTROKE_LEVELS[i]; }
     let onestrokeLevel = 0, onestrokePath = [], onestrokeUsed = new Set(), onestrokeDone = false;
     function onestrokeEdgeKey(a, b) { return Math.min(a, b) + "-" + Math.max(a, b); }
     // R29：起笔陷阱——欧拉轨迹必须从奇点出发；第 2 关奇点是 0、2 号点，第 3 关是 1、2 号点，
     // 从别的点起笔注定走进死胡同。起笔前把能画完的起笔点圈出来（0 个奇点 = 欧拉回路，任意起笔都行，不用提示）。
     function onestrokeStartNodes() {
-      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const lv = onestrokeLv(onestrokeLevel);
       const deg = lv.nodes.map(() => 0);
       lv.edges.forEach((e) => { deg[e[0]]++; deg[e[1]]++; });
       const odd = deg.map((d, i) => (d % 2 === 1 ? i : -1)).filter((i) => i >= 0);
       return odd.length === 2 ? odd : [];
     }
     function onestrokeRender() {
-      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const lv = onestrokeLv(onestrokeLevel);
       const board = $("onestrokeBoard");
       board.innerHTML = "";
       const starts = onestrokePath.length === 0 ? onestrokeStartNodes() : [];
-      // 已画的线
-      onestrokeUsed.forEach((key) => {
-        const [a, b] = key.split("-").map(Number);
-        const [x1, y1] = lv.nodes[a], [x2, y2] = lv.nodes[b];
+      // 所有线：没画的是虚的，画过的是亮的（原来只画已画的线，玩家根本看不到题目）
+      lv.edges.forEach((e) => {
+        const key = onestrokeEdgeKey(e[0], e[1]);
+        const [x1, y1] = lv.nodes[e[0]], [x2, y2] = lv.nodes[e[1]];
         const len = Math.hypot(x2 - x1, y2 - y1);
         const ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
         const line = document.createElement("div");
-        line.className = "onestroke-line";
+        line.className = "onestroke-line" + (onestrokeUsed.has(key) ? " done" : " todo");
         line.style.left = x1 + "px"; line.style.top = y1 + "px";
         line.style.width = len + "px"; line.style.transform = "rotate(" + ang + "deg)";
         board.appendChild(line);
@@ -8877,15 +8909,16 @@
       // 点
       lv.nodes.forEach((pt, i) => {
         const d = document.createElement("button");
-        d.className = "onestroke-dot" + (starts.includes(i) ? " onestroke-start" : "");
+        d.className = "onestroke-dot" + (starts.includes(i) ? " onestroke-start" : "") + (onestrokePath.length && onestrokePath[onestrokePath.length - 1] === i ? " cur" : "");
         d.style.left = pt[0] + "px"; d.style.top = pt[1] + "px";
         d.setAttribute("aria-label", "点 " + (i + 1));
         d.addEventListener("click", () => onestrokePick(i));
         board.appendChild(d);
       });
+      if ($("onestrokeNextBtn")) $("onestrokeNextBtn").classList.toggle("hidden", !onestrokeDone);
       $("onestrokeStatus").textContent = onestrokeDone
-        ? "🎉 第 " + (onestrokeLevel + 1) + " 关画完了！" + (onestrokeLevel < 2 ? " 点重画进下一关。" : " 全部通关！")
-        : "第 " + (onestrokeLevel + 1) + " / 3 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线"
+        ? "🎉 第 " + (onestrokeLevel + 1) + " 关画完了！点「下一关」继续。"
+        : "第 " + (onestrokeLevel + 1) + " 关（" + lv.name + "）· 已画 " + onestrokeUsed.size + " / " + lv.edges.length + " 条线"
           + (onestrokeDeadEnd()
             ? (onestrokeUndoHelps() ? " · 😵 走进死胡同了，点撤销退一步。" : " · 😵 走进死胡同了——起笔点错了，点「重画」换个金色圈的点起笔。")
             : (!onestrokeSolvable() ? " · ⚠️ 再画下去也画不完了，点「重画」换个金色圈的点起笔。" : ""))
@@ -8894,7 +8927,7 @@
     // v3.0-r17：当前点没有未画的相邻边、但关卡还没画完 = 死胡同（以前只静默卡住）
     function onestrokeDeadEnd() {
       if (onestrokeDone || onestrokePath.length === 0) return false;
-      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const lv = onestrokeLv(onestrokeLevel);
       const cur = onestrokePath[onestrokePath.length - 1];
       return !lv.edges.some((e) => !onestrokeUsed.has(onestrokeEdgeKey(e[0], e[1])) && (e[0] === cur || e[1] === cur));
     }
@@ -8902,7 +8935,7 @@
     // 或 2 个且当前点是其中之一）。错起笔时全程都不满足——死胡同里撤销也救不回，文案不能只说“点撤销”。
     function onestrokeSolvable() {
       if (onestrokeDone || onestrokePath.length === 0) return true;
-      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const lv = onestrokeLv(onestrokeLevel);
       const cur = onestrokePath[onestrokePath.length - 1];
       const rem = lv.edges.filter((e) => !onestrokeUsed.has(onestrokeEdgeKey(e[0], e[1])));
       if (rem.length === 0) return true;
@@ -8931,7 +8964,7 @@
     }
     function onestrokePick(i) {
       if (onestrokeDone) return;
-      const lv = ONESTROKE_LEVELS[onestrokeLevel];
+      const lv = onestrokeLv(onestrokeLevel);
       if (onestrokePath.length === 0) { onestrokePath = [i]; onestrokeRender(); return; }
       const cur = onestrokePath[onestrokePath.length - 1];
       const key = onestrokeEdgeKey(cur, i);
@@ -8943,7 +8976,8 @@
       }
       onestrokeUsed.add(key);
       onestrokePath.push(i);
-      if (onestrokeUsed.size === lv.edges.length) onestrokeDone = true;
+      if (onestrokeUsed.size === lv.edges.length) { onestrokeDone = true; if (SFX.enabled) SFX.win(); }
+      else if (SFX.enabled) SFX.click();
       onestrokeRender();
     }
     function onestrokeReset(level) {
@@ -8959,13 +8993,11 @@
       onestrokeDone = false;
       onestrokeRender();
     });
-    $("onestrokeResetBtn").addEventListener("click", () => {
-      if (onestrokeDone && onestrokeLevel < 2) onestrokeReset(onestrokeLevel + 1);
-      else onestrokeReset(onestrokeLevel);
-    });
+    $("onestrokeResetBtn").addEventListener("click", () => onestrokeReset(onestrokeLevel));
+    if ($("onestrokeNextBtn")) $("onestrokeNextBtn").addEventListener("click", () => { if (onestrokeDone) { SFX.click(); onestrokeReset(onestrokeLevel + 1); } });
     onestrokeReset(0);
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get onestroke() { return { level: onestrokeLevel, path: onestrokePath.slice(), used: [...onestrokeUsed], totalEdges: ONESTROKE_LEVELS[onestrokeLevel].edges.length, done: onestrokeDone }; },
+        get onestroke() { return { level: onestrokeLevel, path: onestrokePath.slice(), used: [...onestrokeUsed], totalEdges: onestrokeLv(onestrokeLevel).edges.length, done: onestrokeDone }; },
         onestrokePick(i) { onestrokePick(i); },
         onestrokeSet(level) { onestrokeReset(level); },
     }));
@@ -9116,7 +9148,36 @@
   toyInitFns["make24"] = function () {
     const MAKE24_KEY = "dorm-toybox-make24-best-v1";
     // 12 组题：每组都用暴力求解验过可解（[1,6,7,8] 无解，已排除）
-    const MAKE24_SETS = [[3, 3, 8, 8], [1, 5, 5, 5], [2, 3, 4, 6], [1, 2, 3, 4], [3, 4, 5, 6], [2, 4, 6, 8], [1, 3, 4, 6], [2, 2, 3, 9], [4, 5, 6, 7], [3, 5, 7, 9], [2, 3, 7, 10], [4, 4, 4, 4]];
+    // v4.0：每次随机出 12 组有解的题（扑克牌 1–13），求解器同时给出参考答案
+    function make24Solve(nums) {
+      const go = (items) => {
+        if (items.length === 1) return Math.abs(items[0].v - 24) < 1e-6 ? items[0].e : null;
+        for (let i = 0; i < items.length; i++) for (let j = 0; j < items.length; j++) {
+          if (i === j) continue;
+          const a = items[i], b = items[j], rest = items.filter((_, k) => k !== i && k !== j);
+          const P = (x, op, y) => "(" + x.e + op + y.e + ")";
+          const cands = [{ v: a.v + b.v, e: P(a, "+", b) }, { v: a.v - b.v, e: P(a, "-", b) }, { v: a.v * b.v, e: P(a, "×", b) }];
+          if (Math.abs(b.v) > 1e-9) cands.push({ v: a.v / b.v, e: P(a, "÷", b) });
+          for (const c of cands) { const r = go(rest.concat([c])); if (r) return r; }
+        }
+        return null;
+      };
+      const r = go(nums.map((n) => ({ v: n, e: String(n) })));
+      return r ? r.slice(1, -1) : null; // 最外层括号一定是一对
+    }
+    function make24Gen() {
+      const out = [], seen = new Set();
+      let guard = 0;
+      while (out.length < 12 && guard++ < 2000) {
+        const max = out.length < 4 ? 10 : 13; // 前几组数字小一点
+        const s = [0, 0, 0, 0].map(() => 1 + Math.floor(Math.random() * max)).sort((a, b) => a - b);
+        const k = s.join(",");
+        if (seen.has(k) || !make24Solve(s)) continue;
+        seen.add(k); out.push(s);
+      }
+      return out;
+    }
+    let MAKE24_SETS = make24Gen();
     let make24Best = loadBest(MAKE24_KEY);
     let make24SetIdx = 0, make24Nums = [], make24Sel = [], make24Solved = 0, make24History = [];
     let make24SolvedSets = new Set(); // v3.0-r16：记哪些组已解过，重解同一组不重复计入“已解 N 组”
@@ -9144,6 +9205,7 @@
         ops.appendChild(b);
       });
       $("make24Status").textContent = "第 " + (make24SetIdx + 1) + " / 12 组 · 已解 " + make24Solved + " 组 · 最好 " + make24Best + " 组";
+      if ($("make24Answer")) $("make24Answer").textContent = "";
     }
     function make24PickNum(i) {
       if (make24Sel.indexOf(i) !== -1) { make24Sel = make24Sel.filter((x) => x !== i); make24Render(); return; }
@@ -9197,7 +9259,14 @@
       make24Sel = [];
       make24Render();
     });
-    $("make24ResetBtn").addEventListener("click", () => make24LoadSet((make24SetIdx + 1) % MAKE24_SETS.length));
+    $("make24ResetBtn").addEventListener("click", () => {
+      if (make24SetIdx + 1 >= MAKE24_SETS.length) { MAKE24_SETS = make24Gen(); make24SolvedSets = new Set(); make24Solved = 0; make24LoadSet(0); return; }
+      make24LoadSet(make24SetIdx + 1);
+    });
+    if ($("make24AnswerBtn")) $("make24AnswerBtn").addEventListener("click", () => {
+      const a = make24Solve(MAKE24_SETS[make24SetIdx]);
+      $("make24Answer").textContent = a ? "参考答案：" + a + " = 24" : "";
+    });
     make24LoadSet(0);
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         get make24() { return { setIdx: make24SetIdx, nums: make24Nums.slice(), sel: make24Sel.slice(), solved: make24Solved, best: make24Best, sets: MAKE24_SETS.map((s) => s.slice()) }; },

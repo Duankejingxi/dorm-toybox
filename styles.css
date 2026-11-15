@@ -1915,3 +1915,7 @@ body:not(.in-toy) .howto-more { display: none; }
 .uno-card.dim { filter: saturate(.35) brightness(.7); }
 .level-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 10px; font-weight: 700; }
 .level-nav .btn { min-width: 52px; margin: 0; }
+/* v4.0：一笔画——没画的线虚、画过的亮，当前笔尖所在的点放大 */
+.onestroke-line.todo { background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .35) 0 8px, transparent 8px 14px); height: 3px; }
+.onestroke-line.done { background: #7ec8ff; height: 5px; box-shadow: 0 0 8px rgba(126, 200, 255, .7); }
+.onestroke-dot.cur { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(126, 200, 255, .5); }

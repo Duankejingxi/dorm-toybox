@@ -1155,12 +1155,13 @@
   <!-- 一笔画 -->
   <section class="panel toy hidden" id="toy-onestroke">
     <h2>✏️ 一笔画</h2>
-    <p class="hint">点一个点起笔，再点相邻的点画线，每条线只能画一次，全部画完就过关。3 关。</p>
+    <p class="hint">点一个点起笔，再点和它有线相连的点，把虚线描成实线；每条线只能画一次，全部描完就过关。第 4 关起每关随机生成，越来越复杂。</p>
     <div class="onestroke-board" id="onestrokeBoard"></div>
     <p class="result-line" id="onestrokeStatus">第 1 / 3 关 · 已画 0 / 5 条线</p>
     <div class="btn-row">
       <button class="btn ghost-btn small" id="onestrokeUndoBtn">撤销 ↩</button>
       <button class="btn ghost-btn small" id="onestrokeResetBtn">重画 ↺</button>
+      <button class="btn gold-btn small hidden" id="onestrokeNextBtn">下一关 ▶</button>
     </div>
   </section>
 
@@ -1179,14 +1180,16 @@
   <!-- 24点 -->
   <section class="panel toy hidden" id="toy-make24">
     <h2>🧮 24点</h2>
-    <p class="hint">点两个数，再点一个运算符，把它们合成一个新数。最后只剩一个数，等于 24 就赢。12 组题。</p>
+    <p class="hint">点两个数，再点一个运算符，把它们合成一个新数。最后只剩一个数，等于 24 就赢。每轮随机 12 组，保证都有解，实在想不出可以看答案。</p>
     <div class="make24-nums" id="make24Nums"></div>
     <div class="make24-ops" id="make24Ops"></div>
     <p class="result-line" id="make24Status">第 1 / 12 组 · 已解 0 组 · 最好 0 组</p>
     <div class="btn-row">
       <button class="btn ghost-btn small" id="make24UndoBtn">撤销 ↩</button>
-      <button class="btn ghost-btn small" id="make24ResetBtn">换一组 🔀</button>
+      <button class="btn ghost-btn small" id="make24AnswerBtn">看答案 💡</button>
+      <button class="btn ghost-btn small" id="make24ResetBtn">下一组 ▶</button>
     </div>
+    <p class="count-line" id="make24Answer"></p>
   </section>
 
   <!-- 切水果 -->

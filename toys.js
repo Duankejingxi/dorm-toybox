@@ -10158,34 +10158,56 @@
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function snake2Keys(e) {
       if ($("toy-snake2") && $("toy-snake2").classList.contains("hidden")) return;
       const k = e.key.toLowerCase();
+      if (waiting && "wasd".indexOf(k) >= 0 && k) startNow();
       if (k === "w") setDir(s1, 0, -1);
       else if (k === "s") setDir(s1, 0, 1);
       else if (k === "a") setDir(s1, -1, 0);
       else if (k === "d") setDir(s1, 1, 0);
       // v3.0-r17：方向键只在双人模式管 P2；单人时 P2 是 AI，方向键再去拨它就是作弊
-      else if (e.key === "ArrowUp") { if (!aiMode) setDir(s2, 0, -1); e.preventDefault(); }
-      else if (e.key === "ArrowDown") { if (!aiMode) setDir(s2, 0, 1); e.preventDefault(); }
-      else if (e.key === "ArrowLeft") { if (!aiMode) setDir(s2, -1, 0); e.preventDefault(); }
-      else if (e.key === "ArrowRight") { if (!aiMode) setDir(s2, 1, 0); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { setDir(aiMode ? s1 : s2, 0, -1); e.preventDefault(); }
+      else if (e.key === "ArrowDown") { setDir(aiMode ? s1 : s2, 0, 1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { setDir(aiMode ? s1 : s2, -1, 0); e.preventDefault(); }
+      else if (e.key === "ArrowRight") { setDir(aiMode ? s1 : s2, 1, 0); e.preventDefault(); }
+      else return;
+      if (waiting) startNow();
     });
     const cv = $("snake2Canvas");
-    if (cv) cv.addEventListener("pointerdown", (e) => {
-      SFX.unlock();
-      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 320 };
-      const x = e.clientX - rect.left;
-      // v3.0-r17：单人时整屏都转 P1（右半屏再去转 AI 的蛇是作弊）；双人时左半屏转 P1，右半屏转 P2（顺时针转）
-      const s = (aiMode || x < rect.width / 2) ? s1 : s2;
-      const d = s.dir;
-      setDir(s, -d.y, d.x);
-    });
-    $("snake2ResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    // v4.0：滑动直接定方向；轻点左半屏左转、右半屏右转（双人时左半屏归 P1、右半屏归 P2，都是右转）；开局前点一下才开始
+    let waiting = true, ps = null;
+    function startNow() { waiting = false; if (!running && !winner) running = true; lastT = 0; moveAcc = 0; if (raf) cancelAnimationFrame(raf); raf = requestAnimationFrame(step); render(); }
+    function drawWaiting() {
+      const c = cv && cv.getContext && cv.getContext("2d"); if (!c) return;
+      c.fillStyle = "rgba(0,0,0,.55)"; c.fillRect(0, 0, W, H);
+      c.fillStyle = "#fff"; c.textAlign = "center"; c.font = "bold 22px sans-serif"; c.fillText("👆 点一下开始", W / 2, H / 2 - 20);
+      c.font = "14px sans-serif"; c.fillStyle = "rgba(255,255,255,.8)";
+      c.fillText(aiMode ? "滑动换方向，或点左/右半屏左转/右转" : "左半屏归 P1（WASD），右半屏归 P2（方向键）", W / 2, H / 2 + 12);
+    }
+    if (cv) {
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); e.preventDefault(); ps = { x: e.clientX, y: e.clientY }; });
+      cv.addEventListener("pointerup", (e) => {
+        if (!ps) return;
+        const rect = cv.getBoundingClientRect();
+        const dx = e.clientX - ps.x, dy = e.clientY - ps.y, sx = ps.x - rect.left; ps = null;
+        if (waiting) { startNow(); return; }
+        if (winner) return;
+        const s = (aiMode || sx < rect.width / 2) ? s1 : s2;
+        if (Math.hypot(dx, dy) > 18) {
+          if (Math.abs(dx) > Math.abs(dy)) setDir(s, dx > 0 ? 1 : -1, 0); else setDir(s, 0, dy > 0 ? 1 : -1);
+          return;
+        }
+        const d = s.dir;
+        if (aiMode && sx < rect.width / 2) setDir(s, d.y, -d.x); // 左转
+        else setDir(s, -d.y, d.x); // 右转
+      });
+      cv.addEventListener("pointercancel", () => { ps = null; });
+    }
+    $("snake2ResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); waiting = false; raf = requestAnimationFrame(step); });
     const modeBtn = $("snake2ModeBtn");
-    if (modeBtn) modeBtn.addEventListener("click", () => { aiMode = !aiMode; if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
+    if (modeBtn) modeBtn.addEventListener("click", () => { aiMode = !aiMode; if (raf) cancelAnimationFrame(raf); raf = null; reset(); running = false; waiting = true; draw(); drawWaiting(); });
     toyLeaveCleanup.snake2 = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
-    toyEnterResume.snake2 = () => { if (!winner && !running) { running = true; lastT = 0; moveAcc = 0; raf = requestAnimationFrame(step); } }; // R19：同叠塔，切走再回来蛇冻住（实测 running 从 true 变 false，且点画布只转向不续跑）
-    reset(); draw(); render();
-    raf = requestAnimationFrame(step); // R19：init 只 reset 不启动 raf，打开后蛇根本不动、必须点重开才走（无头实测 1.2 秒画面纹丝不动）
-    Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
+    toyEnterResume.snake2 = () => { if (waiting) { draw(); drawWaiting(); return; } if (!winner && !running) { running = true; lastT = 0; moveAcc = 0; raf = requestAnimationFrame(step); } }; // R19：同叠塔，切走再回来蛇冻住（实测 running 从 true 变 false，且点画布只转向不续跑）
+    reset(); running = false; draw(); drawWaiting(); render(); // v4.0：不再一打开就开跑，等玩家点一下
+Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get snake2() { return { p1: s1.score, p2: s2.score, running, winner, aiMode, dir1: { x: s1.dir.x, y: s1.dir.y }, dir2: { x: s2.dir.x, y: s2.dir.y }, alive1: s1.alive, alive2: s2.alive }; },
       snake2SetDir(p, dx, dy) { setDir(p === 1 ? s1 : s2, dx, dy); },
       snake2Step() { stepBoth(); snake2FinishStep(); },
@@ -12227,8 +12249,9 @@
     const W = 320, H = 420, BH = 22;
     let best = loadBest(KEY);
     let blocks = [], cur = null, dir = 1, height = 0, running = false, raf = null, over = false;
-    let lastT = 0;
+    let lastT = 0, combo = 0, debris = [], flash = null, overAt = 0;
     function reset() {
+      combo = 0; debris = []; flash = null;
       blocks = [{ x: 60, w: 200, y: H - BH }];
       cur = { x: 0, w: 200, y: H - BH * 2, vx: 2.4 };
       dir = 1; height = 0; over = false; running = true; lastT = 0;
@@ -12242,32 +12265,50 @@
       const right = Math.min(cur.x + cur.w, prev.x + prev.w);
       const overlap = right - left;
       if (overlap <= 8) {
-        over = true; running = false;
+        over = true; running = false; overAt = Date.now();
+        debris.push({ x: cur.x, y: cur.y, w: cur.w, vy: 0, vr: (Math.random() - 0.5) * 0.1, r: 0 });
         if (SFX.enabled) SFX.lose();
+        if (!raf) raf = requestAnimationFrame(step);
         draw(); render(); return;
       }
-      // 切掉悬空部分
-      blocks.push({ x: left, w: overlap, y: cur.y });
+      // v4.0：误差 5px 内算“完美”，不切、连击；连击 3 次起每次加宽一点
+      let nx = left, nwid = overlap;
+      if (Math.abs(cur.x - prev.x) <= 5) {
+        nx = prev.x; nwid = prev.w; combo++;
+        if (combo >= 3) { const grow = Math.min(10, 200 - nwid); nwid += grow; nx = Math.max(0, nx - grow / 2); }
+        flash = { t: Date.now(), txt: combo >= 2 ? "完美 ×" + combo : "完美！" };
+      } else {
+        combo = 0;
+        // 切掉的那截掉下去
+        if (cur.x < prev.x) debris.push({ x: cur.x, y: cur.y, w: prev.x - cur.x, vy: 0, vr: -0.04, r: 0 });
+        if (cur.x + cur.w > prev.x + prev.w) debris.push({ x: prev.x + prev.w, y: cur.y, w: cur.x + cur.w - prev.x - prev.w, vy: 0, vr: 0.04, r: 0 });
+      }
+      blocks.push({ x: nx, w: nwid, y: cur.y });
       height++;
-      if (SFX.enabled) SFX.pop(0.4 + Math.min(0.5, height * 0.03));
+      if (SFX.enabled) SFX.pop(combo ? Math.min(1, 0.6 + combo * 0.1) : 0.4 + Math.min(0.4, height * 0.02));
       if (height > best) { best = height; saveBest(KEY, best); }
+      const overlapW = nwid;
       // 下一块：宽度继承，速度加快
-      const nw = overlap;
-      cur = { x: Math.random() < 0.5 ? 0 : W - nw, w: nw, y: cur.y - BH, vx: (2.4 + height * 0.08) * (Math.random() < 0.5 ? 1 : -1) };
+      const nw = overlapW;
+      cur = { x: Math.random() < 0.5 ? 0 : W - nw, w: nw, y: cur.y - BH, vx: Math.min(6, 2.4 + height * 0.08) * (Math.random() < 0.5 ? 1 : -1) };
       // 视角跟随
       if (blocks.length * BH > H - 100) {
         const dy = BH;
         blocks.forEach((b) => b.y += dy);
+        debris.forEach((d) => d.y += dy);
         cur.y += dy;
       }
       draw(); render();
     }
     function step(now) {
-      if (!running || over) return;
+      raf = null;
       if (!lastT) lastT = now;
       const dt = Math.min(50, now - lastT);
       lastT = now;
       const k = dt / 16.7;
+      debris.forEach((d) => { d.vy += 0.5 * k; d.y += d.vy * k; d.r += d.vr * k; });
+      debris = debris.filter((d) => d.y < H + 60);
+      if (!running || over) { draw(); if (debris.length) raf = requestAnimationFrame(step); return; }
       cur.x += cur.vx * k;
       if (cur.x <= 0) { cur.x = 0; cur.vx *= -1; }
       if (cur.x + cur.w >= W) { cur.x = W - cur.w; cur.vx *= -1; }
@@ -12289,6 +12330,15 @@
           ctx.fillStyle = "rgba(255,255,255,0.2)";
           ctx.fillRect(b.x, b.y, b.w, 4);
         });
+        debris.forEach((d) => {
+          ctx.save(); ctx.translate(d.x + d.w / 2, d.y + BH / 2); ctx.rotate(d.r);
+          ctx.fillStyle = "rgba(120,150,220,.75)"; ctx.fillRect(-d.w / 2, -BH / 2, d.w, BH - 2); ctx.restore();
+        });
+        if (flash && Date.now() - flash.t < 700 && !over) {
+          ctx.globalAlpha = 1 - (Date.now() - flash.t) / 700;
+          ctx.fillStyle = "#ffe066"; ctx.font = "900 26px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(flash.txt, W / 2, 60); ctx.globalAlpha = 1;
+        }
         if (!over && cur) {
           ctx.fillStyle = "hsl(210,70%,55%)";
           ctx.fillRect(cur.x, cur.y, cur.w, BH - 2);
@@ -12301,6 +12351,8 @@
           ctx.fillText("🏗️ 塔倒了！", W / 2, H / 2 - 10);
           ctx.font = "18px sans-serif";
           ctx.fillText("高度 " + height + " · 最好 " + best, W / 2, H / 2 + 24);
+          ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)";
+          ctx.fillText("点一下再来", W / 2, H / 2 + 54);
         }
       } catch (e) {}
     }
@@ -12308,7 +12360,11 @@
       $("towerScore").textContent = "高度 " + height + " · 最好 " + best + (over ? " · 结束" : "");
     }
     const cv = $("towerCanvas");
-    if (cv) cv.addEventListener("pointerdown", (e) => { e.preventDefault(); drop(); });
+    if (cv) cv.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (over) { if (Date.now() - overAt > 500) { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); } return; } // v4.0：塔倒了点画面直接再来
+      drop();
+    });
     $("towerResetBtn").addEventListener("click", () => { if (raf) cancelAnimationFrame(raf); reset(); raf = requestAnimationFrame(step); });
     toyLeaveCleanup.tower = () => { if (raf) cancelAnimationFrame(raf); raf = null; running = false; };
     toyEnterResume.tower = () => { if (!over && !running) { running = true; lastT = 0; raf = requestAnimationFrame(step); } }; // R19：切走再回来方块冻住（cleanup 停了 raf 但没续上），只有重开能救
@@ -13067,6 +13123,18 @@
       if (key) { try { const st = __toyboxHandle[key]; running = !!(st && st.running); } catch (e) { running = true; } }
       else running = /暂停/.test(b.textContent || "");
       if (!running) setTimeout(() => { b.click(); }, 0);
+    }, true);
+  });
+
+  // v4.0：结束后点画面直接再来一局（原来只能去找下面的「重开」按钮）。距上一次点击不到 0.45 秒的不算，防止手还在狂点时误开新局
+  [["pongCanvas", "pongResetBtn", (st) => st.over], ["snake2Canvas", "snake2ResetBtn", (st) => !!st.winner], ["archeryCanvas", "archeryResetBtn", (st) => st.left <= 0 && !st.charging]].forEach(([area, btn, isOver]) => {
+    const el = $(area), b = $(btn); if (!el || !b) return;
+    const key = area.replace("Canvas", "");
+    let lastDown = 0;
+    el.addEventListener("pointerdown", () => {
+      const now = Date.now(), gap = now - lastDown; lastDown = now;
+      let over = false; try { over = isOver(__toyboxHandle[key]); } catch (e) {}
+      if (over && gap > 450) setTimeout(() => b.click(), 0);
     }, true);
   });
 

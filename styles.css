@@ -1984,3 +1984,10 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 .linkup-wrap { display: block !important; position: relative; max-width: 340px; margin: 0 auto; }
 .linkup-svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .linkup-svg polyline { fill: none; stroke: #ffd43b; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(255, 212, 59, .8)); }
+/* v4.0：抽屉改紧凑列表，方便快速切换 */
+.drawer-list { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px !important; }
+.drawer-list .drawer-label { grid-column: 1 / -1; margin: 10px 0 2px !important; }
+.drawer-list .tile { aspect-ratio: auto !important; min-height: 44px !important; flex-direction: row !important; justify-content: flex-start !important; gap: 8px !important; padding: 6px 10px !important; border-radius: 10px !important; }
+.drawer-list .tile-emoji { font-size: 20px !important; }
+.drawer-list .tile-name { font-size: 13px !important; text-align: left !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drawer-list .tile.active { border-color: #4f7cff !important; background: rgba(79, 124, 255, .18) !important; }

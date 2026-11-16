@@ -1972,3 +1972,11 @@ body:not(.in-toy) #homeBtn { display: none; }
   #homeAllGrid { grid-template-columns: repeat(6, 1fr) !important; }
   .home-grid .tile { aspect-ratio: 1 / 0.8 !important; }
 }
+/* v4.0：可折叠的设置区（选项编辑之类不常用的东西收起来，不挡主角） */
+.fold { margin: 12px 0; border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px; padding: 0 12px; background: rgba(255, 255, 255, .03); }
+.fold > summary { cursor: pointer; padding: 12px 0; font-weight: 600; list-style: none; min-height: 44px; display: flex; align-items: center; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: "▾"; margin-left: auto; opacity: .6; transition: transform .15s; }
+.fold[open] > summary::after { transform: rotate(180deg); }
+.fold[open] { padding-bottom: 12px; }
+.fold textarea { width: 100%; }

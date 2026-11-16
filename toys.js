@@ -170,6 +170,14 @@
     return arr;
   }
   function todayStr() { return new Date().toDateString(); }
+  // v4.0：给人看的日期（历史记录里原来直接显示 "Mon Nov 16 2026"）
+  function prettyDate(v) {
+    const d = new Date(v);
+    if (isNaN(d)) return String(v || "");
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return (/\d\d:\d\d/.test(String(v)) || typeof v === "number") ? "今天 " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") : "今天";
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+  }
   // localStorage 安全读写（原来每处 try/catch 重复写）
   function lsGet(key, fallback) {
     try { const v = localStorage.getItem(key); return v === null || v === undefined ? fallback : v; }
@@ -743,7 +751,7 @@
         const a = document.createElement("span");
         a.textContent = "🎉 " + h.text;
         const d = document.createElement("span");
-        d.textContent = h.date;
+        d.textContent = prettyDate(h.date);
         li.appendChild(a);
         li.appendChild(d);
         box.appendChild(li);
@@ -751,7 +759,7 @@
     }
     function pushWheelHist(text) {
       const h = loadWheelHist();
-      h.unshift({ text: text, date: todayStr() });
+      h.unshift({ text: text, date: Date.now() });
       try { lsSet(WHEEL_HIST_KEY, JSON.stringify(h.slice(0, 8))); } catch (e) { /* 忽略 */ }
       renderWheelHist();
     }
@@ -2015,7 +2023,7 @@
         const a = document.createElement("span");
         a.textContent = "🏅 第" + (i + 1) + "名 " + r.avg + " ms";
         const d = document.createElement("span");
-        d.textContent = r.date;
+        d.textContent = prettyDate(r.date);
         li.appendChild(a);
         li.appendChild(d);
         box.appendChild(li);
@@ -13137,6 +13145,13 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       if (over && gap > 450) setTimeout(() => b.click(), 0);
     }, true);
   });
+
+  // v4.0：转盘选项改完自动更新（停手 0.6 秒后），不用再找「更新转盘」按钮
+  (function () {
+    const ta = $("wheelOptions"), btn = $("updateWheelBtn"); if (!ta || !btn) return;
+    let t = null;
+    ta.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => btn.click(), 600); });
+  })();
 
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
   // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。

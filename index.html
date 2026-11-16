@@ -69,9 +69,6 @@
   <section class="panel toy" id="toy-wheel">
     <h2>🎡 命运大转盘</h2>
     <p class="hint">纠结的时候就转它：去哪玩、谁请客、晚上干什么，写上去，转一下，命运说了算。</p>
-    <textarea id="wheelOptions" rows="8" aria-label="转盘选项，每行一个"></textarea>
-    <p class="hint">每行一个选项，最多 8 个。改完点「更新转盘」。</p>
-    <button class="btn gold-btn small" id="updateWheelBtn">更新转盘 ↻</button>
     <div class="wheel-stage">
       <canvas id="wheelCanvas" width="320" height="320" role="img" aria-label="命运大转盘"></canvas>
       <div class="wheel-pointer" aria-hidden="true">▼</div>
@@ -79,8 +76,16 @@
     </div>
     <button class="big-btn" id="spinWheelBtn">转起来！</button>
     <p class="result-line" id="wheelResult">转盘还没转过。</p>
+    <details class="fold" id="wheelEdit">
+      <summary>✏️ 改转盘上的选项</summary>
+      <textarea id="wheelOptions" rows="8" aria-label="转盘选项，每行一个"></textarea>
+      <p class="hint">每行一个选项，最多 8 个，改完转盘自动更新。</p>
+      <div class="btn-row">
+        <button class="btn gold-btn small" id="updateWheelBtn">更新转盘 ↻</button>
+        <button class="btn ghost-btn small" id="resetWheelBtn">恢复默认选项</button>
+      </div>
+    </details>
     <ul class="history" id="wheelHistory"></ul>
-    <button class="btn ghost-btn small" id="resetWheelBtn">恢复默认选项</button>
   </section>
 
   <!-- 真心话大冒险 -->

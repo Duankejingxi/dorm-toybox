@@ -1980,3 +1980,7 @@ body:not(.in-toy) #homeBtn { display: none; }
 .fold[open] > summary::after { transform: rotate(180deg); }
 .fold[open] { padding-bottom: 12px; }
 .fold textarea { width: 100%; }
+body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right: auto; }
+.linkup-wrap { display: block !important; position: relative; max-width: 340px; margin: 0 auto; }
+.linkup-svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.linkup-svg polyline { fill: none; stroke: #ffd43b; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(255, 212, 59, .8)); }

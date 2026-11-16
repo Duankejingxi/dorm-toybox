@@ -136,7 +136,7 @@
     return cv;
   }
   ["wheelCanvas", "timerRing", "cuRing", "ledgerChart", "bmiGauge", "compassDialCanvas", "noiseGauge", "noiseHist",
-   "snakeCanvas", "tetrisCanvas", "tetrisNext", "breakoutCanvas", "linkupPath", "shooterCanvas", "fruitsliceCanvas",
+   "snakeCanvas", "tetrisCanvas", "tetrisNext", "breakoutCanvas", "shooterCanvas", "fruitsliceCanvas",
    "archeryCanvas", "flappyCanvas", "snake2Canvas", "pongCanvas", "arkanoidCanvas", "chessCanvas", "goCanvas",
    "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas", "mazeCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
 
@@ -7537,27 +7537,47 @@
       return linkupBoard[(y - 1) * LINKUP_COLS + (x - 1)];
     }
     // 最多拐 2 个弯能不能连上（BFS，带方向和拐弯数）
-    function linkupCanConnect(a, b) {
-      if (a === b || !linkupBoard[a] || !linkupBoard[b] || linkupBoard[a] !== linkupBoard[b]) return false;
+    // v4.0：同时记下路径，消除时把连线画出来（原来连线画布从没用上，消得莫名其妙）
+    function linkupPath(a, b) {
+      if (a === b || !linkupBoard[a] || !linkupBoard[b] || linkupBoard[a] !== linkupBoard[b]) return null;
       const pa = linkupPos(a), pb = linkupPos(b);
       const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       const seen = new Map();
-      const q = [[pa.x, pa.y, -1, 0]];
+      const q = [{ x: pa.x, y: pa.y, dir: -1, turns: 0, prev: null }];
       while (q.length) {
-        const [x, y, dir, turns] = q.shift();
+        const node = q.shift();
         for (let d = 0; d < 4; d++) {
-          const nt = dir === -1 || dir === d ? turns : turns + 1;
+          const nt = node.dir === -1 || node.dir === d ? node.turns : node.turns + 1;
           if (nt > 2) continue;
-          const nx = x + dirs[d][0], ny = y + dirs[d][1];
-          if (nx === pb.x && ny === pb.y) return true;
+          const nx = node.x + dirs[d][0], ny = node.y + dirs[d][1];
+          if (nx === pb.x && ny === pb.y) {
+            const pts = [[nx, ny]]; let n = node; while (n) { pts.unshift([n.x, n.y]); n = n.prev; }
+            return pts;
+          }
           if (linkupCellAt(nx, ny) !== "") continue;
           const key = nx + "," + ny + "," + d;
           if ((seen.get(key) || 99) <= nt) continue;
           seen.set(key, nt);
-          q.push([nx, ny, d, nt]);
+          q.push({ x: nx, y: ny, dir: d, turns: nt, prev: node });
         }
       }
-      return false;
+      return null;
+    }
+    function linkupCanConnect(a, b) { return !!linkupPath(a, b); }
+    function linkupDrawPath(pts) {
+      const wrap = $("linkupWrap"), grid = $("linkupGrid"); if (!wrap || !grid || !pts) return;
+      const c0 = grid.children[0], c1 = grid.children[1], cR = grid.children[LINKUP_COLS];
+      if (!c0 || !c1 || !cR) return;
+      const wr = wrap.getBoundingClientRect(), r0 = c0.getBoundingClientRect();
+      const px = c1.getBoundingClientRect().left - r0.left, py = cR.getBoundingClientRect().top - r0.top;
+      const X = (x) => r0.left - wr.left + r0.width / 2 + (x - 1) * px, Y = (y) => r0.top - wr.top + r0.height / 2 + (y - 1) * py;
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "linkup-svg"); svg.setAttribute("width", wr.width); svg.setAttribute("height", wr.height);
+      const pl = document.createElementNS(ns, "polyline");
+      pl.setAttribute("points", pts.map(([x, y]) => X(x) + "," + Y(y)).join(" "));
+      svg.appendChild(pl); wrap.appendChild(svg);
+      setTimeout(() => svg.remove(), 380);
     }
     function linkupFindPair() {
       for (let i = 0; i < linkupBoard.length; i++) {
@@ -7573,7 +7593,10 @@
       linkupStartTimer();
       if (linkupPicked === -1) { linkupPicked = i; linkupRender(); return; }
       if (linkupPicked === i) { linkupPicked = -1; linkupRender(); return; }
-      if (linkupCanConnect(linkupPicked, i)) {
+      const path = linkupPath(linkupPicked, i);
+      if (path) {
+        linkupDrawPath(path);
+        if (SFX.enabled) SFX.pop(0.6);
         linkupBoard[linkupPicked] = ""; linkupBoard[i] = "";
         linkupLeft--;
         linkupPicked = -1;
@@ -7586,6 +7609,7 @@
           $("linkupStatus").textContent = "剩 " + linkupLeft + " 对 · 用时 " + linkupSeconds + " 秒";
         }
       } else {
+        if (linkupBoard[linkupPicked] === linkupBoard[i]) $("linkupStatus").textContent = "这两个连不上：中间的路要拐超过 2 个弯。";
         linkupPicked = i;
       }
       linkupRender();

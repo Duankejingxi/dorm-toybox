@@ -7773,8 +7773,10 @@
     let jumpScore = 0, jumpPower = 0, jumpOver = false, jumpCharging = false, jumpChargeId = null, jumpBusy = false, jumpShiftId = null; // R26：jumpShiftId——落地 350ms 位移定时器，重开要清掉（见 jumpReset）
     let jumpPlatA = { x: 20, w: 60 }, jumpPlatB = { x: 180, w: 56 }, jumpCharX = 34;
     function jumpNewPlatB() {
+      // v4.0：按舞台实际宽度出台子（手机上舞台只有 ~330px，原来按 340 算，最右边的台子会被切掉一截）
+      const st = $("jumpStage"), W = Math.min(JUMP_W, (st && st.clientWidth) || JUMP_W);
       const w = 40 + Math.floor(Math.random() * 31);
-      const x = 120 + Math.floor(Math.random() * (JUMP_W - 40 - w - 120));
+      const x = 120 + Math.floor(Math.random() * Math.max(1, W - 16 - w - 120));
       return { x, w };
     }
     function jumpRender() {
@@ -7842,7 +7844,7 @@
           jumpBusy = false;
         }, 350);
       } else {
-        jumpOver = true;
+        jumpOver = true; jumpOverAt = Date.now();
         ch.style.bottom = "-40px";
         SFX.lose();
         $("jumpStatus").textContent = "💔 掉下去了！得分 " + jumpScore + "，点再来一局。";
@@ -7860,8 +7862,10 @@
       setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 900);
     }
     const jumpStageEl = $("jumpStage");
+    let jumpOverAt = 0;
     jumpStageEl.addEventListener("pointerdown", (e) => {
-      if (jumpOver || jumpBusy) return;
+      if (jumpOver) { if (Date.now() - jumpOverAt > 500) jumpReset(); return; } // v4.0：提示写着“点再来一局”，原来点了没反应
+      if (jumpBusy) return;
       if (e.preventDefault) e.preventDefault();
       jumpCharging = true; jumpPower = 0;
       $("jumpChar").classList.add("charging"); // v1.32：蓄力压缩

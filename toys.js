@@ -180,6 +180,15 @@
     },
     bg(ctx, W, H) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#151833"); g.addColorStop(1, "#0b0d1a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); },
   };
+  /* v4.1：网格重绘后，内容从“空”变成“有”的格子播放弹入动画（落子、填数） */
+  const popNewSnap = new WeakMap();
+  function popNew(container, cls) {
+    if (!container) return;
+    const kids = Array.from(container.children), prev = popNewSnap.get(container);
+    const now = kids.map((k) => k.innerHTML);
+    if (prev && prev.length === now.length) kids.forEach((k, i) => { if (now[i] !== prev[i] && now[i] && !/^\s*$/.test(k.textContent + (k.querySelector("span,svg,img") ? "x" : ""))) k.classList.add(cls || "fx-in"); });
+    popNewSnap.set(container, now);
+  }
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -3374,7 +3383,7 @@
         cell.setAttribute("data-idx", String(i));
         if (!given) cell.addEventListener("click", () => sudokuSelect(i));
         grid.appendChild(cell);
-      }
+      }      popNew(grid);
     }
     function sudokuSelect(i) {
       if (sudokuWon || sudokuPuzzle[i] !== 0) return;
@@ -3415,6 +3424,16 @@
       }
       renderSudokuGrid();
       renderSudokuStats();
+      if (n === sudokuSolution[i]) {
+        // v4.1：凑满一整行/列/宫，那一组依次闪光
+        const val = (k) => sudokuPuzzle[k] || sudokuEntries[k];
+        const ok = (cells) => cells.every((k) => val(k) === sudokuSolution[k]);
+        const r = Math.floor(i / 9), c = i % 9, br = r - r % 3, bc = c - c % 3;
+        const units = [[...Array(9)].map((_, k) => r * 9 + k), [...Array(9)].map((_, k) => k * 9 + c), [...Array(9)].map((_, k) => (br + Math.floor(k / 3)) * 9 + bc + k % 3)];
+        const kids = $("sudokuGrid").children; let any = false;
+        units.filter(ok).forEach((u) => { any = true; u.forEach((k, j) => { const el = kids[k]; if (el) { el.style.animationDelay = j * 35 + "ms"; el.classList.add("unit-done"); } }); });
+        if (any) { SFX.chime(); }
+      }
       sudokuCheckWin();
     }
     const sudokuNumPad = $("sudokuNumbers");
@@ -3527,6 +3546,7 @@
         cell.classList.remove("shake");
         void cell.offsetWidth;
         cell.classList.add("shake");
+        FX.buzz(25);
         if (typeof SFX !== "undefined") SFX.click();
         return;
       }
@@ -3535,6 +3555,7 @@
         schulteTimerId = setInterval(renderSchulteStats, 100);
       }
       cell.classList.add("done");
+      FX.pop(cell);
       if (typeof SFX !== "undefined") SFX.pop(schulteNext / total);
       schulteNext++;
       if (schulteNext > total) {
@@ -6857,7 +6878,7 @@
       gomokuBoardEl.appendChild(b);
       gomokuCells.push(b);
     }
-    let gPending = -1, gLastPointer = "mouse";
+    let gPending = -1, gLastPointer = "mouse", gDropShown = -1;
     function gomokuRender() {
       gomokuCells.forEach((cell, i) => {
         cell.innerHTML = "";
@@ -6868,10 +6889,11 @@
         }
         if (gBoard[i] !== 0) {
           const s = document.createElement("span");
-          s.className = "gomoku-stone " + (gBoard[i] === 1 ? "black" : "white") + (i === gLast ? " last" : "");
+          s.className = "gomoku-stone " + (gBoard[i] === 1 ? "black" : "white") + (i === gLast ? " last" : "") + (i === gLast && gLast !== gDropShown ? " drop" : "");
           cell.appendChild(s);
         }
       });
+      gDropShown = gLast;
       const black = gBoard.filter((v) => v === 1).length;
       const white = gBoard.filter((v) => v === 2).length;
       $("gomokuStats").textContent = "已下 " + gMoves + " 手 · 黑 " + black + " : " + white + " 白";
@@ -7733,6 +7755,7 @@
         cell.addEventListener("click", () => tttMove(i));
         grid.appendChild(cell);
       }
+      popNew(grid);
       $("tictactoeStats").textContent = "胜 " + tttRecord.win + " · 平 " + tttRecord.draw + " · 负 " + tttRecord.lose;
     }
     function tttMove(i) {

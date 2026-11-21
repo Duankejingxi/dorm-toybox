@@ -2201,3 +2201,14 @@ button, .btn, .tile, a, input, select, label, [role="button"] { touch-action: ma
   .tile:hover { transform: none !important; border-color: var(--c-border) !important; }
   .btn:hover { filter: none !important; }
 }
+/* v4.2：玩游戏时藏掉网站页脚 */
+body.in-toy footer { display: none; }
+body.in-toy .wrap { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+/* v4.2：单独的小按钮、beads-controls 一律居中成一行，不再缩在左下角 */
+.btn-row.single { justify-content: center; }
+.btn-row.single .btn { flex: 0 1 220px !important; }
+.toy .beads-controls { justify-content: center; }
+.toy .beads-controls .btn { flex: 1 1 0; max-width: 200px; margin-top: 0; }
+/* 状态栏更轻：同一组里第二条起不再画框，减少一层层的“盒子感” */
+.toy .result-line + .result-line, .toy .result-line + .count-line { background: none !important; border: 0 !important; margin-top: 4px !important; font-size: 14px; font-weight: 600; color: var(--c-text2, #aab); min-height: 0; }
+.toy .count-line { margin: 6px 0 0; }

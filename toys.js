@@ -723,6 +723,21 @@
       break;
     }
   });
+  // v4.2：面板里直接散落的按钮（不在按钮行里），连续的归成一行，单个的居中
+  document.querySelectorAll(".toy").forEach((panel) => {
+    const kids = Array.from(panel.children);
+    let run = [];
+    const flush = () => {
+      if (!run.length) return;
+      const row = document.createElement("div");
+      row.className = "btn-row auto-row" + (run.length === 1 ? " single" : "");
+      run[0].parentNode.insertBefore(row, run[0]);
+      run.forEach((b) => row.appendChild(b));
+      run = [];
+    };
+    kids.forEach((k) => { if (k.tagName === "BUTTON" && k.classList.contains("btn") && !k.classList.contains("hidden")) run.push(k); else flush(); });
+    flush();
+  });
   function setToyChrome(tid) {
     try {
       document.body.classList.toggle("in-toy", !!tid);
@@ -13005,12 +13020,12 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         } else if (!running && !started) {
           ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
-          ctx.fillText("👆 拖动开始躲", W / 2, H / 2);
+          ctx.fillText("👆 按住画面滑动开始", W / 2, H / 2);
         }
       } catch (e) {}
     }
     function render() {
-      $("dodgeScore").textContent = "分 " + Math.floor(score) + " · 命 " + "❤️".repeat(Math.max(0, lives)) + " · 最好 " + Math.floor(best) + (running ? "" : " · 结束"); // R21：best 存的是浮点分数，原来直接拼出长小数
+      $("dodgeScore").textContent = "分 " + Math.floor(score) + " · 命 " + "❤️".repeat(Math.max(0, lives)) + " · 最好 " + Math.floor(best) + (running ? "" : (started ? " · 结束" : " · 按住画面滑动开始")); // R21：best 存的是浮点分数，原来直接拼出长小数
     }
     function canvasStart() { // R21：画布写着“👆 拖动开始躲”，但拖动只移飞机不开局，只能点重开按钮
       if (running) return;

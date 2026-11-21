@@ -141,6 +141,19 @@
    "archeryCanvas", "flappyCanvas", "snake2Canvas", "pongCanvas", "arkanoidCanvas", "chessCanvas", "goCanvas",
    "rhythmCanvas", "towerCanvas", "dodgeCanvas", "maze3dCanvas", "mazeCanvas"].forEach((id) => { try { hidpi($(id)); } catch (e) { /* 忽略 */ } });
 
+  /* v4.1：FLIP 补间——整格重建的 DOM 也能“滑过去”：记下旧位置 → 重建 → 从旧位置动画回新位置（按文字内容配对） */
+  function flipAnimate(container, rebuild, ms) {
+    if (!container || FX.reduce || typeof Element === "undefined" || !Element.prototype.animate) { rebuild(); return; }
+    const before = new Map();
+    Array.from(container.children).forEach((el) => { const k = el.textContent; if (k && !before.has(k)) before.set(k, el.getBoundingClientRect()); });
+    rebuild();
+    Array.from(container.children).forEach((el) => {
+      const k = el.textContent, a = k && before.get(k); if (!a) return;
+      const b = el.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: ms || 130, easing: "cubic-bezier(.2,.8,.3,1)" });
+    });
+  }
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -2800,7 +2813,8 @@
     function puzzleTilePos(i) {
       return { left: (i % 3) * 33.3333 + "%", top: Math.floor(i / 3) * 33.3333 + "%" };
     }
-    function renderPuzzle() {
+    function renderPuzzle() { flipAnimate($("puzzleGrid"), renderPuzzleNow); }
+    function renderPuzzleNow() {
       const grid = $("puzzleGrid");
       grid.innerHTML = "";
       puzzleTiles.forEach((n, i) => {
@@ -6418,14 +6432,22 @@
         mCells[i].count = mNeighbors(i).filter((n) => mCells[n].mine).length;
       }
     }
+    // v4.1：新翻开的格子按离点击处的距离依次弹出（波纹扩散）；插旗弹一下
+    let mWasOpen = [], mWasFlag = [], mOrigin = -1;
     function mRender() {
       const grid = $("minesGrid");
       grid.innerHTML = "";
       let flags = 0;
+      const or = mOrigin >= 0 ? Math.floor(mOrigin / M_COLS) : 0, oc = mOrigin >= 0 ? mOrigin % M_COLS : 0;
       mCells.forEach((cell, i) => {
         if (cell.flagged) flags++;
         const btn = document.createElement("button");
         btn.className = "mines-cell" + (cell.revealed ? " open" : "") + (cell.flagged ? " flagged" : "");
+        if (cell.revealed && !mWasOpen[i] && mOrigin >= 0) {
+          const d = Math.max(Math.abs(Math.floor(i / M_COLS) - or), Math.abs(i % M_COLS - oc));
+          btn.classList.add(cell.mine ? "boom" : "reveal"); btn.style.animationDelay = Math.min(d * 28, 400) + "ms";
+        }
+        if (cell.flagged && !mWasFlag[i]) btn.classList.add("flag-in");
         btn.setAttribute("aria-label", "扫雷格子 " + (Math.floor(i / M_COLS) + 1) + " 行 " + (i % M_COLS + 1) + " 列");
         if (cell.revealed) {
           if (cell.mine) btn.textContent = "💣";
@@ -6440,6 +6462,7 @@
         btn.addEventListener("pointercancel", () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }); // 系统手势打断长按也要清计时，不然手指都走了还会插旗
         grid.appendChild(btn);
       });
+      mWasOpen = mCells.map((c) => c.revealed); mWasFlag = mCells.map((c) => c.flagged);
       $("minesLeft").textContent = "💣 剩 " + (M_MINES - flags) + " 颗雷";
     }
     function mStartTimer() {
@@ -6458,6 +6481,7 @@
       return true;
     }
     function mClick(i, flag) {
+      mOrigin = i;
       if (mOver) return;
       const cell = mCells[i];
       if (flag) {
@@ -7918,7 +7942,8 @@
       catch (e) { slide15Best = null; }
     }
     function slide15Par() { return slide15N === 3 ? 30 : slide15N === 4 ? 120 : 300; } // 参考步数
-    function slide15Render() {
+    function slide15Render() { flipAnimate($("slide15Grid"), slide15RenderNow); }
+    function slide15RenderNow() {
       const grid = $("slide15Grid");
       grid.innerHTML = "";
       grid.style.gridTemplateColumns = "repeat(" + slide15N + ", 1fr)";

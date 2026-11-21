@@ -2130,3 +2130,20 @@ body {
 .seg-btn.active { background: linear-gradient(135deg, #6366f1, #4f7cff); }
 body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 @media (min-width: 720px) { .home-grid .tile-emoji { width: 60px; height: 60px; } }
+/* v4.1：各类格子游戏统一的按压反馈 */
+.slide15-cell, .puzzle-tile, .memory-card, .schulte-cell, .tictactoe-cell, .linkup-cell, .sudoku-cell, .mines-cell, .mole-hole, .spotdiff-cell, .stroop-options .btn, .riddle-options .btn, .idiom-options .btn, .make24-num, .drums-cell {
+  transition: transform .2s var(--ease-spring), background-color .15s, box-shadow .2s, opacity .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.slide15-cell:active, .puzzle-tile:active, .memory-card:active, .schulte-cell:active, .tictactoe-cell:active, .linkup-cell:active, .sudoku-cell:active, .mines-cell:active, .spotdiff-cell:active, .make24-num:active, .drums-cell:active {
+  transform: scale(.9); transition-duration: .06s;
+}
+.linkup-cell.picked { transform: scale(1.08); box-shadow: 0 0 0 2px #ffd43b, 0 6px 16px -4px rgba(255, 212, 59, .6); }
+.linkup-cell.gone { animation: lkGone .25s ease forwards; }
+@keyframes lkGone { from { opacity: 1; scale: 1; } to { opacity: 0; scale: .4; } }
+.mines-cell.reveal { animation: mReveal .28s var(--ease-out) both; }
+@keyframes mReveal { from { transform: scale(.4); opacity: .2; background: rgba(255, 255, 255, .25); } to { transform: none; opacity: 1; } }
+.mines-cell.boom { animation: mBoom .5s var(--ease-spring) both; background: #e5484d !important; }
+@keyframes mBoom { 0% { transform: scale(.5); } 50% { transform: scale(1.35); } 100% { transform: none; } }
+.mines-cell.flag-in { animation: fxPop .3s var(--ease-spring); }
+.mines-cell:not(.open) { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .08)) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15); }

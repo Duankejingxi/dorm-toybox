@@ -5507,15 +5507,47 @@
     function snakeSaveBest() { try { if (snakeScore > snakeBest()) localStorage.setItem(SNAKE_KEY, String(snakeScore)); } catch (e) { /* 忽略 */ } }
     const snakeCanvas = $("snakeCanvas");
     const snakeCtx = snakeCanvas.getContext ? snakeCanvas.getContext("2d") : null;
+    // v4.1：平滑插值移动 + 圆润蛇身 + 蛇头眼睛 + 呼吸食物
+    let snakePrev = [], snakeLastStep = 0, snakeStepMs = 220, snakeRaf = null, snakeTurnQ = [];
+    function snakeLoop() { snakeRaf = null; snakeDraw(); if (snakeState === "running") snakeRaf = requestAnimationFrame(snakeLoop); }
+    function snakeKick() { if (!snakeRaf) snakeRaf = requestAnimationFrame(snakeLoop); }
     function snakeDraw() {
       if (!snakeCtx) return;
-      snakeCtx.fillStyle = "#10101f";
-      snakeCtx.fillRect(0, 0, 320, 320);
-      if (snakeFood) { snakeCtx.fillStyle = "#E5484D"; snakeCtx.fillRect(snakeFood.x * SNAKE_CELL + 2, snakeFood.y * SNAKE_CELL + 2, SNAKE_CELL - 4, SNAKE_CELL - 4); }
-      snakeBody.forEach((s, i) => {
-        snakeCtx.fillStyle = i === 0 ? "#7CFC9A" : "#30A46C";
-        snakeCtx.fillRect(s.x * SNAKE_CELL + 1, s.y * SNAKE_CELL + 1, SNAKE_CELL - 2, SNAKE_CELL - 2);
+      const C = SNAKE_CELL, ctx = snakeCtx, now = performance.now();
+      for (let y = 0; y < SNAKE_GRID; y++) for (let x = 0; x < SNAKE_GRID; x++) {
+        ctx.fillStyle = (x + y) % 2 ? "#12142a" : "#151833"; ctx.fillRect(x * C, y * C, C, C);
+      }
+      if (snakeFood) {
+        const pulse = 1 + Math.sin(now / 180) * 0.08, fx = snakeFood.x * C + C / 2, fy = snakeFood.y * C + C / 2;
+        ctx.shadowColor = "#ff6b6b"; ctx.shadowBlur = 14;
+        ctx.fillStyle = "#ff5c5c"; ctx.beginPath(); ctx.arc(fx, fy, C * 0.36 * pulse, 0, 7); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.arc(fx - 3, fy - 3, 2.4, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#6bcf63"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(fx, fy - C * 0.3); ctx.lineTo(fx + 3, fy - C * 0.48); ctx.stroke();
+      }
+      if (!snakeBody.length) return;
+      const k = snakeState === "running" ? Math.max(0, Math.min(1, (now - snakeLastStep) / snakeStepMs)) : 1;
+      const pts = snakeBody.map((s, i) => {
+        const p = snakePrev[i] || snakePrev[snakePrev.length - 1] || s;
+        // 穿墙不会发生（撞墙即死），直接线性插值
+        return { x: (p.x + (s.x - p.x) * k) * C + C / 2, y: (p.y + (s.y - p.y) * k) * C + C / 2 };
       });
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (let i = pts.length - 1; i > 0; i--) {
+        const t = i / Math.max(1, pts.length - 1);
+        ctx.strokeStyle = "hsl(" + (145 - t * 25) + ",62%," + (52 - t * 16) + "%)";
+        ctx.lineWidth = C * (0.78 - t * 0.18);
+        ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i - 1].x, pts[i - 1].y); ctx.stroke();
+      }
+      const h = pts[0], d = snakeDir;
+      ctx.fillStyle = "#8cf5a8"; ctx.beginPath(); ctx.arc(h.x, h.y, C * 0.46, 0, 7); ctx.fill();
+      const ex = -d.y, ey = d.x; // 眼睛分在前进方向两侧
+      for (const sgn of [-1, 1]) {
+        const cx = h.x + d.x * C * 0.14 + ex * sgn * C * 0.2, cy = h.y + d.y * C * 0.14 + ey * sgn * C * 0.2;
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx, cy, C * 0.13, 0, 7); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(cx + d.x * 1.5, cy + d.y * 1.5, C * 0.07, 0, 7); ctx.fill();
+      }
+      if (snakeState === "over") { ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(0, 0, 320, 320); }
     }
     function snakePlaceFood() {
       snakeFoodCount++;
@@ -5527,6 +5559,7 @@
       snakeFood = p;
     }
     function snakeReset() {
+      snakePrev = []; snakeTurnQ = []; snakeStepMs = 220;
       snakeBody = [{ x: 5, y: 8 }, { x: 4, y: 8 }, { x: 3, y: 8 }]; // R14：出生点左移，零操作撞墙从 1.2 秒放宽到 2.4 秒，新手有时间反应
       snakeDir = { x: 1, y: 0 }; snakeNextDir = null; snakeScore = 0; snakeFoodCount = 0;
       snakePlaceFood();
@@ -5535,7 +5568,9 @@
     }
     function snakeUpdateScore() { $("snakeScore").textContent = "得分 " + snakeScore + " · 最高 " + Math.max(snakeBest(), snakeScore); }
     function snakeStep() {
-      if (snakeNextDir) { snakeDir = snakeNextDir; snakeNextDir = null; }
+      if (snakeTurnQ.length) snakeDir = snakeTurnQ.shift();
+      snakePrev = snakeBody.map((p) => ({ x: p.x, y: p.y }));
+      snakeLastStep = performance.now();
       const head = { x: snakeBody[0].x + snakeDir.x, y: snakeBody[0].y + snakeDir.y };
       // R26：头撞进尾巴当前格不算撞自己——尾巴本步会挪走；只有吃豆那步尾巴不动，才算撞
       const snakeWillEat = snakeFood && head.x === snakeFood.x && head.y === snakeFood.y;
@@ -5545,10 +5580,12 @@
       if (snakeFood && head.x === snakeFood.x && head.y === snakeFood.y) {
         snakeScore++;
         SFX.pop(Math.min(1, snakeScore / 30));
+        { const r = snakeCanvas.getBoundingClientRect(), sc = r.width / 320; const px = r.left + (head.x + 0.5) * SNAKE_CELL * sc, py = r.top + (head.y + 0.5) * SNAKE_CELL * sc;
+          FX.sparkle(px, py, ["#ff6b6b", "#ffd43b", "#fff"], 12); FX.float("+1", px, py - 10, "#ffd43b"); FX.buzz(8); }
         snakeUpdateScore();
         snakePlaceFood();
         // R14：吃得越多越快，最快 80ms 一步；起步 220ms（原来 150ms，上手就死太快）
-        if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = setInterval(snakeStep, Math.max(80, 220 - snakeScore * 8)); }
+        if (snakeTimer) { clearInterval(snakeTimer); snakeStepMs = Math.max(80, 220 - snakeScore * 8); snakeTimer = setInterval(snakeStep, snakeStepMs); }
       } else {
         snakeBody.pop();
       }
@@ -5557,6 +5594,7 @@
     function snakeGameOver() {
       if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = null; }
       snakeState = "over";
+      snakeDraw();
       snakeSaveBest();
       snakeUpdateScore();
       SFX.lose();
@@ -5567,7 +5605,9 @@
       if (snakeState === "over" || snakeState === "idle") snakeReset();
       if (snakeTimer) return;
       snakeState = "running";
-      snakeTimer = setInterval(snakeStep, Math.max(80, 220 - snakeScore * 8)); // R14：起步 220ms
+      snakeStepMs = Math.max(80, 220 - snakeScore * 8); snakeLastStep = performance.now();
+      snakeTimer = setInterval(snakeStep, snakeStepMs); // R14：起步 220ms
+      snakeKick();
       $("snakeStatus").textContent = "游戏中，吃红点长一节，别撞墙。";
       $("snakeStartBtn").textContent = "暂停 ⏸";
     }
@@ -5577,14 +5617,16 @@
     }
     $("snakeStartBtn").addEventListener("click", () => { if (snakeState === "running") snakePause(); else snakeStart(); });
     $("snakeRestartBtn").addEventListener("click", () => { if (snakeTimer) { clearInterval(snakeTimer); snakeTimer = null; } snakeState = "idle"; snakeReset(); $("snakeStatus").textContent = "点开始，蛇就动起来。"; $("snakeStartBtn").textContent = "开始 ▶"; });
+    // v4.1：转向排队（最多 2 步），快速连按“上、左”这种掉头操作不会丢
     function snakeTurn(dx, dy) {
-      if (snakeDir.x === -dx && snakeDir.y === -dy) return; // 不能直接掉头
-      snakeNextDir = { x: dx, y: dy };
+      const last = snakeTurnQ.length ? snakeTurnQ[snakeTurnQ.length - 1] : snakeDir;
+      if ((last.x === -dx && last.y === -dy) || (last.x === dx && last.y === dy)) return; // 不能直接掉头，同方向不重复排
+      if (snakeTurnQ.length < 2) snakeTurnQ.push({ x: dx, y: dy });
     }
-    $("snakeDirUp").addEventListener("click", () => snakeTurn(0, -1));
-    $("snakeDirDown").addEventListener("click", () => snakeTurn(0, 1));
-    $("snakeDirLeft").addEventListener("click", () => snakeTurn(-1, 0));
-    $("snakeDirRight").addEventListener("click", () => snakeTurn(1, 0));
+    $("snakeDirUp").addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); snakeTurn(0, -1); });
+    $("snakeDirDown").addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); snakeTurn(0, 1); });
+    $("snakeDirLeft").addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); snakeTurn(-1, 0); });
+    $("snakeDirRight").addEventListener("pointerdown", (e) => { e.preventDefault(); SFX.unlock(); snakeTurn(1, 0); });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
         if ($("toy-snake").classList.contains("hidden")) return;
@@ -5594,14 +5636,17 @@
     }
     // 手指在画布上滑动换方向
     let snakeSwipe = null;
-    snakeCanvas.addEventListener("pointerdown", (e) => { snakeSwipe = { x: e.offsetX, y: e.offsetY }; });
-    snakeCanvas.addEventListener("pointerup", (e) => {
+    // v4.1：手指一动就转向（不用等抬手），一次按住可以连续拐弯
+    snakeCanvas.addEventListener("pointerdown", (e) => { snakeSwipe = { x: e.clientX, y: e.clientY }; try { snakeCanvas.setPointerCapture(e.pointerId); } catch (er) {} });
+    snakeCanvas.addEventListener("pointermove", (e) => {
       if (!snakeSwipe) return;
-      const dx = e.offsetX - snakeSwipe.x, dy = e.offsetY - snakeSwipe.y;
-      snakeSwipe = null;
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      const dx = e.clientX - snakeSwipe.x, dy = e.clientY - snakeSwipe.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
       if (Math.abs(dx) > Math.abs(dy)) snakeTurn(dx > 0 ? 1 : -1, 0); else snakeTurn(0, dy > 0 ? 1 : -1);
+      snakeSwipe = { x: e.clientX, y: e.clientY };
     });
+    snakeCanvas.addEventListener("pointerup", () => { snakeSwipe = null; });
+    snakeCanvas.addEventListener("pointercancel", () => { snakeSwipe = null; });
     snakeReset();
     toyLeaveCleanup.snake = () => { snakePause(); }; // 退出就停，不然切走还在走
 

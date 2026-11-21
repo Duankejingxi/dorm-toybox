@@ -2064,3 +2064,6 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 /* v4.1：俄罗斯方块硬降落地的“咚”一下 */
 .tetris-wrap.t-thud #tetrisCanvas { animation: tThud .18s var(--ease-out); }
 @keyframes tThud { 0% { transform: translateY(0); } 35% { transform: translateY(5px); } 100% { transform: translateY(0); } }
+/* v4.1：焦点框只在键盘操作时显示，手指/鼠标点完不留黄框 */
+button:focus:not(:focus-visible), .btn:focus:not(:focus-visible), .tile:focus:not(:focus-visible) { outline: none !important; box-shadow: none; }
+.gold-btn:focus:not(:focus-visible) { box-shadow: 0 6px 16px -6px rgba(79, 124, 255, .7) !important; }

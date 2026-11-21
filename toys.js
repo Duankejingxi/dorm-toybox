@@ -154,6 +154,12 @@
       el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: ms || 130, easing: "cubic-bezier(.2,.8,.3,1)" });
     });
   }
+  /* v4.1：画布坐标 → 屏幕坐标放火花（画布游戏的命中反馈） */
+  function cvFX(canvasId, x, y, colors, n) {
+    const cv = $(canvasId); if (!cv) return;
+    const r = cv.getBoundingClientRect(); if (!r.width) return;
+    FX.sparkle(r.left + x * r.width / cv.width, r.top + y * r.height / cv.height, colors, n || 10);
+  }
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -7535,6 +7541,7 @@
         if (b.x + b.r > br.x && b.x - b.r < br.x + br.w && b.y + b.r > br.y && b.y - b.r < br.y + br.h) {
           br.alive = false;
           breakoutScore += 10;
+          cvFX("breakoutCanvas", br.x + br.w / 2, br.y + br.h / 2, ["#4f7cff", "#9ab4ff", "#fff"], 10);
           SFX.pop(0.5);
           b.dy = -b.dy;
           break;
@@ -7552,6 +7559,7 @@
       }
       if (b.y - b.r > BREAKOUT_H) {
         breakoutLives--;
+        FX.fail($("breakoutCanvas"));
         if (breakoutLives <= 0) {
           breakoutRunning = false;
           if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
@@ -9105,6 +9113,7 @@
       shooterBullets = shooterBullets.filter((b) => {
         const hit = shooterEnemies.findIndex((e) => Math.abs(e.x - b.x) < 20 && Math.abs(e.y - b.y) < 20);
         if (hit !== -1) {
+          cvFX("shooterCanvas", shooterEnemies[hit].x, shooterEnemies[hit].y, ["#ff6b6b", "#ffd43b", "#fff"], 14);
           shooterEnemies.splice(hit, 1);
           shooterScore += 10;
           SFX.hit();
@@ -9702,6 +9711,7 @@
             if (fruitLives <= 0) fruitEnd("💔 三条命都炸没了。");
           } else {
             fruitScore += 10;
+            cvFX("fruitsliceCanvas", f.x, f.y, ["#ff8787", "#ffe066", "#69db7c"], 12); FX.buzz(8);
             SFX.pop(Math.min(1, fruitScore / 500));
           }
         }
@@ -10785,7 +10795,8 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
             br.hp--;
             if (br.hp <= 0) {
               score += 10;
-              if (SFX.enabled) SFX.pop(0.5);
+              cvFX("arkanoidCanvas", br.x + br.w / 2, br.y + br.h / 2, null, 10);
+              SFX.pop(0.5);
               if (Math.random() < 0.22) {
                 const kinds = ["multi", "long", "laser"];
                 items.push({ x: br.x + br.w / 2, y: br.y, kind: kinds[Math.floor(Math.random() * 3)], vy: 1.6 });
@@ -12816,7 +12827,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
           if (invuln <= 0) {
             lives--;
             invuln = 1500;
-            if (SFX.enabled) SFX.hit();
+            SFX.hit(); FX.shake($("dodgeCanvas"));
             if (lives <= 0) {
               running = false;
               if (score > best) { best = score; saveBest(KEY, best); }

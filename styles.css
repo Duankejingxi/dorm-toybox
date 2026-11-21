@@ -2215,3 +2215,7 @@ body.in-toy .wrap { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)
 /* v4.2：玩游戏时页面不再橡皮筋回弹/误触下拉刷新 */
 body.in-toy { overscroll-behavior-y: none; }
 html:has(body.in-toy) { overscroll-behavior-y: none; }
+.mines2-scroll { max-width: 100%; overflow: hidden; border-radius: 10px; }
+.mines2-scroll .mines2-board { width: 100%; max-width: 380px; }
+.mines2-scroll.zoomed { overflow: auto; max-height: min(70vh, 520px); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.mines2-scroll.zoomed .mines2-board { width: 500px; max-width: none; touch-action: pan-x pan-y !important; }

@@ -11065,12 +11065,15 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       const c = board[i];
       if (c.open || c.flag) return;
       // 首点保护：第一次点到雷就把雷挪走，保证开局不死
-      if (firstOpen && c.mine) {
-        c.mine = false;
-        // 在别处补一颗雷
-        for (let t = 0; t < 500; t++) {
+      if (firstOpen) {
+        // v4.2：首点保证周围 3×3 都没雷（原来只保证点的那格），开局能翻开一大片，不用一上来就猜
+        const safe = new Set();
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < N && ny >= 0 && ny < N) safe.add(ny * N + nx); }
+        let moved = 0;
+        safe.forEach((k) => { if (board[k].mine) { board[k].mine = false; moved++; } });
+        while (moved > 0) {
           const j = Math.floor(Math.random() * N * N);
-          if (!board[j].mine && j !== i) { board[j].mine = true; break; }
+          if (!board[j].mine && !safe.has(j)) { board[j].mine = true; moved--; }
         }
         // 重算数字
         for (let yy = 0; yy < N; yy++) for (let xx = 0; xx < N; xx++) {
@@ -11126,7 +11129,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       const bd = $("mines2Board");
       if (!bd) return;
       bd.innerHTML = "";
-      bd.style.cssText = "display:grid;grid-template-columns:repeat(16,1fr);gap:1px;max-width:340px;margin:0 auto;";
+      bd.style.cssText = "display:grid;grid-template-columns:repeat(16,1fr);gap:1px;margin:0 auto;";
       board.forEach((c, i) => {
         const d = document.createElement("div");
         const x = i % N, y = Math.floor(i / N);
@@ -11159,10 +11162,15 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       $("mines2Score").textContent = win ? "🏆 赢了！用时 " + secs + "s · 最好 " + (best ? best + "s" : "--")
         : over ? "💥 踩雷了！点重开再来"
         : "🚩 剩 " + (MINES - flags) + " · 已开 " + revealed + "/" + (N * N - MINES) + " · 最好 " + (best ? best + "s" : "--");
-      $("mines2FlagBtn").textContent = "🚩 插旗模式：" + (flagMode ? "开" : "关");
+      $("mines2FlagBtn").textContent = "🚩 插旗：" + (flagMode ? "开" : "关");
     }
     $("mines2FlagBtn").addEventListener("click", () => { flagMode = !flagMode; render(); });
     $("mines2ResetBtn").addEventListener("click", reset);
+    // v4.2：手机上 16×16 每格才 20px，点错一格就炸；放大后约 30px，棋盘可拖动查看
+    let zoomed = lsGet("dorm-toybox-mines2-zoom", "0") === "1";
+    const applyZoom = () => { $("mines2Scroll").classList.toggle("zoomed", zoomed); $("mines2ZoomBtn").textContent = zoomed ? "🔍 缩小" : "🔍 放大"; };
+    $("mines2ZoomBtn").addEventListener("click", () => { zoomed = !zoomed; lsSet("dorm-toybox-mines2-zoom", zoomed ? "1" : "0"); applyZoom(); });
+    applyZoom();
     reset(); render();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       get mines2() { return { revealed, flags, over, win, mines: MINES, n: N, best }; },

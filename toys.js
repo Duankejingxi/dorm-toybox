@@ -2542,7 +2542,9 @@
       renderMemoryStats();
       renderMemoryBest();
     }
+    let memoryPending = null; // v4.1：配错后等待翻回时，点下一张直接结算，不用干等
     function memoryFlip(card) {
+      if (memoryLock && memoryPending && !card.classList.contains("flipped") && !card.classList.contains("matched")) { memoryPending(); }
       if (memoryLock || card.classList.contains("flipped") || card.classList.contains("matched") || card.classList.contains("flipping") || card.classList.contains("unflipping")) return;
       if (memoryStartAt === null) {
         memoryStartAt = performance.now();
@@ -2564,8 +2566,13 @@
         const a = memoryFlipped[0];
         const b = memoryFlipped[1];
         const gen = memoryGen; // R22：记下本局世代，结算时世代变了说明已重开，直接作废
-        setTimeout(() => {
-          if (gen !== memoryGen) return; // R22：旧局结算不碰新局（否则幽灵 +1 配对数，新局 7 对就提前通关）
+        const isMatch = a.getAttribute("data-emoji") === b.getAttribute("data-emoji");
+        if (!isMatch) setTimeout(() => { if (gen === memoryGen) { a.classList.add("nope"); b.classList.add("nope"); FX.buzz(30); } }, 260);
+        let done = false;
+        const settle = () => {
+          if (done) return; done = true; memoryPending = null; clearTimeout(tid);
+          if (gen !== memoryGen) return;
+          a.classList.remove("nope"); b.classList.remove("nope"); // R22：旧局结算不碰新局（否则幽灵 +1 配对数，新局 7 对就提前通关）
           if (a.getAttribute("data-emoji") === b.getAttribute("data-emoji")) {
             a.classList.add("matched");
             b.classList.add("matched");
@@ -2591,20 +2598,21 @@
             // v1.32：没配上——两段式翻回去
             a.classList.add("unflipping");
             b.classList.add("unflipping");
-            setTimeout(() => {
-              a.classList.remove("flipped", "unflipping");
-              b.classList.remove("flipped", "unflipping");
-              a.textContent = "❓";
-              b.textContent = "❓";
-              memoryFlipped = [];
-              memoryLock = false;
-            }, 140);
+            a.classList.remove("flipped", "unflipping");
+            b.classList.remove("flipped", "unflipping");
+            a.textContent = "❓";
+            b.textContent = "❓";
+            memoryFlipped = [];
+            memoryLock = false;
             $("memoryResult").textContent = "没配上，再试一次。";
             return;
           }
+          [a, b].forEach((c) => { FX.pop(c); const r = c.getBoundingClientRect(); FX.sparkle(r.left + r.width / 2, r.top + r.height / 2, null, 8); });
           memoryFlipped = [];
           memoryLock = false;
-        }, 600);
+        };
+        const tid = setTimeout(settle, isMatch ? 330 : 850);
+        if (!isMatch) memoryPending = settle;
       }
     }
     $("memoryResetBtn").addEventListener("click", buildMemoryDeck);

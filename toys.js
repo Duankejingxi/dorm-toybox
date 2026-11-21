@@ -757,6 +757,13 @@
   });
   $("drawerCloseBtn").addEventListener("click", () => closeDrawer(true));
   $("drawerOverlay").addEventListener("click", () => closeDrawer(true));
+  // v4.1：震动开关（安卓手机有效；iPhone 浏览器本身不支持网页震动）
+  (function () {
+    const b = $("buzzBtn"); if (!b) return;
+    const sync = () => { b.textContent = "📳 震动反馈：" + (FX.buzzOn ? "开" : "关"); b.setAttribute("aria-pressed", FX.buzzOn ? "true" : "false"); };
+    b.addEventListener("click", () => { FX.setBuzz(!FX.buzzOn); FX.buzz(20); sync(); });
+    sync();
+  })();
   // v1.32：音效开关
   const sfxBtn = $("sfxBtn");
   if (sfxBtn) {
@@ -931,6 +938,8 @@
     drawWheel(0);
     renderWheelHist();
 
+    // v4.1：直接点转盘也能转
+    if ($("wheelCanvas")) $("wheelCanvas").addEventListener("click", () => { if (!wheelSpinning) $("spinWheelBtn").click(); });
     $("spinWheelBtn").addEventListener("click", () => {
       if (wheelSpinning) return;
       if (!updateWheelFromInput()) return;
@@ -941,24 +950,35 @@
       const targetIndex = Math.floor(Math.random() * n);
       // 指针在顶部（-90°）。让目标扇区中点转到指针处，再多转 5 圈。
       const seg = (Math.PI * 2) / n;
-      const targetMid = targetIndex * seg + seg / 2;
+      const targetMid = targetIndex * seg + seg / 2 + (Math.random() - 0.5) * seg * 0.72; // v4.1：别每次都停在正中间，更像真转盘
       const pointerAngle = -Math.PI / 2;
       let delta = pointerAngle - (wheelAngle + targetMid);
       while (delta <= 0) delta += Math.PI * 2;
-      const totalRotation = Math.PI * 2 * 5 + delta;
+      const totalRotation = Math.PI * 2 * (5 + Math.floor(Math.random() * 2)) + delta;
       const startAngle = wheelAngle;
       const startTime = performance.now();
-      const duration = 3200;
+      const duration = 4300;
+      const ptr = document.querySelector("#toy-wheel .wheel-pointer");
+      let lastSeg = Math.floor((pointerAngle - startAngle) / seg);
       function frame(now) {
         const t = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = 1 - Math.pow(1 - t, 4); // v4.1：四次方减速，最后几格慢慢挪，更有悬念
         wheelAngle = startAngle + totalRotation * eased;
         drawWheel(wheelAngle);
+        // 每划过一格：咔哒一声、指针抖一下、轻震
+        const curSeg = Math.floor((pointerAngle - wheelAngle) / seg);
+        if (curSeg !== lastSeg) {
+          lastSeg = curSeg;
+          SFX._tone(1400, 0.025, "square", 0.04);
+          if (t > 0.55) FX.buzz(5);
+          if (ptr) { ptr.classList.remove("tick"); void ptr.offsetWidth; ptr.classList.add("tick"); }
+        }
         if (t < 1) { requestAnimationFrame(frame); }
         else {
           wheelSpinning = false;
           $("spinWheelBtn").disabled = false;
           $("wheelResult").textContent = "🎉 命运已定：" + wheelOptions[targetIndex] + "！";
+          FX.pop($("wheelResult"));
           wheelConfetti();
           pushWheelHist(wheelOptions[targetIndex]);
           if (typeof SFX !== "undefined") SFX.chime();

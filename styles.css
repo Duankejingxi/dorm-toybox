@@ -2149,3 +2149,8 @@ body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 .mines-cell:not(.open) { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .08)) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15); }
 .memory-card.nope { box-shadow: 0 0 0 2px #ff6b6b !important; animation: fxShake .35s; }
 .memory-card.matched { box-shadow: 0 0 0 2px rgba(105, 219, 124, .8), 0 0 14px rgba(105, 219, 124, .4) !important; }
+.wheel-pointer { transform-origin: 50% 20%; }
+.wheel-pointer.tick { animation: wheelTick .12s ease-out; }
+@keyframes wheelTick { 0% { rotate: 0deg; } 40% { rotate: -14deg; } 100% { rotate: 0deg; } }
+#wheelCanvas { cursor: pointer; }
+.drawer-settings { margin: 8px 0 4px; } .drawer-settings .btn { width: 100%; margin: 0; }

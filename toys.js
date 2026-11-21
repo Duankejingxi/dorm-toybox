@@ -160,6 +160,26 @@
     const r = cv.getBoundingClientRect(); if (!r.width) return;
     FX.sparkle(r.left + x * r.width / cv.width, r.top + y * r.height / cv.height, colors, n || 10);
   }
+  /* v4.1：砖块类游戏共用的画法——圆角渐变砖、发光球+拖尾、渐变挡板 */
+  const PAINT = {
+    rr(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); },
+    brick(ctx, x, y, w, h, color) {
+      const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, color); g.addColorStop(1, "rgba(0,0,0,.25)");
+      ctx.fillStyle = color; PAINT.rr(ctx, x + 1, y + 1, w - 2, h - 2, 4); ctx.fill();
+      ctx.fillStyle = g; PAINT.rr(ctx, x + 1, y + 1, w - 2, h - 2, 4); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.35)"; PAINT.rr(ctx, x + 3, y + 2, w - 6, 3, 2); ctx.fill();
+    },
+    ball(ctx, b, trail) {
+      if (trail) { trail.push({ x: b.x, y: b.y }); if (trail.length > 8) trail.shift(); trail.forEach((p, i) => { ctx.globalAlpha = (i + 1) / trail.length * 0.25; ctx.fillStyle = "#9ab4ff"; ctx.beginPath(); ctx.arc(p.x, p.y, b.r * (0.5 + i / trail.length * 0.5), 0, 7); ctx.fill(); }); ctx.globalAlpha = 1; }
+      ctx.shadowColor = "#9ab4ff"; ctx.shadowBlur = 12; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    },
+    paddle(ctx, x, y, w, h) {
+      const g = ctx.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, "#6366f1"); g.addColorStop(1, "#22d3ee");
+      ctx.shadowColor = "#6366f1"; ctx.shadowBlur = 10; ctx.fillStyle = g; PAINT.rr(ctx, x, y, w, h, h / 2); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,.4)"; PAINT.rr(ctx, x + 6, y + 2, w - 12, 2, 1); ctx.fill();
+    },
+    bg(ctx, W, H) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#151833"); g.addColorStop(1, "#0b0d1a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); },
+  };
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -7489,7 +7509,7 @@
   toyInitFns["breakout"] = function () {
     const BREAKOUT_W = 340, BREAKOUT_H = 300;
     const BREAKOUT_ROWS = 3, BREAKOUT_COLS = 6;
-    let breakoutBricks = [], breakoutBall = null, breakoutPaddleX = 140;
+    let breakoutBricks = [], breakoutBall = null, breakoutPaddleX = 140, breakoutTrail = null;
     let breakoutScore = 0, breakoutLives = 3, breakoutRunning = false, breakoutTimerId = null;
     const breakoutCanvas = $("breakoutCanvas");
     const breakoutCtx = breakoutCanvas.getContext ? breakoutCanvas.getContext("2d") : null;
@@ -7501,7 +7521,7 @@
     }
     function breakoutReset() {
       breakoutBuildBricks();
-      breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 };
+      breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 }; breakoutTrail = [];
       breakoutPaddleX = 140;
       breakoutScore = 0; breakoutLives = 3; breakoutRunning = false;
       if (breakoutTimerId) { clearInterval(breakoutTimerId); breakoutTimerId = null; }
@@ -7511,14 +7531,11 @@
     }
     function breakoutRender() {
       if (!breakoutCtx) return;
-      breakoutCtx.clearRect(0, 0, BREAKOUT_W, BREAKOUT_H);
-      breakoutCtx.fillStyle = "#4f7cff";
-      breakoutBricks.forEach((b) => { if (b.alive) breakoutCtx.fillRect(b.x, b.y, b.w, b.h); });
-      breakoutCtx.fillStyle = "#fff";
-      breakoutCtx.fillRect(breakoutPaddleX, BREAKOUT_H - 14, 60, 10);
-      breakoutCtx.beginPath();
-      breakoutCtx.arc(breakoutBall.x, breakoutBall.y, breakoutBall.r, 0, Math.PI * 2);
-      breakoutCtx.fill();
+      const ctx = breakoutCtx, ROWC = ["#f472b6", "#a78bfa", "#60a5fa", "#34d399"];
+      PAINT.bg(ctx, BREAKOUT_W, BREAKOUT_H);
+      breakoutBricks.forEach((b, i) => { if (b.alive) PAINT.brick(ctx, b.x, b.y, b.w, b.h, ROWC[Math.floor(i / BREAKOUT_COLS) % ROWC.length]); });
+      PAINT.paddle(ctx, breakoutPaddleX, BREAKOUT_H - 14, 60, 10);
+      PAINT.ball(ctx, breakoutBall, breakoutRunning ? (breakoutTrail = breakoutTrail || []) : null);
     }
     function breakoutStep() {
       if (!breakoutRunning) return;
@@ -7566,7 +7583,7 @@
           SFX.lose();
           $("breakoutStatus").textContent = "💔 没命了。得分 " + breakoutScore + "，点重开再来。";
         } else {
-          breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 };
+          breakoutBall = { x: 170, y: 260, dx: 2.2, dy: -2.6, r: 6 }; breakoutTrail = [];
           $("breakoutStatus").textContent = "掉了一个球，还剩 " + breakoutLives + " 条命。";
         }
       }
@@ -10859,17 +10876,15 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       const cv = $("arkanoidCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
       try {
-        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
+        PAINT.bg(ctx, W, H);
         for (const br of bricks) {
           if (br.hp <= 0) continue;
-          ctx.fillStyle = br.color;
-          ctx.fillRect(br.x, br.y, br.w, br.h);
-          if (br.hp > 1) { ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fillRect(br.x, br.y, br.w, 5); }
+          PAINT.brick(ctx, br.x, br.y, br.w, br.h, br.color);
+          if (br.hp > 1) { ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 2; PAINT.rr(ctx, br.x + 2, br.y + 2, br.w - 4, br.h - 4, 3); ctx.stroke(); }
         }
         const pw = longT > 0 ? 120 : 80;
-        ctx.fillStyle = "#4f7cff";
-        ctx.beginPath(); ctx.roundRect(paddle.x, H - 24, pw, 12, 6); ctx.fill();
-        for (const b of balls) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }
+        PAINT.paddle(ctx, paddle.x, H - 24, pw, 12);
+        for (const b of balls) PAINT.ball(ctx, b, running ? (b.trail = b.trail || []) : null);
         for (const it of items) {
           ctx.fillStyle = it.kind === "multi" ? "#4caf50" : it.kind === "long" ? "#f5c542" : "#e5484d";
           ctx.beginPath(); ctx.arc(it.x, it.y, 8, 0, 7); ctx.fill();

@@ -2166,3 +2166,13 @@ body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 @keyframes tttWin { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1.04); } }
 .sudoku-cell.unit-done { animation: unitDone .5s ease both; }
 @keyframes unitDone { 0% { background: rgba(255, 212, 59, 0); } 35% { background: rgba(255, 212, 59, .45); transform: scale(1.06); } 100% { background: rgba(255, 212, 59, 0); transform: none; } }
+/* v4.1：麻将——刚打出的牌落进牌河、刚摸的牌从右边滑入、能出的牌可按压 */
+.mj-river .mj-tile.last { animation: mjDiscard .3s var(--ease-spring); }
+@keyframes mjDiscard { from { transform: translateY(-14px) scale(1.5); opacity: 0; } to { transform: none; opacity: 1; } }
+.mj-hand .mj-tile.drawn { animation: mjDraw .32s var(--ease-out); }
+@keyframes mjDraw { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+.mj-lastwrap .mj-tile.big { animation: fxIn .28s var(--ease-spring); }
+.mj-tile.can:active { transform: translateY(-10px) scale(1.06) !important; }
+.mj-opp.on { animation: mjTurn 1.2s ease-in-out infinite; }
+@keyframes mjTurn { 50% { box-shadow: 0 0 0 1px #4f7cff inset, 0 0 16px rgba(79, 124, 255, .45); } }
+.mj-actions .btn { animation: fxIn .3s var(--ease-spring); }

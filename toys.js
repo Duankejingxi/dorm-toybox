@@ -11548,6 +11548,9 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       }
       if (color === "black") capB += captured; else capW += captured;
       goHistory.push(key);
+      goDrop = { x, y, t0: performance.now() };
+      for (const [sx, sy] of capturedStones) goFading.push({ x: sx, y: sy, s: opp, t0: performance.now() });
+      if (captured) { FX.buzz(captured > 2 ? [20, 30, 20] : 15); setTimeout(() => { const cv = $("goCanvas"); if (cv) { const r = cv.getBoundingClientRect(); capturedStones.forEach(([sx, sy]) => FX.sparkle(r.left + (sx + 0.5) * r.width / N, r.top + (sy + 0.5) * r.height / N, opp === "black" ? ["#333", "#888"] : ["#fff", "#ddd"], 6)); } }, 60); }
       if (SFX.enabled) SFX.click();
       return true;
     }
@@ -11677,6 +11680,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         setTimeout(() => { if (!over) aiMove(); }, 400);
       }
     }
+    let goDrop = null, goFading = [];
     function draw() {
       const cv = $("goCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
@@ -11693,18 +11697,28 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
           ctx.fillStyle = "#5a3a1a";
           ctx.beginPath(); ctx.arc(CELL / 2 + sx * CELL, CELL / 2 + sy * CELL, 3, 0, 7); ctx.fill();
         }
+        // v4.1：新落的子从大到小“啪”地落下，被提的子淡出缩小
+        const now = performance.now();
+        const stone = (cx, cy, s, sc, alpha) => {
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.arc(cx + 1.5, cy + 2, 13 * sc, 0, 7); ctx.fill();
+          const g = ctx.createRadialGradient(cx - 4 * sc, cy - 4 * sc, 2, cx, cy, 13 * sc);
+          if (s === "black") { g.addColorStop(0, "#6b6b6b"); g.addColorStop(1, "#0d0d0d"); } else { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#c9c9c9"); }
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 13 * sc, 0, 7); ctx.fill();
+          ctx.globalAlpha = 1;
+        };
+        for (const f of goFading) { const k = (now - f.t0) / 320; if (k < 1) stone(CELL / 2 + f.x * CELL, CELL / 2 + f.y * CELL, f.s, 1 - k * 0.4, 1 - k); }
         for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
           const s = board[y][x];
           if (!s) continue;
           const cx = CELL / 2 + x * CELL, cy = CELL / 2 + y * CELL;
-          const g = ctx.createRadialGradient ? ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 13) : null;
-          if (g && s === "black") { g.addColorStop(0, "#666"); g.addColorStop(1, "#111"); ctx.fillStyle = g; }
-          else if (g) { g.addColorStop(0, "#fff"); g.addColorStop(1, "#ccc"); ctx.fillStyle = g; }
-          else ctx.fillStyle = s === "black" ? "#111" : "#fff";
-          ctx.beginPath(); ctx.arc(cx, cy, 13, 0, 7); ctx.fill();
-          ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.stroke();
+          let sc = 1;
+          if (goDrop && goDrop.x === x && goDrop.y === y) { const k = Math.min(1, (now - goDrop.t0) / 200); sc = k < 0.7 ? 1.5 - k / 0.7 * 0.6 : 0.9 + (k - 0.7) / 0.3 * 0.1; }
+          stone(cx, cy, s, sc, 1);
           if (lastAi && lastAi[0] === x && lastAi[1] === y) { ctx.fillStyle = "#e5484d"; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 7); ctx.fill(); }
         }
+        goFading = goFading.filter((f) => now - f.t0 < 320);
+        if ((goDrop && now - goDrop.t0 < 200) || goFading.length) requestAnimationFrame(draw); else goDrop = null;
       } catch (e) {}
     }
     function render() {

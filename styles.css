@@ -2154,3 +2154,5 @@ body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 @keyframes wheelTick { 0% { rotate: 0deg; } 40% { rotate: -14deg; } 100% { rotate: 0deg; } }
 #wheelCanvas { cursor: pointer; }
 .drawer-settings { margin: 8px 0 4px; } .drawer-settings .btn { width: 100%; margin: 0; }
+.result-line.fx-text { animation: fxText .32s var(--ease-out); }
+@keyframes fxText { from { opacity: .2; transform: translateY(4px); } to { opacity: 1; transform: none; } }

@@ -10666,7 +10666,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       serve(Math.random() < 0.5 ? 1 : -1);
       running = true; render();
     }
-    function serve(dir) {
+    function serve(dir) { pongTrail = [];
       const ang = (Math.random() - 0.5) * 0.9;
       ball = { x: W / 2, y: H / 2, vx: dir * 3.4 * Math.cos(ang), vy: 3.4 * Math.sin(ang) };
     }
@@ -10714,17 +10714,21 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         { if (ps >= 5) SFX.win(); else SFX.lose(); }
       }
     }
+    let pongTrail = null;
     function draw() {
       const cv = $("pongCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
       try {
-        ctx.fillStyle = "#12141c"; ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.setLineDash([6, 6]);
+        PAINT.bg(ctx, W, H);
+        ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.font = "900 64px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(ps, W / 4, H / 2); ctx.fillText(cs, W * 3 / 4, H / 2); ctx.textBaseline = "alphabetic";
+        ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.setLineDash([6, 8]);
         ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = "#4f7cff"; ctx.fillRect(16, py - PH / 2, PW, PH);
-        ctx.fillStyle = "#ff5252"; ctx.fillRect(W - 16 - PW, cy - PH / 2, PW, PH);
-        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 6, 0, 7); ctx.fill();
+        const pad = (x, y, c1, c2) => { const g = ctx.createLinearGradient(0, y - PH / 2, 0, y + PH / 2); g.addColorStop(0, c1); g.addColorStop(1, c2); ctx.shadowColor = c1; ctx.shadowBlur = 12; ctx.fillStyle = g; PAINT.rr(ctx, x, y - PH / 2, PW, PH, PW / 2); ctx.fill(); ctx.shadowBlur = 0; };
+        pad(16, py, "#818cf8", "#22d3ee");
+        pad(W - 16 - PW, cy, "#fb7185", "#f97316");
+        PAINT.ball(ctx, { x: ball.x, y: ball.y, r: 6 }, running && !over ? (pongTrail = pongTrail || []) : null);
         if (over) {
           ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center";
@@ -13577,6 +13581,26 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
     let t = null;
     ta.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => btn.click(), 600); });
   })();
+
+  // v4.1：状态栏文案变化时轻轻淡入（纯数字跳动不触发，免得计时器一直闪）
+  try {
+    if (!FX.reduce && typeof MutationObserver !== "undefined") {
+      const strip = (t) => (t || "").replace(/[\d.:,，·\s]+/g, "");
+      const seen = new WeakMap();
+      const mo = new MutationObserver((list) => {
+        const touched = new Set();
+        list.forEach((m) => { const el = m.target.nodeType === 3 ? m.target.parentElement : m.target; const rl = el && el.closest && el.closest(".result-line"); if (rl) touched.add(rl); });
+        touched.forEach((el) => {
+          const k = strip(el.textContent);
+          if (seen.get(el) === k) return;
+          const had = seen.has(el); seen.set(el, k);
+          if (!had) return;
+          el.classList.remove("fx-text"); void el.offsetWidth; el.classList.add("fx-text");
+        });
+      });
+      document.querySelectorAll(".toy").forEach((p) => mo.observe(p, { subtree: true, childList: true, characterData: true }));
+    }
+  } catch (e) { /* 忽略 */ }
 
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
   // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。

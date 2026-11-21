@@ -2049,3 +2049,15 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 .fx-enter-home .tile:nth-child(16) { animation-delay: 288ms; }
 .fx-enter-home .tile:nth-child(17) { animation-delay: 306ms; }
 .fx-enter-home .tile:nth-child(18) { animation-delay: 324ms; }
+/* v4.1：2048 方块滑动/合并/出生动画 */
+.g2048-grid { position: relative; padding: 8px; background: rgba(255, 255, 255, .04); border-radius: 14px; aspect-ratio: 1; }
+.g2048-bg { aspect-ratio: 1; border-radius: 10px; background: rgba(255, 255, 255, .06); }
+.g2048-grid .g2048-tile {
+  position: absolute; left: 8px; top: 8px; width: calc((100% - 40px) / 4); height: calc((100% - 40px) / 4); aspect-ratio: auto;
+  transform: translate(calc(var(--c) * (100% + 8px)), calc(var(--r) * (100% + 8px)));
+  transition: transform .11s ease-out; z-index: 2; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); will-change: transform;
+}
+.g2048-grid .g2048-tile.spawn { animation: g2048Spawn .2s var(--ease-out) .02s both; }
+.g2048-grid .g2048-tile.merged { animation: g2048Merge .2s var(--ease-spring); z-index: 3; }
+@keyframes g2048Spawn { from { scale: 0; opacity: 0; } to { scale: 1; opacity: 1; } }
+@keyframes g2048Merge { 0% { scale: 1; } 45% { scale: 1.2; } 100% { scale: 1; } }

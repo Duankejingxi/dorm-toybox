@@ -6111,78 +6111,120 @@
     let g2048 = [], gScore = 0, gOver = false, gWon = false;
     function g2048Best() { try { return parseInt(localStorage.getItem(G2048_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
     function g2048SaveBest() { try { if (gScore > g2048Best()) localStorage.setItem(G2048_KEY, String(gScore)); } catch (e) { /* 忽略 */ } }
+    // v4.1：方块有身份——移动时滑过去、合并时弹一下、新块缩放出现（原来每步整盘重建，方块是瞬移的）
+    let tileEls = new Array(16).fill(null), animTimer = null, pendingCommit = null;
+    function g2048Grid() {
+      const grid = $("g2048Grid");
+      if (!grid.querySelector(".g2048-bg")) {
+        grid.innerHTML = "";
+        for (let i = 0; i < 16; i++) { const b = document.createElement("div"); b.className = "g2048-bg"; grid.appendChild(b); }
+      }
+      return grid;
+    }
+    function styleTile(el, v) {
+      el.textContent = v;
+      el.className = "g2048-tile" + (v >= 1024 ? " huge" : v >= 128 ? " big" : "") + (v >= 128 ? " glow" : "");
+      el.style.background = G2048_COLORS[v] || "#3c3a32";
+      el.style.color = v <= 4 ? "#776e65" : "#f9f6f2";
+    }
+    function place(el, i) { el.style.setProperty("--r", Math.floor(i / 4)); el.style.setProperty("--c", i % 4); }
+    function makeTile(i, v, cls) {
+      const el = document.createElement("div");
+      styleTile(el, v); place(el, i);
+      if (cls) el.classList.add(cls);
+      g2048Grid().appendChild(el);
+      return el;
+    }
     function g2048Spawn() {
       const empty = [];
       for (let i = 0; i < 16; i++) if (!g2048[i]) empty.push(i);
-      if (empty.length === 0) return;
-      g2048[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < 0.9 ? 2 : 4;
+      if (empty.length === 0) return -1;
+      const i = empty[Math.floor(Math.random() * empty.length)];
+      g2048[i] = Math.random() < 0.9 ? 2 : 4;
+      return i;
     }
     function g2048New() {
+      finishAnim();
       g2048 = new Array(16).fill(0); gScore = 0; gOver = false; gWon = false;
       g2048Spawn(); g2048Spawn();
-      g2048Render();
+      g2048Render(true);
       $("g2048Status").textContent = "滑动开始合并。";
     }
-    function g2048Render() {
-      const grid = $("g2048Grid");
-      grid.innerHTML = "";
-      for (let i = 0; i < 16; i++) {
-        const cell = document.createElement("div");
-        const v = g2048[i];
-        cell.className = "g2048-tile" + (v ? " filled" : "")
-          + (v >= 1024 ? " huge" : v >= 128 ? " big" : "")
-          + (v >= 128 ? " glow" : "");
-        if (v) {
-          cell.textContent = v;
-          cell.style.background = G2048_COLORS[v] || "#3c3a32";
-          cell.style.color = v <= 4 ? "#776e65" : "#f9f6f2";
-        }
-        grid.appendChild(cell);
-      }
-      $("g2048Score").textContent = "得分 " + gScore + " · 最高 " + Math.max(g2048Best(), gScore);
+    // 整盘重建（开局/外部摆盘用）
+    function g2048Render(spawnAnim) {
+      const grid = g2048Grid();
+      grid.querySelectorAll(".g2048-tile").forEach((el) => el.remove());
+      tileEls = new Array(16).fill(null);
+      for (let i = 0; i < 16; i++) if (g2048[i]) tileEls[i] = makeTile(i, g2048[i], spawnAnim ? "spawn" : "");
+      renderScore();
     }
+    function renderScore() { $("g2048Score").textContent = "得分 " + gScore + " · 最高 " + Math.max(g2048Best(), gScore); }
+    function finishAnim() { if (animTimer) { clearTimeout(animTimer); animTimer = null; } if (pendingCommit) { const f = pendingCommit; pendingCommit = null; f(); } }
     function g2048SlideLine(line) {
-      const arr = line.filter(Boolean);
-      let gained = 0;
-      for (let i = 0; i < arr.length - 1; i++) {
-        if (arr[i] === arr[i + 1]) { arr[i] *= 2; gained += arr[i]; arr.splice(i + 1, 1); }
+      // 返回新行、得分，以及每个原位置去了哪里、是否被合并掉
+      const out = [0, 0, 0, 0], moves = [], merged = [];
+      let w = 0, lastIdx = -1, gained = 0;
+      for (let k = 0; k < 4; k++) {
+        if (!line[k]) continue;
+        if (lastIdx >= 0 && out[w - 1] === line[k] && !merged[w - 1]) {
+          out[w - 1] *= 2; gained += out[w - 1]; merged[w - 1] = true;
+          moves.push({ from: k, to: w - 1, die: true });
+        } else {
+          out[w] = line[k]; moves.push({ from: k, to: w, die: false }); lastIdx = k; w++;
+        }
       }
-      while (arr.length < 4) arr.push(0);
-      return { line: arr, gained };
+      return { line: out, gained, moves, merged };
     }
     function g2048Move(dir) {
       if (gOver) return;
+      finishAnim();
       const before = g2048.join(",");
       let gained = 0;
-      const idx = (r, c) => r * 4 + c;
-      if (dir === "left" || dir === "right") {
-        for (let r = 0; r < 4; r++) {
-          let line = [g2048[idx(r, 0)], g2048[idx(r, 1)], g2048[idx(r, 2)], g2048[idx(r, 3)]];
-          if (dir === "right") line.reverse();
-          const res = g2048SlideLine(line);
-          gained += res.gained;
-          if (dir === "right") res.line.reverse();
-          for (let c = 0; c < 4; c++) g2048[idx(r, c)] = res.line[c];
-        }
-      } else {
-        for (let c = 0; c < 4; c++) {
-          let line = [g2048[idx(0, c)], g2048[idx(1, c)], g2048[idx(2, c)], g2048[idx(3, c)]];
-          if (dir === "down") line.reverse();
-          const res = g2048SlideLine(line);
-          gained += res.gained;
-          if (dir === "down") res.line.reverse();
-          for (let r = 0; r < 4; r++) g2048[idx(r, c)] = res.line[r];
-        }
+      const lines = [];
+      for (let a = 0; a < 4; a++) {
+        const cells = [0, 1, 2, 3].map((k) => {
+          if (dir === "left") return a * 4 + k;
+          if (dir === "right") return a * 4 + (3 - k);
+          if (dir === "up") return k * 4 + a;
+          return (3 - k) * 4 + a;
+        });
+        lines.push(cells);
       }
-      if (g2048.join(",") === before) return; // 没动，不生成新块
+      const next = new Array(16).fill(0), newEls = new Array(16).fill(null), dying = [], bumped = [];
+      for (const cells of lines) {
+        const res = g2048SlideLine(cells.map((i) => g2048[i]));
+        gained += res.gained;
+        res.line.forEach((v, k) => { next[cells[k]] = v; });
+        for (const m of res.moves) {
+          const el = tileEls[cells[m.from]], to = cells[m.to];
+          if (!el) continue;
+          place(el, to);
+          if (m.die) { dying.push(el); el.style.zIndex = 1; }
+          else newEls[to] = el;
+        }
+        res.merged.forEach((mm, k) => { if (mm) bumped.push(cells[k]); });
+      }
+      if (next.join(",") === before) { FX.shake($("g2048Grid")); return; } // 这个方向走不动：轻轻抖一下
+      g2048 = next; tileEls = newEls;
       gScore += gained;
-      if (gained > 0) { const mx = Math.max.apply(null, g2048); SFX.pop(Math.min(1, Math.log2(mx) / 11)); }
-      g2048Spawn();
+      const spawnAt = g2048Spawn();
+      SFX.click && gained === 0 && SFX._tone(320, 0.05, "sine", 0.05);
+      pendingCommit = () => {
+        dying.forEach((el) => el.remove());
+        for (const i of bumped) { const el = tileEls[i]; if (el) { styleTile(el, g2048[i]); place(el, i); el.classList.add("merged"); } }
+        if (spawnAt >= 0) tileEls[spawnAt] = makeTile(spawnAt, g2048[spawnAt], "spawn");
+        renderScore();
+      };
+      animTimer = setTimeout(() => { animTimer = null; finishAnim(); }, 110);
+      if (gained > 0) {
+        const mx = Math.max.apply(null, g2048); SFX.pop(Math.min(1, Math.log2(mx) / 11));
+        FX.floatAt($("g2048Score"), "+" + gained, mx >= 128 ? "#ffd43b" : "#fff");
+        if (mx >= 256 && bumped.some((i) => g2048[i] === mx)) FX.buzz(20);
+      }
       g2048SaveBest();
-      g2048Render();
       if (!gWon && g2048.some((v) => v >= 2048)) { gWon = true; SFX.win(); $("g2048Status").textContent = "🎉 拼出 2048 了！太强了，还能继续往上拼。"; }
       else if (g2048CanMove()) { if (!gWon) $("g2048Status").textContent = "继续，拼出更大的数。"; }
-      else { gOver = true; SFX.lose(); $("g2048Status").textContent = "💥 拼不动了！得分 " + gScore + "，最高 " + Math.max(g2048Best(), gScore) + "。点新一局再来。"; }
+      else { gOver = true; setTimeout(() => SFX.lose(), 200); $("g2048Status").textContent = "💥 拼不动了！得分 " + gScore + "，最高 " + Math.max(g2048Best(), gScore) + "。点重开再来。"; }
     }
     function g2048CanMove() {
       if (g2048.some((v) => !v)) return true;
@@ -6227,8 +6269,8 @@
     }
     g2048New();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get g2048() { return { board: g2048.slice(), score: gScore, over: gOver, won: gWon }; },
-        g2048Set(board) { g2048 = board.slice(); gOver = false; gWon = false; g2048Render(); }, // R22：摆新盘要清终局/获胜旗，不然终局后摆盘再动会被拦住
+        get g2048() { finishAnim(); return { board: g2048.slice(), score: gScore, over: gOver, won: gWon }; },
+        g2048Set(board) { finishAnim(); g2048 = board.slice(); gOver = false; gWon = false; g2048Render(); }, // R22：摆新盘要清终局/获胜旗，不然终局后摆盘再动会被拦住
         g2048Move(dir) { g2048Move(dir); },
     }));
 

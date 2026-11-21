@@ -69,7 +69,7 @@ const TOYS = [
   { id: "make24", label: "🧮 24点", howto: "24点：点两个数字再点运算符合成新数，最后等于24就赢；每轮随机12组都有解，想不出可以看答案。", py: "24d", cat: "puzzle" },
   { id: "fruitslice", label: "🍉 切水果", howto: "切水果：手指划过切开水果，别切到炸弹，3条命。", py: "qsg", cat: "game" },
   { id: "maze", label: "🌀 走迷宫", howto: "走迷宫：在迷宫上滑一下，球沿走廊走到岔路口；走到右下角旗子过关，每关现生成、越来越大。", py: "zmg", cat: "game" },
-  { id: "match3", label: "🍬 消消乐", howto: "消消乐：点两个相邻的格子交换，3个连成线就消除，连击加分。", py: "xxl", cat: "game" },
+  { id: "match3", label: "🍬 消消乐", howto: "消消乐：拖动水果和旁边的交换，三个连一排就消掉；每关 25 步凑够目标分过关，连锁消除分数翻倍。", py: "xxl", cat: "game" },
   { id: "archery", label: "🏹 射箭", howto: "射箭：按住拉弓瞄准，松手射，10支箭看总分。", py: "sj", cat: "game" },
   { id: "flappy", label: "🐤 像素鸟", howto: "像素鸟：点屏幕（电脑按空格）让小鸟飞，穿过水管缝隙，别撞上，看看能飞多远。", py: "xsn", cat: "game" },
   { id: "snake2", label: "🐍🐍 双人贪吃蛇", howto: "默认单人打AI：等你点一下才开始；滑动直接换方向，或点左/右半屏左转/右转。双人时左半屏和WASD管P1，右半屏和方向键管P2。", py: "srtcs", cat: "game" },

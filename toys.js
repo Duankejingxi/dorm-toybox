@@ -9891,141 +9891,209 @@
   };
   /* ---------- 65. 消消乐 ---------- */
   toyInitFns["match3"] = function () {
+    // v4.1 重写：关卡制（限步数+目标分）、拖动交换、交换/消除/下落全过程动画、连锁倍率
     const MATCH3_KEY = "dorm-toybox-match3-best-v1";
-    const MATCH3_EMOJI = ["🍎", "🍊", "🍋", "🍇", "🫐"];
-    const MATCH3_N = 6;
-    let match3Best = loadBest(MATCH3_KEY);
-    let match3Board = [], match3Score = 0, match3Moves = 0, match3Sel = null;
-    function match3Random() { return MATCH3_EMOJI[Math.floor(Math.random() * MATCH3_EMOJI.length)]; }
-    function match3NewBoard() {
-      // 生成无初始三连的棋盘
-      do {
-        match3Board = [];
-        for (let r = 0; r < MATCH3_N; r++) {
-          match3Board[r] = [];
-          for (let c = 0; c < MATCH3_N; c++) match3Board[r][c] = match3Random();
-        }
-      } while (match3Find().length > 0);
+    const LV_KEY = "dorm-toybox-match3-level-v1";
+    const EMO = ["🍎", "🍊", "🍋", "🍇", "🫐", "🍓"];
+    const N = 7, MOVES = 25;
+    let best = loadBest(MATCH3_KEY);
+    let grid = [], score = 0, level = 1, movesLeft = MOVES, target = 0, sel = null, busy = false, over = false;
+    let uid = 0;
+    const boardEl = () => $("match3Board");
+    const targetFor = (lv) => 500 + (lv - 1) * 350;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    function place(t, r, c) { t.r = r; t.c = c; t.el.style.setProperty("--r", r); t.el.style.setProperty("--c", c); }
+    function makeTile(v, r, c, fromRow) {
+      const el = document.createElement("div");
+      el.className = "m3-tile"; el.textContent = EMO[v];
+      const t = { id: ++uid, v, r, c, el };
+      place(t, fromRow == null ? r : fromRow, c);
+      boardEl().appendChild(el);
+      return t;
     }
-    function match3Find() {
-      // 找出所有三连及以上的格子
-      const hit = new Set();
-      for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
-        const v = match3Board[r][c];
-        if (!v) continue;
-        let n = 1;
-        while (c + n < MATCH3_N && match3Board[r][c + n] === v) n++;
-        if (n >= 3) for (let k = 0; k < n; k++) hit.add(r + "," + (c + k));
-        n = 1;
-        while (r + n < MATCH3_N && match3Board[r + n][c] === v) n++;
-        if (n >= 3) for (let k = 0; k < n; k++) hit.add((r + k) + "," + c);
+    function findMatches(g) {
+      const hit = new Set(), groups = [];
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const t = g[r][c]; if (!t) continue;
+        let n = 1; while (c + n < N && g[r][c + n] && g[r][c + n].v === t.v) n++;
+        if (n >= 3) { const grp = []; for (let k = 0; k < n; k++) { hit.add(r * N + c + k); grp.push([r, c + k]); } groups.push(grp); }
+        n = 1; while (r + n < N && g[r + n][c] && g[r + n][c].v === t.v) n++;
+        if (n >= 3) { const grp = []; for (let k = 0; k < n; k++) { hit.add((r + k) * N + c); grp.push([r + k, c]); } groups.push(grp); }
       }
-      return [...hit];
+      return { hit, groups };
     }
-    function match3HasMove() {
-      // 有没有一次相邻交换能凑出三连：没有就是死局，再怎么换都只会换回来
-      for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
-        for (const [dr, dc] of [[0, 1], [1, 0]]) {
-          const r2 = r + dr, c2 = c + dc;
-          if (r2 >= MATCH3_N || c2 >= MATCH3_N) continue;
-          if (match3Board[r][c] === match3Board[r2][c2]) continue;
-          const t = match3Board[r][c];
-          match3Board[r][c] = match3Board[r2][c2]; match3Board[r2][c2] = t;
-          const ok = match3Find().length > 0;
-          const t2 = match3Board[r][c];
-          match3Board[r][c] = match3Board[r2][c2]; match3Board[r2][c2] = t2;
-          if (ok) return true;
-        }
+    function vgrid() { return grid.map((row) => row.map((t) => t && { v: t.v })); }
+    function hasMove() {
+      const g = vgrid();
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+        const r2 = r + dr, c2 = c + dc; if (r2 >= N || c2 >= N) continue;
+        const t = g[r][c]; g[r][c] = g[r2][c2]; g[r2][c2] = t;
+        const ok = findMatches(g).hit.size > 0;
+        g[r2][c2] = g[r][c]; g[r][c] = t;
+        if (ok) return [r, c, r2, c2];
       }
-      return false;
+      return null;
     }
-    function match3EnsureMoves() {
-      // 死局就换一副新牌（分数保留），返回是否换过牌
-      if (match3HasMove()) return false;
+    function freshBoard(anim) {
+      boardEl().querySelectorAll(".m3-tile").forEach((e) => e.remove());
       let guard = 0;
-      do { match3NewBoard(); } while (!match3HasMove() && guard++ < 50);
-      $("match3Status").textContent = "这副牌走不下去了，换了一副新的，分数保留。";
-      return true;
+      do {
+        const g = [];
+        for (let r = 0; r < N; r++) { g[r] = []; for (let c = 0; c < N; c++) {
+          let v; do { v = Math.floor(Math.random() * EMO.length); } while ((c >= 2 && g[r][c - 1] === v && g[r][c - 2] === v) || (r >= 2 && g[r - 1][c] === v && g[r - 2][c] === v));
+          g[r][c] = v;
+        } }
+        grid = g.map((row) => row.map((v) => ({ v })));
+      } while (!hasMove() && guard++ < 50);
+      grid = grid.map((row, r) => row.map((x, c) => makeTile(x.v, r, c, anim ? r - N - 1 : null)));
+      if (anim) requestAnimationFrame(() => requestAnimationFrame(() => grid.forEach((row, r) => row.forEach((t) => { t.el.style.transitionDelay = (c => c * 25)(t.c) + (N - r) * 12 + "ms"; place(t, r, t.c); setTimeout(() => { t.el.style.transitionDelay = ""; }, 600); }))));
     }
-    function match3Collapse() {
-      // 消掉三连，下落补齐，连锁反应一直消到没有三连
-      let total = 0;
+    function cellAt(clientX, clientY) {
+      const rect = boardEl().getBoundingClientRect(), pad = 6, size = (rect.width - pad * 2) / N;
+      const c = Math.floor((clientX - rect.left - pad) / size), r = Math.floor((clientY - rect.top - pad) / size);
+      return r >= 0 && r < N && c >= 0 && c < N ? [r, c] : null;
+    }
+    function screenOf(r, c) { const rect = boardEl().getBoundingClientRect(), size = (rect.width - 12) / N; return { x: rect.left + 6 + (c + 0.5) * size, y: rect.top + 6 + (r + 0.5) * size }; }
+    function setSel(rc) {
+      if (sel) { const t = grid[sel[0]][sel[1]]; if (t) t.el.classList.remove("sel"); }
+      sel = rc;
+      if (sel) { const t = grid[sel[0]][sel[1]]; if (t) t.el.classList.add("sel"); }
+    }
+    async function trySwap(r1, c1, r2, c2) {
+      if (busy || over) return;
+      if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
+      busy = true; setSel(null); SFX.unlock();
+      const a = grid[r1][c1], b = grid[r2][c2];
+      grid[r1][c1] = b; grid[r2][c2] = a; place(a, r2, c2); place(b, r1, c1);
+      await sleep(170);
+      if (!findMatches(grid).hit.size) {
+        grid[r1][c1] = a; grid[r2][c2] = b; place(a, r1, c1); place(b, r2, c2);
+        SFX._tone(220, 0.08, "sine", 0.06);
+        await sleep(170);
+        FX.shake(boardEl()); FX.buzz(25);
+        busy = false; return;
+      }
+      movesLeft--;
+      await resolve();
+      busy = false;
+      afterTurn();
+    }
+    async function resolve() {
+      let chain = 0;
       for (;;) {
-        const hit = match3Find();
-        if (hit.length === 0) break;
-        total += hit.length;
-        hit.forEach((k) => {
-          const [r, c] = k.split(",").map(Number);
-          match3Board[r][c] = null;
-        });
-        for (let c = 0; c < MATCH3_N; c++) {
-          const col = [];
-          for (let r = MATCH3_N - 1; r >= 0; r--) if (match3Board[r][c]) col.push(match3Board[r][c]);
-          while (col.length < MATCH3_N) col.push(match3Random());
-          for (let r = MATCH3_N - 1, i = 0; r >= 0; r--, i++) match3Board[r][c] = col[i];
+        const { hit, groups } = findMatches(grid);
+        if (!hit.size) break;
+        chain++;
+        const mult = chain;
+        const bonus = groups.reduce((s, g) => s + (g.length >= 5 ? 60 : g.length === 4 ? 25 : 0), 0);
+        const gained = (hit.size * 10 + bonus) * mult;
+        score += gained;
+        // 消除：缩小 + 火花
+        let cx = 0, cy = 0;
+        hit.forEach((k) => { const r = Math.floor(k / N), c = k % N, t = grid[r][c]; t.el.classList.add("clear"); const p = screenOf(r, c); cx += p.x; cy += p.y; FX.sparkle(p.x, p.y, null, 5); });
+        cx /= hit.size; cy /= hit.size;
+        FX.float((chain > 1 ? "连击 ×" + chain + "  " : "") + "+" + gained, cx, cy, chain > 1 ? "#ff8787" : "#ffe066");
+        SFX.pop(Math.min(1, 0.3 + chain * 0.15));
+        if (chain >= 2) FX.buzz(10 + chain * 6);
+        renderHud();
+        await sleep(200);
+        hit.forEach((k) => { const r = Math.floor(k / N), c = k % N; grid[r][c].el.remove(); grid[r][c] = null; });
+        // 重力下落 + 补新
+        let maxFall = 0;
+        for (let c = 0; c < N; c++) {
+          let w = N - 1;
+          for (let r = N - 1; r >= 0; r--) if (grid[r][c]) { const t = grid[r][c]; if (w !== r) { grid[w][c] = t; grid[r][c] = null; maxFall = Math.max(maxFall, w - r); place(t, w, c); } w--; }
+          const need = w + 1;
+          for (let k = 0; k < need; k++) {
+            const r = w - k, t = makeTile(Math.floor(Math.random() * EMO.length), r, c, r - need - 1);
+            grid[r][c] = t; maxFall = Math.max(maxFall, need + 1);
+          }
         }
+        // 下一帧再把新块落到位，过渡才会生效
+        await sleep(20);
+        for (let c = 0; c < N; c++) for (let r = 0; r < N; r++) { const t = grid[r][c]; if (t) place(t, r, c); }
+        await sleep(160 + maxFall * 30);
       }
-      return total;
     }
-    function match3Render() {
-      const board = $("match3Board");
-      board.innerHTML = "";
-      for (let r = 0; r < MATCH3_N; r++) for (let c = 0; c < MATCH3_N; c++) {
-        const cell = document.createElement("button");
-        cell.className = "match3-cell" + (match3Sel && match3Sel[0] === r && match3Sel[1] === c ? " sel" : "");
-        cell.textContent = match3Board[r][c];
-        cell.setAttribute("data-r", r); cell.setAttribute("data-c", c);
-        cell.addEventListener("click", () => match3Pick(r, c));
-        board.appendChild(cell);
+    function afterTurn() {
+      if (score > best) { best = score; saveBest(MATCH3_KEY, best); }
+      if (score >= target) {
+        // 过关：剩余步数换奖励分
+        const bonus = movesLeft * 30;
+        score += bonus;
+        SFX.win();
+        $("match3Status").textContent = "🎉 第 " + level + " 关通过！剩 " + movesLeft + " 步奖励 +" + bonus + "，进入下一关。";
+        level++; lsSet(LV_KEY, String(level));
+        movesLeft = MOVES; target = score + targetFor(level);
+        renderHud();
+        busy = true;
+        setTimeout(() => { freshBoard(true); busy = false; }, 900);
+        return;
       }
-      $("match3Score").textContent = "得分 " + match3Score + " · 步数 " + match3Moves + " · 最好 " + match3Best;
-    }
-    function match3Pick(r, c) {
-      if (!match3Sel) { match3Sel = [r, c]; match3Render(); return; }
-      const [pr, pc] = match3Sel;
-      match3Sel = null;
-      if (pr === r && pc === c) { match3Render(); return; }
-      if (Math.abs(pr - r) + Math.abs(pc - c) !== 1) { match3Sel = [r, c]; match3Render(); return; } // 不相邻：改选新点的格子，而不是取消选中让玩家再点一次
-      // 交换
-      const tmp = match3Board[pr][pc];
-      match3Board[pr][pc] = match3Board[r][c];
-      match3Board[r][c] = tmp;
-      const cleared = match3Collapse();
-      if (cleared === 0) {
-        // 没消掉，换回来
-        match3Board[r][c] = match3Board[pr][pc];
-        match3Board[pr][pc] = tmp;
-      } else {
-        match3Score += cleared * 10;
-        match3Moves++;
-        SFX.pop(Math.min(1, cleared / 12));
-        if (match3Score > match3Best) {
-          match3Best = match3Score;
-          saveBest(MATCH3_KEY, match3Best);
-        }
-        // 补齐后可能走进死局：直接换一副新牌（状态提示在 match3EnsureMoves 里写），
-        // 分数保留，别让玩家对着换不掉的牌干瞪眼；能正常走就把旧提示清掉
-        if (!match3EnsureMoves()) $("match3Status").textContent = "";
+      if (movesLeft <= 0) {
+        over = true;
+        SFX.lose();
+        $("match3Status").textContent = "😵 步数用完了，还差 " + (target - score) + " 分。点「重新开始」从第 1 关再来。";
+        renderHud(); return;
       }
-      match3Render();
+      if (!hasMove()) {
+        $("match3Status").textContent = "这盘没得换了，帮你重新洗牌。";
+        busy = true; setTimeout(() => { freshBoard(true); busy = false; }, 500);
+      } else $("match3Status").textContent = movesLeft <= 5 ? "⚠️ 只剩 " + movesLeft + " 步了！" : "";
+      renderHud();
     }
-    function match3Reset() {
-      match3Score = 0; match3Moves = 0; match3Sel = null;
-      match3NewBoard();
-      match3EnsureMoves();
-      $("match3Status").textContent = "";
-      match3Render();
+    function renderHud() {
+      const need = Math.max(0, target - score), base = target - targetFor(level), prog = Math.max(0, Math.min(1, (score - base) / targetFor(level)));
+      $("match3Score").textContent = "第 " + level + " 关 · 得分 " + score + " · 还差 " + need + " · 剩 " + movesLeft + " 步";
+      const bar = $("match3Bar"); if (bar) bar.style.width = (prog * 100).toFixed(1) + "%";
+      const mv = $("match3Moves"); if (mv) { mv.textContent = movesLeft; mv.classList.toggle("low", movesLeft <= 5); }
     }
-    $("match3ResetBtn").addEventListener("click", match3Reset);
-    match3Reset();
+    function reset() {
+      score = 0; level = 1; movesLeft = MOVES; target = targetFor(1); sel = null; over = false; busy = false;
+      $("match3Status").textContent = "拖动或先后点两个相邻水果交换，三个连成一排就消掉。";
+      freshBoard(true); renderHud();
+    }
+    // 输入：拖动交换 或 点两下交换
+    (function () {
+      const el = boardEl(); let start = null, moved = false;
+      el.addEventListener("pointerdown", (e) => { e.preventDefault(); if (busy || over) return; start = { rc: cellAt(e.clientX, e.clientY), x: e.clientX, y: e.clientY }; moved = false; try { el.setPointerCapture(e.pointerId); } catch (er) {} });
+      el.addEventListener("pointermove", (e) => {
+        if (!start || !start.rc || moved) return;
+        const dx = e.clientX - start.x, dy = e.clientY - start.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 16) return;
+        moved = true;
+        const [r, c] = start.rc;
+        const [r2, c2] = Math.abs(dx) > Math.abs(dy) ? [r, c + (dx > 0 ? 1 : -1)] : [r + (dy > 0 ? 1 : -1), c];
+        if (r2 >= 0 && r2 < N && c2 >= 0 && c2 < N) trySwap(r, c, r2, c2);
+      });
+      el.addEventListener("pointerup", () => {
+        if (!start) return; const rc = start.rc; start = null;
+        if (moved || !rc || busy || over) return;
+        if (!sel) { setSel(rc); SFX.click(); return; }
+        if (sel[0] === rc[0] && sel[1] === rc[1]) { setSel(null); return; }
+        if (Math.abs(sel[0] - rc[0]) + Math.abs(sel[1] - rc[1]) === 1) { const s0 = sel; trySwap(s0[0], s0[1], rc[0], rc[1]); }
+        else { setSel(rc); SFX.click(); }
+      });
+      el.addEventListener("pointercancel", () => { start = null; });
+    })();
+    $("match3ResetBtn").addEventListener("click", reset);
+    if ($("match3HintBtn")) $("match3HintBtn").addEventListener("click", () => {
+      const m = hasMove(); if (!m || busy) return;
+      [grid[m[0]][m[1]], grid[m[2]][m[3]]].forEach((t) => { t.el.classList.remove("hint"); void t.el.offsetWidth; t.el.classList.add("hint"); setTimeout(() => t.el.classList.remove("hint"), 1300); });
+    });
+    reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
-        get match3() { return { board: match3Board.map((r) => r.slice()), score: match3Score, moves: match3Moves, best: match3Best }; },
-        matchSet(board) { match3Board = board.map((r) => r.slice()); match3Score = 0; match3Moves = 0; match3Sel = null; match3Render(); },
-        matchPick(r, c) { match3Pick(r, c); },
-        matchHasMove() { return match3HasMove(); },
-        matchEnsure() { return match3EnsureMoves(); },
+      get match3() { return { board: grid.map((r) => r.map((t) => t ? EMO[t.v] : null)), score, moves: MOVES - movesLeft, movesLeft, level, target, best, busy, over }; },
+      matchSet(board) {
+        boardEl().querySelectorAll(".m3-tile").forEach((e) => e.remove());
+        grid = board.map((row, r) => row.map((v, c) => makeTile(Math.max(0, EMO.indexOf(v)), r, c)));
+        score = 0; movesLeft = MOVES; target = targetFor(level); sel = null; busy = false; over = false; renderHud();
+      },
+      matchPick(r, c) { if (!sel) { setSel([r, c]); return; } const s0 = sel; setSel(null); trySwap(s0[0], s0[1], r, c); },
+      matchSwap(r1, c1, r2, c2) { return trySwap(r1, c1, r2, c2); },
+      matchHasMove() { return !!hasMove(); },
+      matchEnsure() { if (hasMove()) return false; freshBoard(false); return true; },
     }));
-
   };
   /* ---------- 66. 射箭 ---------- */
   toyInitFns["archery"] = function () {

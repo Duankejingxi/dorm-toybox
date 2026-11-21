@@ -2067,3 +2067,26 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 /* v4.1：焦点框只在键盘操作时显示，手指/鼠标点完不留黄框 */
 button:focus:not(:focus-visible), .btn:focus:not(:focus-visible), .tile:focus:not(:focus-visible) { outline: none !important; box-shadow: none; }
 .gold-btn:focus:not(:focus-visible) { box-shadow: 0 6px 16px -6px rgba(79, 124, 255, .7) !important; }
+/* v4.1：消消乐 */
+.match3-board { position: relative; display: block !important; width: 100% !important; max-width: 380px; aspect-ratio: 1; margin: 8px auto 0 !important; padding: 6px; border-radius: 16px;
+  background: linear-gradient(160deg, rgba(120, 90, 255, .18), rgba(40, 30, 90, .35)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); overflow: hidden; touch-action: none; }
+.m3-tile {
+  position: absolute; left: 6px; top: 6px; width: calc((100% - 12px) / 7); height: calc((100% - 12px) / 7);
+  display: flex; align-items: center; justify-content: center; font-size: clamp(22px, 7vw, 32px); line-height: 1; user-select: none;
+  transform: translate(calc(var(--c) * 100%), calc(var(--r) * 100%));
+  transition: transform .17s cubic-bezier(.3, .7, .4, 1.15), opacity .2s ease; will-change: transform; cursor: pointer;
+}
+.m3-tile::before { content: ""; position: absolute; inset: 3px; border-radius: 10px; background: rgba(255, 255, 255, .07); z-index: -1; }
+.m3-tile.sel::before { background: rgba(255, 212, 59, .32); box-shadow: 0 0 0 2px #ffd43b; }
+.m3-tile.sel { animation: m3Sel .8s ease-in-out infinite; }
+@keyframes m3Sel { 50% { scale: 1.1; } }
+.m3-tile.clear { scale: 0; opacity: 0; transition: transform .17s, scale .2s cubic-bezier(.6, -0.4, .7, 1), opacity .2s; }
+.m3-tile.hint { animation: m3Hint .4s ease-in-out 3; }
+@keyframes m3Hint { 50% { scale: 1.22; rotate: 10deg; } }
+.m3-hud { display: flex; align-items: center; gap: 10px; max-width: 380px; margin: 0 auto; }
+.m3-moves { display: flex; align-items: baseline; gap: 2px; min-width: 56px; }
+.m3-moves b { font-size: 28px; font-weight: 900; color: #fff; transition: color .2s; }
+.m3-moves b.low { color: #ff6b6b; animation: fxPop .5s; }
+.m3-moves small { color: var(--c-text2, #aab); }
+.m3-prog { flex: 1; height: 12px; border-radius: 999px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.m3-bar { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #ffd43b, #ff8787); transition: width .45s var(--ease-out); }

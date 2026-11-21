@@ -1225,12 +1225,14 @@
   <!-- 消消乐 -->
   <section class="panel toy hidden" id="toy-match3">
     <h2>🍬 消消乐</h2>
-    <p class="hint">点两个相邻的格子交换，3 个连成一排就消掉。消 1 个 +10 分，看看能连多少。</p>
+    <p class="hint">拖动水果（或先后点两个相邻的）交换位置，三个以上连成一排就消掉。每关 25 步，凑够目标分就过关，连锁消除分数翻倍，剩下的步数还能换奖励分。</p>
+    <div class="m3-hud"><div class="m3-moves"><b id="match3Moves">25</b><small>步</small></div><div class="m3-prog"><div class="m3-bar" id="match3Bar"></div></div></div>
     <div class="match3-board" id="match3Board"></div>
-    <p class="result-line" id="match3Score">得分 0 · 步数 0 · 最好 0</p>
-    <p class="result-line" id="match3Status"></p>
+    <p class="result-line" id="match3Score">得分 0</p>
+    <p class="count-line" id="match3Status"></p>
     <div class="btn-row">
-      <button class="btn ghost-btn small" id="match3ResetBtn">重开 ↺</button>
+      <button class="btn ghost-btn small" id="match3HintBtn">提示 💡</button>
+      <button class="btn ghost-btn small" id="match3ResetBtn">重新开始 ↺</button>
     </div>
   </section>
 

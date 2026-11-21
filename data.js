@@ -83,7 +83,7 @@ const TOYS = [
   { id: "poker", label: "♠️ 德州扑克", howto: "德州扑克：单挑 AI，各 1000 筹码，可以过牌、跟注、加注、全下；两张底牌加五张公共牌凑最大的牌型。", py: "dzpk", cat: "game" },
   { id: "rhythm", label: "🎵 音游", howto: "音游：每局现场合成一首曲子，音符落到圆圈时点对应轨道（电脑按 DFJK），三档难度，建议开声音。", py: "yy", cat: "game" },
   { id: "tower", label: "🏗️ 叠塔", howto: "叠塔：方块左右移动，点一下放下；对得准算“完美”不会变窄，连续完美还会变宽。", py: "dt", cat: "game" },
-  { id: "dodge", label: "✈️ 弹幕躲避", howto: "弹幕躲避：拖飞机躲子弹，擦弹（贴着过）加分，3条命。", py: "tmyb", cat: "game" },
+  { id: "dodge", label: "✈️ 弹幕躲避", howto: "弹幕躲避：手指在画面任意处滑动，飞机跟着走（不用按在飞机上，不会挡住视线）；擦弹贴着过加分，3条命。", py: "tmyb", cat: "game" },
   { id: "maze3d", label: "🌀 3D迷宫", howto: "伪3D迷宫：第一人称视角找绿色出口。手机点屏幕上/下走、左/右转，电脑用WASD/方向键。", py: "3dmg", cat: "game" },
   { id: "scriptkill", label: "🔪 剧本杀主持人", howto: "剧本杀主持：发身份后传手机点牌看身份，走流程、发线索，点牌标记出局，带60秒计时。", py: "jbss", cat: "party" },
   { id: "memegen", label: "😂 表情包制作", howto: "斗图缺弹药？自己做表情包：传图+加字，一键下载。", py: "bqbzz", cat: "tool" },

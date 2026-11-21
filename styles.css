@@ -2186,3 +2186,18 @@ body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 .uno-card.deal { animation: pkDeal .34s var(--ease-out) both; }
 .uno-card.playable { transition: transform .2s var(--ease-spring), box-shadow .2s; }
 .uno-card.playable:active { transform: translateY(-14px) scale(1.06); }
+
+/* ===================== v4.2 触屏手感底层修正 ===================== */
+/* 1. 关掉“双击放大”：连点按钮/格子不会再让页面突然缩放、吞掉点击 */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+button, .btn, .tile, a, input, select, label, [role="button"] { touch-action: manipulation; }
+/* 2. 游戏区按住不选字、不弹系统菜单（输入框和文本区除外） */
+.toy, .hero, .drawer, .home-grid { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.toy input, .toy textarea, .toy [contenteditable], .slang-list, .resume-preview, .ledger-list { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+* { -webkit-tap-highlight-color: transparent; }
+/* 3. 手机上没有“鼠标移开”，悬停样式会粘住：只在真有鼠标的设备上生效 */
+@media (hover: none) {
+  .ghost-btn:hover { border-color: var(--c-border) !important; }
+  .tile:hover { transform: none !important; border-color: var(--c-border) !important; }
+  .btn:hover { filter: none !important; }
+}

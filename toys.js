@@ -189,6 +189,28 @@
     if (prev && prev.length === now.length) kids.forEach((k, i) => { if (now[i] !== prev[i] && now[i] && !/^\s*$/.test(k.textContent + (k.querySelector("span,svg,img") ? "x" : ""))) k.classList.add(cls || "fx-in"); });
     popNewSnap.set(container, now);
   }
+  /* v4.2：相对拖动——手指在画面任意处按下，物体不跳；手指移多少，物体跟着移多少（不会被手指挡住）。
+     get() 返回物体当前逻辑坐标，set(x, y) 写回；lw/lh 是逻辑宽高（默认取画布尺寸）；
+     鼠标在电脑上不按键移动时仍直接跟随（hoverAbs），因为鼠标不挡视线。 */
+  function relDrag(el, get, set, opt) {
+    if (!el) return;
+    opt = opt || {};
+    let s = null;
+    const dims = () => { const r = el.getBoundingClientRect(); return { r, kx: (opt.lw || el.width || r.width) / (r.width || 1), ky: (opt.lh || el.height || r.height) / (r.height || 1) }; };
+    el.addEventListener("pointerdown", (e) => {
+      const p = get(); s = { cx: e.clientX, cy: e.clientY, x: p.x, y: p.y, id: e.pointerId };
+      try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    });
+    el.addEventListener("pointermove", (e) => {
+      const d = dims(), g = opt.gain || 1.15;
+      if (s && e.pointerId === s.id) { set(s.x + (e.clientX - s.cx) * d.kx * g, s.y + (e.clientY - s.cy) * d.ky * g); return; }
+      if (!s && e.pointerType === "mouse" && opt.hoverAbs) set((e.clientX - d.r.left) * d.kx, (e.clientY - d.r.top) * d.ky, true);
+    });
+    const end = (e) => { if (s && (!e || e.pointerId === s.id)) s = null; };
+    el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+    // 阻止页面跟着手指滚动（画布本身已 touch-action:none，这里再兜底 iOS）
+    el.addEventListener("touchmove", (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  }
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -592,7 +614,7 @@
     if (toyEnterResume[id]) toyEnterResume[id]();
     showHowtoBar(clickedId); // v1.33：新手引导（首次打开显示怎么玩）
     if (window.location.hash !== "#" + clickedId) window.location.hash = clickedId;
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "auto" }); // v4.2：切页直接到顶，不和入场动画叠在一起发飘
   }
   /* v1.33：怎么玩提示条——首次打开某玩具时显示，可关闭；"？"按钮可重新显示 */
   var HOWTO_SEEN_KEY = "dorm-toybox-howto-seen-v1";
@@ -623,6 +645,7 @@
       } catch (e) { /* 桩环境忽略 */ }
     }
     if (!force && getHowtoSeen().indexOf(tid) !== -1) return;
+    if (!force) markHowtoSeen(tid); // v4.2：自动弹出的提示只出现一次，下次进来不再挡在游戏上面（想再看点顶栏的“？”）
     var bar = document.createElement("div");
     bar.className = "howto-bar";
     var txt = document.createElement("span");
@@ -7645,9 +7668,8 @@
       breakoutPaddleX = Math.max(0, Math.min(BREAKOUT_W - 60, (clientX - rect.left) * scale - 30));
       breakoutRender();
     }
-    breakoutCanvas.addEventListener("pointerdown", (e) => breakoutMovePaddle(e.clientX));
-    breakoutCanvas.addEventListener("touchmove", (e) => { e.preventDefault(); breakoutMovePaddle(e.touches[0].clientX); }, { passive: false });
-    breakoutCanvas.addEventListener("pointermove", (e) => { if (e.buttons) breakoutMovePaddle(e.clientX); });
+    // v4.2：相对拖动，挡板不跳到手指下
+    relDrag(breakoutCanvas, () => ({ x: breakoutPaddleX, y: 0 }), (x, y, abs) => { breakoutPaddleX = Math.max(0, Math.min(BREAKOUT_W - 60, abs ? x - 30 : x)); breakoutRender(); }, { lw: BREAKOUT_W, lh: BREAKOUT_H, hoverAbs: true });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
         if ($("toy-breakout").classList.contains("hidden")) return;
@@ -8459,9 +8481,8 @@
       catchBasketX = Math.max(0, Math.min(CATCH_W - 48, (clientX - rect.left) * scale - 24));
       $("catchBasket").style.left = catchBasketX + "px";
     }
-    $("catchStage").addEventListener("pointerdown", (e) => catchMoveBasket(e.clientX));
-    $("catchStage").addEventListener("touchmove", (e) => { e.preventDefault(); catchMoveBasket(e.touches[0].clientX); }, { passive: false });
-    $("catchStage").addEventListener("pointermove", (e) => { if (e.buttons) catchMoveBasket(e.clientX); });
+    // v4.2：相对拖动
+    relDrag($("catchStage"), () => ({ x: catchBasketX, y: 0 }), (x, y, abs) => { catchBasketX = Math.max(0, Math.min(CATCH_W - 48, abs ? x - 24 : x)); $("catchBasket").style.left = catchBasketX + "px"; }, { lw: CATCH_W, lh: 300, hoverAbs: true });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
         if ($("toy-catch").classList.contains("hidden")) return;
@@ -9246,9 +9267,8 @@
       shooterShipX = Math.max(16, Math.min(SHOOT_W - 16, (clientX - rect.left) * scale));
       shooterDraw();
     }
-    $("shooterCanvas").addEventListener("pointerdown", (e) => shooterMoveShip(e.clientX));
-    $("shooterCanvas").addEventListener("touchmove", (e) => { e.preventDefault(); shooterMoveShip(e.touches[0].clientX); }, { passive: false });
-    $("shooterCanvas").addEventListener("pointermove", (e) => { if (e.buttons) shooterMoveShip(e.clientX); });
+    // v4.2：相对拖动，飞船不会被手指挡住
+    relDrag($("shooterCanvas"), () => ({ x: shooterShipX, y: 0 }), (x) => { shooterShipX = Math.max(16, Math.min(SHOOT_W - 16, x)); shooterDraw(); }, { lw: SHOOT_W, lh: 300, hoverAbs: true });
     if (document.addEventListener) {
       document.addEventListener("keydown", (e) => {
         if ($("toy-shooter").classList.contains("hidden")) return;
@@ -10774,11 +10794,9 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         const y = (e.clientY - rect.top) * 220 / (rect.height || 220);
         py = Math.max(PH / 2, Math.min(H - PH / 2, y));
       };
-      cv.addEventListener("pointermove", move);
-      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } });
-      // iOS 双保险：touch 事件 + preventDefault
-      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientY: t.clientY }); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } }, { passive: false });
-      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientY: t.clientY }); }, { passive: false });
+      // v4.2：相对拖动（手指在画面哪里都能推球拍，不会挡住球）
+      relDrag(cv, () => ({ x: 0, y: py }), (x, y) => { py = Math.max(PH / 2, Math.min(H - PH / 2, y)); }, { lw: 320, lh: 220, hoverAbs: true, gain: 1.3 });
+      cv.addEventListener("pointerdown", () => { SFX.unlock(); if (!running && !over) { running = true; raf = requestAnimationFrame(step); } });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function pongKeys(e) {
       if ($("toy-pong") && $("toy-pong").classList.contains("hidden")) return;
@@ -10967,10 +10985,9 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         const pw = longT > 0 ? 120 : 80;
         paddle.x = Math.max(0, Math.min(W - pw, x - pw / 2));
       };
-      cv.addEventListener("pointermove", move);
-      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); canvasStart(); });
-      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX }); canvasStart(); }, { passive: false });
-      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX }); }, { passive: false });
+      // v4.2：相对拖动
+      relDrag(cv, () => ({ x: paddle.x, y: 0 }), (x, y, abs) => { const pw = longT > 0 ? 120 : 80; paddle.x = Math.max(0, Math.min(W - pw, abs ? x - pw / 2 : x)); }, { lw: 320, lh: 400, hoverAbs: true });
+      cv.addEventListener("pointerdown", () => { SFX.unlock(); canvasStart(); });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function arkanoidKeys(e) {
       if ($("toy-arkanoid") && $("toy-arkanoid").classList.contains("hidden")) return;
@@ -13004,11 +13021,9 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         px = Math.max(12, Math.min(W - 12, px));
         py = Math.max(12, Math.min(H - 12, py));
       };
-      cv.addEventListener("pointermove", move);
-      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); move(e); canvasStart(); });
-      // iOS 双保险
-      cv.addEventListener("touchstart", (e) => { e.preventDefault(); SFX.unlock(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); canvasStart(); }, { passive: false });
-      cv.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; move({ clientX: t.clientX, clientY: t.clientY }); }, { passive: false });
+      // v4.2：相对拖动——手指在飞机下方任意处滑，飞机跟着走，不会被手指盖住
+      relDrag(cv, () => ({ x: px, y: py }), (x, y) => { px = Math.max(12, Math.min(W - 12, x)); py = Math.max(12, Math.min(H - 12, y)); }, { lw: 320, lh: 420, hoverAbs: true, gain: 1.25 });
+      cv.addEventListener("pointerdown", () => { SFX.unlock(); canvasStart(); });
     }
     if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", function dodgeKeys(e) {
       if ($("toy-dodge") && $("toy-dodge").classList.contains("hidden")) return;

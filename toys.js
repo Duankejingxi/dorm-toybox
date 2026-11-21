@@ -5965,27 +5965,54 @@
       }
       return false;
     }
+    // v4.1：方块带立体高光、落点预览（幽灵块）、消行闪白
+    let tClearing = null; // { rows, t }
+    function tCell(ctx, x, y, size, color, alpha) {
+      ctx.globalAlpha = alpha == null ? 1 : alpha;
+      ctx.fillStyle = color; ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
+      ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(x + 1, y + 1, size - 2, 3); ctx.fillRect(x + 1, y + 1, 3, size - 2);
+      ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fillRect(x + 1, y + size - 4, size - 2, 3); ctx.fillRect(x + size - 4, y + 1, 3, size - 2);
+      ctx.globalAlpha = 1;
+    }
+    function tGhostY() { if (!tCur) return 0; let y = tCur.y; while (!tCollide(tCur.m, tCur.x, y + 1)) y++; return y; }
     function tDraw() {
       if (!tCtx) return;
-      tCtx.fillStyle = "#10101f";
-      tCtx.fillRect(0, 0, T_COLS * T_CELL, T_ROWS * T_CELL);
+      const W = T_COLS * T_CELL, H = T_ROWS * T_CELL;
+      tCtx.fillStyle = "#0e0f1d"; tCtx.fillRect(0, 0, W, H);
+      tCtx.strokeStyle = "rgba(255,255,255,.04)"; tCtx.lineWidth = 1;
+      tCtx.beginPath();
+      for (let c = 1; c < T_COLS; c++) { tCtx.moveTo(c * T_CELL + .5, 0); tCtx.lineTo(c * T_CELL + .5, H); }
+      for (let r = 1; r < T_ROWS; r++) { tCtx.moveTo(0, r * T_CELL + .5); tCtx.lineTo(W, r * T_CELL + .5); }
+      tCtx.stroke();
       for (let r = 0; r < T_ROWS; r++) for (let c = 0; c < T_COLS; c++) {
-        if (tBoard[r][c]) { tCtx.fillStyle = tBoard[r][c]; tCtx.fillRect(c * T_CELL + 1, r * T_CELL + 1, T_CELL - 2, T_CELL - 2); }
+        if (tBoard[r][c]) tCell(tCtx, c * T_CELL, r * T_CELL, T_CELL, tBoard[r][c]);
+      }
+      if (tClearing) {
+        const k = Math.min(1, (performance.now() - tClearing.t) / 200);
+        for (const r of tClearing.rows) {
+          tCtx.fillStyle = "rgba(255,255,255," + (0.9 * (1 - k)) + ")"; tCtx.fillRect(0, r * T_CELL, W, T_CELL);
+          tCtx.fillStyle = "rgba(255,255,255,.95)"; tCtx.fillRect(W / 2 * k, r * T_CELL + T_CELL / 2 - 2, W * (1 - k), 4);
+        }
       }
       if (tCur) {
-        tCtx.fillStyle = tCur.c;
+        const gy = tGhostY();
+        if (gy !== tCur.y) for (let r = 0; r < tCur.m.length; r++) for (let c = 0; c < tCur.m[r].length; c++) {
+          if (!tCur.m[r][c]) continue;
+          const x = (tCur.x + c) * T_CELL, y = (gy + r) * T_CELL;
+          tCtx.strokeStyle = tCur.c; tCtx.globalAlpha = 0.55; tCtx.lineWidth = 2; tCtx.strokeRect(x + 2, y + 2, T_CELL - 4, T_CELL - 4);
+          tCtx.globalAlpha = 0.12; tCtx.fillStyle = tCur.c; tCtx.fillRect(x + 2, y + 2, T_CELL - 4, T_CELL - 4); tCtx.globalAlpha = 1;
+        }
         for (let r = 0; r < tCur.m.length; r++) for (let c = 0; c < tCur.m[r].length; c++) {
-          if (tCur.m[r][c]) tCtx.fillRect((tCur.x + c) * T_CELL + 1, (tCur.y + r) * T_CELL + 1, T_CELL - 2, T_CELL - 2);
+          if (tCur.m[r][c]) tCell(tCtx, (tCur.x + c) * T_CELL, (tCur.y + r) * T_CELL, T_CELL, tCur.c);
         }
       }
       if (tNextCtx && tNext) {
-        tNextCtx.fillStyle = "#10101f";
+        tNextCtx.fillStyle = "#0e0f1d";
         tNextCtx.fillRect(0, 0, 96, 96);
-        tNextCtx.fillStyle = tNext.c;
         const w = tNext.m[0].length, h = tNext.m.length;
         const ox = Math.floor((96 - w * 20) / 2), oy = Math.floor((96 - h * 20) / 2);
         for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
-          if (tNext.m[r][c]) tNextCtx.fillRect(ox + c * 20 + 1, oy + r * 20 + 1, 18, 18);
+          if (tNext.m[r][c]) tCell(tNextCtx, ox + c * 20, oy + r * 20, 20, tNext.c);
         }
       }
     }
@@ -5994,31 +6021,53 @@
       $("tetrisLevel").textContent = "第 " + tLevel + " 关 · 已消 " + tLines + " 行";
       $("tetrisBest").textContent = "最高 " + Math.max(tBest(), tScore);
     }
+    const T_NAMES = { 2: "双消！", 3: "三消！", 4: "四消 TETRIS！" };
     function tLock() {
       for (let r = 0; r < tCur.m.length; r++) for (let c = 0; c < tCur.m[r].length; c++) {
         if (tCur.m[r][c] && tCur.y + r >= 0) tBoard[tCur.y + r][tCur.x + c] = tCur.c;
       }
-      let cleared = 0;
-      for (let r = T_ROWS - 1; r >= 0; r--) {
-        if (tBoard[r].every(Boolean)) { tBoard.splice(r, 1); tBoard.unshift(new Array(T_COLS).fill(null)); cleared++; r++; }
-      }
-      if (cleared > 0) {
-        tLines += cleared;
-        tScore += (T_POINTS[cleared] || 100) * tLevel;
-        tLevel = Math.floor(tLines / 10) + 1;
-        SFX.chime();
+      const full = [];
+      for (let r = 0; r < T_ROWS; r++) if (tBoard[r].every(Boolean)) full.push(r);
+      tCur = null;
+      if (!full.length) { SFX.click(); tSpawnNext(); return; }
+      // 消行：先闪白 200ms，再落下
+      tClearing = { rows: full, t: performance.now() };
+      const rect = tCanvas.getBoundingClientRect(), sy = rect.height / T_ROWS;
+      for (const r of full) FX.sparkle(rect.left + rect.width / 2, rect.top + (r + 0.5) * sy, null, 10);
+      if (T_NAMES[full.length]) FX.float(T_NAMES[full.length], rect.left + rect.width / 2, rect.top + full[0] * sy, full.length >= 4 ? "#22d3ee" : "#ffe066");
+      FX.buzz(full.length >= 4 ? [30, 30, 50] : 18);
+      SFX.chime();
+      const anim = () => { tDraw(); if (tClearing && performance.now() - tClearing.t < 200) requestAnimationFrame(anim); };
+      requestAnimationFrame(anim);
+      setTimeout(() => {
+        for (const r of full.slice().reverse()) tBoard.splice(r, 1);
+        for (let i = 0; i < full.length; i++) tBoard.unshift(new Array(T_COLS).fill(null));
+        tClearing = null;
+        tLines += full.length;
+        tScore += (T_POINTS[full.length] || 100) * tLevel;
+        const lv = Math.floor(tLines / 10) + 1;
+        if (lv > tLevel) FX.floatAt($("tetrisLevel"), "升级 第 " + lv + " 关", "#69db7c");
+        tLevel = lv;
+        FX.pop($("tetrisScore"));
         if (tTimer) { clearInterval(tTimer); tTimer = setInterval(tTick, Math.max(100, 800 - (tLevel - 1) * 70)); }
-      } else { SFX.click(); }
+        if (tState === "over" || tState === "idle") return;
+        tSpawnNext();
+      }, 200);
+    }
+    function tSpawnNext() {
       tCur = tNext; tNext = tNewPiece();
       if (tCollide(tCur.m, tCur.x, tCur.y)) { tGameOver(); return; }
       tUpdateHud(); tDraw();
     }
+    // 落地后给 0.45 秒“锁定缓冲”，可以再左右挪一下或转一下（最多重置 8 次）
     function tTick() {
       if (!tCur) return;
-      if (!tCollide(tCur.m, tCur.x, tCur.y + 1)) { tCur.y++; }
-      else tLock();
+      if (!tCollide(tCur.m, tCur.x, tCur.y + 1)) { tCur.y++; tCur.ground = 0; }
+      else if (!tCur.ground) tCur.ground = performance.now();
+      else if (performance.now() - tCur.ground >= 450) tLock();
       tDraw();
     }
+    function tTouched() { if (tCur && tCur.ground && (tCur.resets = (tCur.resets || 0) + 1) <= 8) tCur.ground = performance.now(); }
     function tGameOver() {
       if (tTimer) { clearInterval(tTimer); tTimer = null; }
       tState = "over";
@@ -6028,6 +6077,7 @@
       $("tetrisStartBtn").textContent = "开始 ▶";
     }
     function tReset() {
+      tClearing = null;
       tEmptyBoard(); tScore = 0; tLines = 0; tLevel = 1;
       tCur = tNewPiece(); tNext = tNewPiece();
       tUpdateHud(); tDraw();
@@ -6044,7 +6094,7 @@
       if (tTimer) { clearInterval(tTimer); tTimer = null; }
       if (tState === "running") { tState = "paused"; $("tetrisStatus").textContent = "已暂停，点开始继续。"; $("tetrisStartBtn").textContent = "继续 ▶"; }
     }
-    function tMove(dx) { if (tCur && tState === "running" && !tCollide(tCur.m, tCur.x + dx, tCur.y)) { tCur.x += dx; tDraw(); } }
+    function tMove(dx) { if (tCur && tState === "running" && !tCollide(tCur.m, tCur.x + dx, tCur.y)) { tCur.x += dx; tTouched(); tDraw(); } }
     function tRotate() {
       if (!tCur || tState !== "running") return;
       const m = tCur.m;
@@ -6052,11 +6102,18 @@
       for (let c = 0; c < m[0].length; c++) { const row = []; for (let r = m.length - 1; r >= 0; r--) row.push(m[r][c]); rot.push(row); }
       const kicks = [0, -1, 1, -2, 2];
       for (let i = 0; i < kicks.length; i++) {
-        if (!tCollide(rot, tCur.x + kicks[i], tCur.y)) { tCur.m = rot; tCur.x += kicks[i]; tDraw(); return; }
+        if (!tCollide(rot, tCur.x + kicks[i], tCur.y)) { tCur.m = rot; tCur.x += kicks[i]; tTouched(); tDraw(); return; }
       }
     }
     function tSoftDrop() { if (tCur && tState === "running") { if (!tCollide(tCur.m, tCur.x, tCur.y + 1)) { tCur.y++; tDraw(); } else tLock(); } }
-    function tHardDrop() { if (!tCur || tState !== "running") return; while (!tCollide(tCur.m, tCur.x, tCur.y + 1)) tCur.y++; tLock(); tDraw(); }
+    function tHardDrop() {
+      if (!tCur || tState !== "running") return;
+      const y0 = tCur.y;
+      while (!tCollide(tCur.m, tCur.x, tCur.y + 1)) tCur.y++;
+      tScore += (tCur.y - y0) * 2; // 硬降按格数给点小分
+      if (tCur.y - y0 > 2) { const w = tCanvas.parentNode; w.classList.remove("t-thud"); void w.offsetWidth; w.classList.add("t-thud"); FX.buzz(12); }
+      tLock(); tDraw();
+    }
     $("tetrisStartBtn").addEventListener("click", () => { if (tState === "running") tPause(); else tStart(); });
     $("tetrisPauseBtn").addEventListener("click", tPause);
     // v4.0：◀ ▶ ▼ 按住连发（原来只能一下一下点）

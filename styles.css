@@ -2061,3 +2061,6 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 .g2048-grid .g2048-tile.merged { animation: g2048Merge .2s var(--ease-spring); z-index: 3; }
 @keyframes g2048Spawn { from { scale: 0; opacity: 0; } to { scale: 1; opacity: 1; } }
 @keyframes g2048Merge { 0% { scale: 1; } 45% { scale: 1.2; } 100% { scale: 1; } }
+/* v4.1：俄罗斯方块硬降落地的“咚”一下 */
+.tetris-wrap.t-thud #tetrisCanvas { animation: tThud .18s var(--ease-out); }
+@keyframes tThud { 0% { transform: translateY(0); } 35% { transform: translateY(5px); } 100% { transform: translateY(0); } }

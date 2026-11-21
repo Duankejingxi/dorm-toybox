@@ -11289,7 +11289,12 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       scored.sort((a, z) => z.v - a.v);
       return scored[0].m;
     }
+    let mv = null;
+    function animateMove() { draw(); if (mv && performance.now() - mv.t0 < 240) requestAnimationFrame(animateMove); else { mv = null; draw(); } }
     function applyMove(fx, fy, tx, ty) {
+      mv = { fx, fy, tx, ty, cap: board[ty][tx], t0: performance.now() };
+      requestAnimationFrame(animateMove);
+      if (board[ty][tx]) setTimeout(() => { const cv = $("chessCanvas"); if (cv) { const r = cv.getBoundingClientRect(); FX.sparkle(r.left + (tx + 0.5) * r.width / 9, r.top + (ty + 0.5) * r.height / 10, ["#ffd43b", "#ff6b6b", "#fff"], 12); } }, 220);
       history.push({ board: board.map((r) => r.slice()), last, turn });
       const cap = board[ty][tx];
       board[ty][tx] = board[fy][fx]; board[fy][fx] = null;
@@ -11388,20 +11393,33 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         }
         const ms = sel ? legalFrom(board, sel.x, sel.y) : [];
         const chk = !over && inCheck(board, turn) ? findK(board, turn) : null;
+        // v4.1：走子滑动动画——移动中的棋子最后画、带一点抬起；被吃的子在落点淡出
+        const k = mv ? Math.min(1, (performance.now() - mv.t0) / 240) : 1, ek = 1 - Math.pow(1 - k, 3);
+        const piece = (p, cx, cy, lift, alpha) => {
+          const red = p[0] === "r";
+          ctx.globalAlpha = alpha == null ? 1 : alpha;
+          ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.arc(cx + 1.5 + lift / 2, cy + 2.5 + lift, 15, 0, 7); ctx.fill();
+          ctx.fillStyle = lift ? "#fff3c4" : "#f7e7c6";
+          ctx.beginPath(); ctx.arc(cx, cy - lift, 15, 0, 7); ctx.fill();
+          ctx.strokeStyle = red ? "#b8261b" : "#1d1d1d"; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(cx, cy - lift, 12.5, 0, 7); ctx.stroke();
+          ctx.fillStyle = red ? "#b8261b" : "#1d1d1d";
+          ctx.font = "bold 16px 'KaiTi','STKaiti',serif";
+          ctx.fillText((red ? NAME_R : NAME_B)[p[1]], cx, cy + 1 - lift);
+          ctx.globalAlpha = 1;
+        };
         for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
           const p = board[y][x];
           const cx = X(x), cy = Y(y);
+          if (mv && k < 1 && x === mv.tx && y === mv.ty) { if (mv.cap) piece(mv.cap, cx, cy, 0, 1 - ek); continue; }
           if (!p) continue;
-          const red = p[0] === "r";
-          ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.arc(cx + 1.5, cy + 2.5, 15, 0, 7); ctx.fill();
-          ctx.fillStyle = sel && sel.x === x && sel.y === y ? "#fff3c4" : "#f7e7c6";
-          ctx.beginPath(); ctx.arc(cx, cy - (sel && sel.x === x && sel.y === y ? 2 : 0), 15, 0, 7); ctx.fill();
-          ctx.strokeStyle = red ? "#b8261b" : "#1d1d1d"; ctx.lineWidth = 1.6;
-          ctx.beginPath(); ctx.arc(cx, cy - (sel && sel.x === x && sel.y === y ? 2 : 0), 12.5, 0, 7); ctx.stroke();
+          const isSel = sel && sel.x === x && sel.y === y;
+          piece(p, cx, cy, isSel ? 2 : 0);
           if (chk && chk[0] === x && chk[1] === y) { ctx.strokeStyle = "#ff2d2d"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 17, 0, 7); ctx.stroke(); }
-          ctx.fillStyle = red ? "#b8261b" : "#1d1d1d";
-          ctx.font = "bold 16px 'KaiTi','STKaiti',serif";
-          ctx.fillText((red ? NAME_R : NAME_B)[p[1]], cx, cy + 1 - (sel && sel.x === x && sel.y === y ? 2 : 0));
+        }
+        if (mv && k < 1 && board[mv.ty][mv.tx]) {
+          const cx = X(mv.fx) + (X(mv.tx) - X(mv.fx)) * ek, cy = Y(mv.fy) + (Y(mv.ty) - Y(mv.fy)) * ek;
+          piece(board[mv.ty][mv.tx], cx, cy, Math.sin(k * Math.PI) * 6);
         }
         for (const [mx, my] of ms) {
           const cx = X(mx), cy = Y(my);

@@ -211,6 +211,13 @@
     // 阻止页面跟着手指滚动（画布本身已 touch-action:none，这里再兜底 iOS）
     el.addEventListener("touchmove", (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
   }
+  /* v4.2：按下即触发（拼手速的玩具不能等抬手）。随后那次 click 吞掉；键盘回车/读屏触发的 click（detail=0）照常生效 */
+  function fastTap(el, fn) {
+    if (!el) return;
+    let fired = 0;
+    el.addEventListener("pointerdown", (e) => { if (e.button !== undefined && e.button > 0) return; fired = Date.now(); SFX.unlock(); fn(e); });
+    el.addEventListener("click", (e) => { if (fired && Date.now() - fired < 800) { fired = 0; return; } fired = 0; fn(e); });
+  }
   /* v4.0：按住连发——按下立即触发一次，停顿 260ms 后按 interval 连发，松手/滑出即停 */
   function holdRepeat(btn, fn, interval) {
     if (!btn) return;
@@ -2297,7 +2304,7 @@
         renderReaction();
       }
     }
-    $("reactionStage").addEventListener("click", reactionClick);
+    fastTap($("reactionStage"), reactionClick); // v4.2：按下就算反应，原来等抬手会多算几十毫秒
     $("reactionStage").addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reactionClick(); }
     });
@@ -2613,7 +2620,7 @@
         card.setAttribute("data-emoji", emoji);
         card.setAttribute("data-index", String(i));
         card.textContent = "❓";
-        card.addEventListener("click", () => memoryFlip(card));
+        fastTap(card, () => memoryFlip(card));
         grid.appendChild(card);
       });
       $("memoryResult").textContent = "点一张牌开始。";
@@ -3552,7 +3559,7 @@
         cell.textContent = String(n);
         cell.setAttribute("data-num", String(n));
         cell.style.animationDelay = Math.min(300, idx * 12) + "ms";
-        cell.addEventListener("click", () => schulteTap(cell, n));
+        fastTap(cell, () => schulteTap(cell, n));
         grid.appendChild(cell);
       });
       $("schulteTarget").textContent = "下一个点：1";
@@ -6762,7 +6769,7 @@
       b.className = "mole-hole";
       b.textContent = "🕳️";
       b.setAttribute("aria-label", "洞 " + (i + 1));
-      b.addEventListener("click", () => moleWhack(i));
+      fastTap(b, () => moleWhack(i));
       moleGrid.appendChild(b);
       moleHoles.push(b);
     }
@@ -8287,7 +8294,7 @@
         cell.className = "spotdiff-cell";
         cell.textContent = i === spotdiffOdd ? spotdiffOddEmoji : spotdiffBase;
         cell.setAttribute("aria-label", "格子 " + (i + 1));
-        cell.addEventListener("click", () => spotdiffPick(i));
+        fastTap(cell, () => spotdiffPick(i));
         grid.appendChild(cell);
       }
       $("spotdiffStatus").textContent = "第 " + spotdiffLevel + " 关 · 得分 " + spotdiffScore + " · 剩 " + spotdiffTime + " 秒";
@@ -8748,7 +8755,7 @@
             const cell = document.createElement("button");
             cell.className = "drums-cell";
             cell.setAttribute("aria-label", tr.name + " 第 " + (s + 1) + " 拍");
-            cell.addEventListener("click", () => { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); });
+            fastTap(cell, () => { drumsGrid[t][s] = !drumsGrid[t][s]; drumsRender(); });
             drumsCellBtns[t + "-" + s] = cell;
             grid.appendChild(cell);
           }
@@ -8873,7 +8880,7 @@
         const b = document.createElement("button");
         b.className = "btn ghost-btn";
         b.textContent = c.name;
-        b.addEventListener("click", () => stroopPick(c.name));
+        fastTap(b, () => stroopPick(c.name));
         wrap.appendChild(b);
       });
       const comboTxt = stroopCombo >= 2 ? " · 🔥连击×" + stroopCombo : "";

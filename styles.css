@@ -2212,3 +2212,6 @@ body.in-toy .wrap { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)
 /* 状态栏更轻：同一组里第二条起不再画框，减少一层层的“盒子感” */
 .toy .result-line + .result-line, .toy .result-line + .count-line { background: none !important; border: 0 !important; margin-top: 4px !important; font-size: 14px; font-weight: 600; color: var(--c-text2, #aab); min-height: 0; }
 .toy .count-line { margin: 6px 0 0; }
+/* v4.2：玩游戏时页面不再橡皮筋回弹/误触下拉刷新 */
+body.in-toy { overscroll-behavior-y: none; }
+html:has(body.in-toy) { overscroll-behavior-y: none; }

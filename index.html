@@ -256,7 +256,7 @@
     <h2>💣 数字炸弹</h2>
     <p class="hint">1–100 里藏了个数字炸弹，猜中它就拆掉了。猜的次数越少越牛，宿舍纪录等你破。</p>
     <div class="guess-row">
-      <input id="guessInput" type="number" min="1" max="100" placeholder="输入 1–100" aria-label="猜的数字">
+      <input id="guessInput" type="number" min="1" max="100" placeholder="输入 1–100" aria-label="猜的数字" inputmode="numeric" pattern="[0-9]*" enterkeyhint="go">
       <button class="btn gold-btn" id="guessBtn">猜！</button>
     </div>
     <p class="result-line" id="guessResult">还没猜过。先猜一个。</p>
@@ -282,7 +282,7 @@
     <p class="hint">照着上面打，绿了就是对，红了就是错。打完一关（正确率≥80%）解锁下一关，从短句打到段落。</p>
     <div class="typing-levels" id="typingLevels"></div>
     <div class="typing-target" id="typingTarget"></div>
-    <input id="typingInput" type="text" placeholder="点这里开始打字" aria-label="打字输入" autocomplete="off">
+    <input id="typingInput" type="text" placeholder="点这里开始打字" aria-label="打字输入" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     <p class="result-line" id="typingResult">还没开始打。</p>
     <p class="count-line" id="typingStats">用时 0 秒 · 已打 0 字</p>
     <p class="count-line" id="typingBest"></p>
@@ -395,7 +395,7 @@
     <div id="scoreExtraTeams"></div>
     <div class="score-timer">
       <span class="score-timer-display" id="scoreTimerDisplay">05:00</span>
-      <input id="scoreTimerMin" type="number" min="1" max="99" value="5" aria-label="计时分钟数">
+      <input id="scoreTimerMin" type="number" min="1" max="99" value="5" aria-label="计时分钟数" inputmode="numeric" pattern="[0-9]*">
       <span class="hint-inline">分钟</span>
       <button class="btn small gold-btn" id="scoreTimerStartBtn">计时开始 ▶</button>
       <button class="btn small ghost-btn" id="scoreTimerPauseBtn">暂停 ⏸</button>
@@ -428,8 +428,8 @@
     <h2>⏳ 人生小格</h2>
     <p class="hint">假设人活 80 岁，一个月一格。填出生年月，看看已经过了多少格，还剩多少格。</p>
     <div class="life-inputs">
-      <input id="lifeYear" type="number" placeholder="出生年份，如 2005" aria-label="出生年份" min="1900" max="2100">
-      <input id="lifeMonth" type="number" placeholder="出生月份 1–12" aria-label="出生月份" min="1" max="12">
+      <input id="lifeYear" type="number" placeholder="出生年份，如 2005" aria-label="出生年份" min="1900" max="2100" inputmode="numeric" pattern="[0-9]*">
+      <input id="lifeMonth" type="number" placeholder="出生月份 1–12" aria-label="出生月份" min="1" max="12" inputmode="numeric" pattern="[0-9]*">
       <button class="btn gold-btn small" id="lifeGenBtn">生成 ✓</button>
     </div>
     <div class="life-grid" id="lifeGrid"></div>
@@ -448,7 +448,7 @@
     <div class="toolbox-panel" id="ledgerTabLedger">
       <p class="hint">花了多少、收了多少，随手记一笔。只存在你自己手机里，不上传。</p>
       <div class="ledger-form">
-        <input id="ledgerAmount" type="number" placeholder="金额（元）" aria-label="金额" min="0" step="0.01">
+        <input id="ledgerAmount" type="number" placeholder="金额（元）" aria-label="金额" min="0" step="0.01" inputmode="decimal">
         <input id="ledgerNote" type="text" placeholder="备注，比如：奶茶" aria-label="备注" maxlength="20">
       </div>
       <div class="ledger-type">
@@ -538,7 +538,7 @@
     <div class="toolbox-panel hidden" id="calcTabFx">
       <p class="hint">出国玩、海淘算账用。离线备用汇率，标了更新日期。</p>
       <div class="fx-row">
-        <input id="fxAmount" type="number" placeholder="金额" aria-label="金额" min="0" step="0.01" value="100">
+        <input id="fxAmount" type="number" placeholder="金额" aria-label="金额" min="0" step="0.01" value="100" inputmode="decimal">
         <select id="fxFrom" aria-label="从这种货币"></select>
         <span class="fx-arrow">→</span>
         <select id="fxTo" aria-label="换成这种货币"></select>
@@ -562,8 +562,8 @@
         <input id="bmiWeightSlider" type="range" min="35" max="150" value="65" step="0.5" aria-label="体重滑杆">
       </div>
       <div class="bmi-form hidden">
-        <input id="bmiHeight" type="number" placeholder="身高（厘米）" aria-label="身高厘米" min="100" max="250">
-        <input id="bmiWeight" type="number" placeholder="体重（公斤）" aria-label="体重公斤" min="20" max="300" step="0.1">
+        <input id="bmiHeight" type="number" placeholder="身高（厘米）" aria-label="身高厘米" min="100" max="250" inputmode="numeric" pattern="[0-9]*">
+        <input id="bmiWeight" type="number" placeholder="体重（公斤）" aria-label="体重公斤" min="20" max="300" step="0.1" inputmode="decimal">
       </div>
       <button class="btn gold-btn" id="bmiCalcBtn">算一下 📏</button>
       <div class="bmi-gauge-wrap"><canvas id="bmiGauge" width="260" height="140"></canvas></div>
@@ -771,7 +771,7 @@
     <p class="hint">考试、放假、生日、比赛……写个日子，每天打开就知道还有几天。存在本机，关掉页面也不丢。</p>
     <div class="cd-confetti hidden" id="cdConfetti"></div>
     <p class="count-line">什么事</p>
-    <input id="cdName" type="text" maxlength="20" placeholder="比如：期末考试、四级、放假回家">
+    <input id="cdName" type="text" maxlength="20" placeholder="比如：期末考试、四级、放假回家" enterkeyhint="next">
     <p class="count-line">哪一天</p>
     <input id="cdDate" type="date">
     <button class="btn gold-btn" id="cdAddBtn">加一个倒计时 📅</button>
@@ -784,7 +784,7 @@
     <h2>✅ 待办清单</h2>
     <p class="hint">今天要干的事写下来，做完打个勾。存在本机，关掉页面也不丢。长按拖动可排序。</p>
     <div class="beads-controls">
-      <input id="todoInput" type="text" maxlength="40" placeholder="比如：交实验报告、取快递、背 20 个单词">
+      <input id="todoInput" type="text" maxlength="40" placeholder="比如：交实验报告、取快递、背 20 个单词" enterkeyhint="done">
       <select id="todoPri" aria-label="优先级">
         <option value="high">🔴 高优先级</option>
         <option value="med" selected>🟡 中优先级</option>
@@ -1373,7 +1373,7 @@
     <h2>🔪 剧本杀主持人</h2>
     <p class="hint">没人会主持？它带全程：分身份 → 走流程 → 发线索。点牌翻身份；要标记出局：先开「💀 点牌标记出局」再点牌（电脑也可双击牌）。</p>
     <div class="btn-row">
-      <label>人数 <input id="skCount" type="number" min="4" max="12" value="6" style="width:56px"></label>
+      <label>人数 <input id="skCount" type="number" min="4" max="12" value="6" style="width:56px" inputmode="numeric" pattern="[0-9]*"></label>
       <button class="btn gold-btn small" id="skDealBtn">发身份</button>
       <button class="btn ghost-btn small" id="skModeBtn">💀 点牌标记出局：关</button>
       <button class="btn ghost-btn small" id="skResetBtn">重开 ↺</button>
@@ -1387,7 +1387,7 @@
       </div>
       <p class="result-line" id="skTimerLine"></p>
       <div class="sk-clue">
-        <input id="skClueWho" placeholder="几号玩家" style="width:80px">
+        <input id="skClueWho" placeholder="几号玩家" style="width:80px" inputmode="numeric">
         <input id="skClueText" placeholder="线索内容">
         <button class="btn ghost-btn small" id="skClueBtn">发线索</button>
       </div>
@@ -1423,9 +1423,9 @@
       <button class="btn ghost-btn small" id="resumeClearBtn">清空</button>
     </div>
     <div class="resume-form">
-      <input id="rsName" placeholder="姓名">
-      <input id="rsPhone" placeholder="电话">
-      <input id="rsMail" placeholder="邮箱">
+      <input id="rsName" placeholder="姓名" autocomplete="name">
+      <input id="rsPhone" placeholder="电话" type="tel" inputmode="tel" autocomplete="tel">
+      <input id="rsMail" placeholder="邮箱" type="email" inputmode="email" autocomplete="email">
       <input id="rsTarget" placeholder="求职意向，如：前端开发实习生">
       <textarea id="rsEdu" placeholder="教育经历（每行一条）" rows="3"></textarea>
       <textarea id="rsIntern" placeholder="实习经历（每行一条）" rows="3"></textarea>

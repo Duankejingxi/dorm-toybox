@@ -267,7 +267,110 @@
     hit() { this._noise(0.15, 0.25, 0, 1200); },
     jump() { this._tone(300, 0.18, "sine", 0.14, 0, 700); },
     shoot() { this._tone(1200, 0.12, "sawtooth", 0.08, 0, 300); },
+    chime() { [784, 1047].forEach((f, i) => this._tone(f, 0.14, "triangle", 0.12, i * 0.07)); },
   };
+  /* ========== v4.1：全局手感层 FX ==========
+     胜负/得分的视觉+震动反馈统一放这里，SFX.win()/lose() 会自动带上，所以关了声音也有反馈。 */
+  const FX = (function () {
+    const reduce = (() => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } })();
+    let cv = null, ctx = null, parts = [], raf = null, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const COLORS = ["#ffd43b", "#ff6b6b", "#4dabf7", "#69db7c", "#da77f2", "#ffa94d", "#ffffff"];
+    function layer() {
+      if (cv) return true;
+      try {
+        cv = document.createElement("canvas");
+        cv.className = "fx-layer"; cv.setAttribute("aria-hidden", "true");
+        document.body.appendChild(cv);
+        ctx = cv.getContext("2d");
+        const fit = () => { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; };
+        fit(); window.addEventListener("resize", fit);
+        return !!ctx;
+      } catch (e) { return false; }
+    }
+    function loop(t) {
+      raf = null;
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      const now = performance.now();
+      parts = parts.filter((p) => now - p.born < p.life);
+      for (const p of parts) {
+        const k = (now - p.born) / 1000;
+        const x = p.x + p.vx * k, y = p.y + p.vy * k + 0.5 * p.g * k * k;
+        const a = 1 - (now - p.born) / p.life;
+        ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, a * 1.4));
+        ctx.translate(x, y); ctx.rotate(p.rot + p.vr * k);
+        ctx.fillStyle = p.c;
+        if (p.shape === 0) ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2);
+        else { ctx.beginPath(); ctx.arc(0, 0, p.s / 2.4, 0, 6.3); ctx.fill(); }
+        ctx.restore();
+      }
+      if (parts.length) raf = requestAnimationFrame(loop);
+      else ctx.clearRect(0, 0, innerWidth, innerHeight);
+    }
+    function burst(x, y, n, opt) {
+      if (reduce || !layer()) return;
+      opt = opt || {};
+      const now = performance.now();
+      for (let i = 0; i < n; i++) {
+        const ang = opt.up ? -Math.PI / 2 + (Math.random() - 0.5) * (opt.spread || 1.6) : Math.random() * Math.PI * 2;
+        const sp = (opt.speed || 520) * (0.45 + Math.random() * 0.75);
+        parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, g: opt.g == null ? 900 : opt.g, born: now, life: (opt.life || 1500) * (0.7 + Math.random() * 0.5),
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14, s: (opt.size || 9) * (0.6 + Math.random() * 0.8), c: (opt.colors || COLORS)[Math.floor(Math.random() * (opt.colors || COLORS).length)], shape: Math.random() < 0.6 ? 0 : 1 });
+      }
+      if (parts.length > 600) parts.splice(0, parts.length - 600);
+      if (!raf) raf = requestAnimationFrame(loop);
+    }
+    function panel() { return document.querySelector(".toy:not(.hidden)"); }
+    function center(el) { const r = (el || document.body).getBoundingClientRect(); return { x: r.left + r.width / 2, y: Math.max(80, r.top + Math.min(r.height, innerHeight) * 0.35) }; }
+    let buzzOn = lsGet("dorm-toybox-buzz-v1", "1") === "1";
+    const FX = {
+      reduce,
+      buzz(p) { if (!buzzOn) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} },
+      setBuzz(on) { buzzOn = !!on; lsSet("dorm-toybox-buzz-v1", on ? "1" : "0"); },
+      get buzzOn() { return buzzOn; },
+      burst,
+      // 从某个元素（默认当前玩具）往上喷彩带
+      celebrate(el) {
+        const c = center(el || panel());
+        burst(c.x - 60, c.y + 40, 45, { up: true, spread: 1.3, speed: 760 });
+        burst(c.x + 60, c.y + 40, 45, { up: true, spread: 1.3, speed: 760 });
+        const p = el || panel(); if (p) { p.classList.remove("fx-win"); void p.offsetWidth; p.classList.add("fx-win"); setTimeout(() => p.classList.remove("fx-win"), 900); }
+        FX.buzz([18, 40, 28]);
+      },
+      // 小火花：点中、消除、得分
+      sparkle(x, y, colors, n) { burst(x, y, n || 14, { speed: 260, g: 500, life: 650, size: 6, colors }); },
+      shake(el) {
+        const p = el || panel(); if (!p || reduce) return;
+        p.classList.remove("fx-shake"); void p.offsetWidth; p.classList.add("fx-shake");
+        setTimeout(() => p.classList.remove("fx-shake"), 450);
+      },
+      fail(el) { FX.shake(el); FX.buzz([70, 50, 70]); },
+      // 飘字：+10、Perfect 之类，坐标是屏幕坐标
+      float(text, x, y, color) {
+        try {
+          const d = document.createElement("div");
+          d.className = "fx-float"; d.textContent = text;
+          d.style.left = x + "px"; d.style.top = y + "px"; if (color) d.style.color = color;
+          document.body.appendChild(d);
+          setTimeout(() => d.remove(), 900);
+        } catch (e) {}
+      },
+      floatAt(el, text, color) { if (!el) return; const r = el.getBoundingClientRect(); FX.float(text, r.left + r.width / 2, r.top + r.height / 3, color); },
+      // 元素弹一下
+      pop(el) { if (!el || reduce) return; el.classList.remove("fx-pop"); void el.offsetWidth; el.classList.add("fx-pop"); },
+    };
+    return FX;
+  })();
+  // 胜负自动带上视觉和震动；声音仍只在开声音时响（_tone 里判断）
+  (function () {
+    const w = SFX.win.bind(SFX), l = SFX.lose.bind(SFX), h = SFX.hit.bind(SFX);
+    SFX.win = function () { FX.celebrate(); w(); };
+    SFX.lose = function () { FX.fail(); l(); };
+    SFX.hit = function () { FX.buzz(30); h(); };
+    const c = SFX.chime.bind(SFX);
+    SFX.chime = function () { FX.buzz(12); c(); };
+  })();
   // 全局首次交互解锁音频
   if (typeof document !== "undefined" && document.addEventListener) {
     const unlockOnce = () => { SFX.unlock(); };
@@ -431,6 +534,7 @@
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-home").classList.add("hidden");
     $("toy-" + id).classList.remove("hidden");
+    { const pe = $("toy-" + id); pe.classList.remove("fx-enter"); void pe.offsetWidth; pe.classList.add("fx-enter"); setTimeout(() => pe.classList.remove("fx-enter"), 400); }
     allTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     allHomeTiles().forEach((b) => b.classList.toggle("active", b.getAttribute("data-toy") === clickedId));
     currentToy = id;
@@ -565,6 +669,7 @@
     if (currentToy) leaveToy(currentToy);
     document.querySelectorAll(".toy").forEach((el) => el.classList.add("hidden"));
     $("toy-home").classList.remove("hidden");
+    if (fromToy) { const hp = $("toy-home"); hp.classList.remove("fx-enter-home"); void hp.offsetWidth; hp.classList.add("fx-enter-home"); setTimeout(() => hp.classList.remove("fx-enter-home"), 450); }
     renderRecent();
     allTiles().forEach((b) => b.classList.remove("active"));
     allHomeTiles().forEach((b) => b.classList.remove("active"));
@@ -816,7 +921,7 @@
           $("wheelResult").textContent = "🎉 命运已定：" + wheelOptions[targetIndex] + "！";
           wheelConfetti();
           pushWheelHist(wheelOptions[targetIndex]);
-          if (typeof SFX !== "undefined") SFX.win();
+          if (typeof SFX !== "undefined") SFX.chime();
         }
       }
       requestAnimationFrame(frame);
@@ -1163,7 +1268,7 @@
           $("diceResult").textContent = count === 1
             ? "🎲 扔出了 " + values[0] + " 点"
             : "🎲 扔出了 " + values.join(" + ") + " = " + sum + " 点";
-          if (typeof SFX !== "undefined" && SFX.win) SFX.win();
+          if (typeof SFX !== "undefined" && SFX.win) SFX.chime();
         }
       }
       animate();
@@ -1510,7 +1615,7 @@
           result.classList.remove("slowing");
           result.textContent = "🎉 " + winner;
           result.classList.add("pop");
-          if (typeof SFX !== "undefined") SFX.win();
+          if (typeof SFX !== "undefined") SFX.chime();
           picked.push(winner);
           renderPickLeft();
           renderPickHistory();
@@ -2182,7 +2287,7 @@
       });
       let msg;
       if (you === cpu) { msg = "平局！再来。"; SFX.pop(); }
-      else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; SFX.win(); }
+      else if (RPS_BEATS[you] === cpu) { rpsScore.you++; msg = "🎉 你赢了这局！"; SFX.chime(); }
       else { rpsScore.cpu++; msg = "😤 电脑赢了这局。"; SFX.lose(); }
       if (predicted) msg += "（AI 觉得你要出" + RPS_HANDS[predicted] + "）";
       if (rpsScore.you >= RPS_TARGET) msg = "🏆 5 局 3 胜，你赢下了整场！AI 服了。";
@@ -2927,7 +3032,7 @@
               setTimeout(() => machineEl.classList.remove("slots-win"), 1500);
             }
             slotsWinSound();
-            SFX.win();
+            SFX.chime();
           } else {
             SFX.lose();
           }
@@ -5901,7 +6006,7 @@
         tLines += cleared;
         tScore += (T_POINTS[cleared] || 100) * tLevel;
         tLevel = Math.floor(tLines / 10) + 1;
-        SFX.win();
+        SFX.chime();
         if (tTimer) { clearInterval(tTimer); tTimer = setInterval(tTick, Math.max(100, 800 - (tLevel - 1) * 70)); }
       } else { SFX.click(); }
       tCur = tNext; tNext = tNewPiece();
@@ -6633,7 +6738,7 @@
       gLast = bestIdx;
       gMoves++;
       SFX.click();
-      if (gomokuLineLen(bestIdx, 2) >= 5) { gWinner = 2; SFX.win(); }
+      if (gomokuLineLen(bestIdx, 2) >= 5) { gWinner = 2; if (gMode === "duo") SFX.win(); else SFX.lose(); }
       else if (gBoard.every((v) => v !== 0)) gWinner = 3;
       else gTurn = 1;
       gomokuRender();
@@ -7827,7 +7932,7 @@
           saveBest(JUMP_KEY, jumpBest);
         }
         if (isCenter) {
-          SFX.win();
+          SFX.chime();
           jumpPerfect(ch); // v1.32：Perfect! 飘字
         } else { SFX.pop(0.4); }
         $("jumpStatus").textContent = isCenter ? "🎯 正中心！+2 分！" : "稳稳落下，+1 分。";
@@ -9058,7 +9163,7 @@
       }
       onestrokeUsed.add(key);
       onestrokePath.push(i);
-      if (onestrokeUsed.size === lv.edges.length) { onestrokeDone = true; if (SFX.enabled) SFX.win(); }
+      if (onestrokeUsed.size === lv.edges.length) { onestrokeDone = true; SFX.win(); }
       else if (SFX.enabled) SFX.click();
       onestrokeRender();
     }
@@ -9560,7 +9665,7 @@
       if (!save[key] || secs < save[key]) save[key] = Math.round(secs * 10) / 10;
       save.level = Math.max(save.level | 0, level + 1);
       lsSet(BEST_KEY, JSON.stringify(save));
-      if (SFX.enabled) SFX.win();
+      SFX.win();
     }
     function startTick() { stopTick(); tick = setInterval(render, 200); }
     function stopTick() { if (tick) { clearInterval(tick); tick = null; } }
@@ -9967,7 +10072,7 @@
         running = false; deadAt = Date.now();
         raf = null; // R21：死后把 raf 置空——原来残留已跑完的旧 id，点屏/空格重开时 !raf 为假、新的 requestAnimationFrame 排不上，鸟定在开局位置不动（画布还写着“点屏幕再来”）
         if (score > best) { best = score; saveBest(KEY, best); isNewBest = score > 0; }
-        if (SFX.enabled) { if (isNewBest) SFX.win(); else SFX.lose(); }
+        { if (isNewBest) SFX.win(); else SFX.lose(); }
       }
       draw();
       render();
@@ -10113,7 +10218,7 @@
       if (!s1.alive || !s2.alive) {
         running = false;
         winner = !s1.alive && !s2.alive ? "平局！" : !s1.alive ? (aiMode ? "🤖 AI 获胜！" : "P2 🔵 获胜！") : "P1 🟢 获胜！";
-        if (SFX.enabled) SFX.win();
+        SFX.win();
       }
       draw(); render();
     }
@@ -10305,7 +10410,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       cy += Math.max(-DIFFS[diff].ai * k, Math.min(DIFFS[diff].ai * k, d * 0.12 * k));
       cy = Math.max(PH / 2, Math.min(H - PH / 2, cy));
       // 得分
-      if (ball.x < 0) { cs++; if (SFX.enabled) SFX.lose(); checkOver(); if (!over) serve(1); }
+      if (ball.x < 0) { cs++; SFX.lose(); checkOver(); if (!over) serve(1); }
       if (ball.x > W) { ps++; if (SFX.enabled) SFX.pop(0.7); checkOver(); if (!over) serve(-1); }
       draw(); render();
       if (!over) raf = requestAnimationFrame(step);
@@ -10313,7 +10418,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
     function checkOver() {
       if (ps >= 5 || cs >= 5) {
         over = true; running = false;
-        if (SFX.enabled) { if (ps >= 5) SFX.win(); else SFX.lose(); }
+        { if (ps >= 5) SFX.win(); else SFX.lose(); }
       }
     }
     function draw() {
@@ -10449,7 +10554,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       balls = balls.filter((b) => b.y < H + 20);
       if (balls.length === 0) {
         lives--;
-        if (SFX.enabled) SFX.lose();
+        SFX.lose();
         if (lives <= 0) { running = false; draw(); render(); return; }
         balls = [{ x: paddle.x + pw / 2, y: H - 40, vx: 2.6, vy: -3.4, r: 6 }];
       }
@@ -10485,10 +10590,10 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       // 过关
       if (bricks.every((b) => b.hp <= 0)) {
         level++;
-        if (level > 3) { running = false; if (SFX.enabled) SFX.win(); draw(); render(); return; }
+        if (level > 3) { running = false; SFX.win(); draw(); render(); return; }
         buildLevel(level);
         balls = [{ x: W / 2, y: H - 40, vx: 2.6, vy: -3.4, r: 6 }];
-        if (SFX.enabled) SFX.win();
+        SFX.win();
       }
       draw(); render();
       raf = requestAnimationFrame(step);
@@ -10623,7 +10728,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       firstOpen = false;
       if (c.mine) {
         over = true; c.open = true;
-        if (SFX.enabled) SFX.lose();
+        SFX.lose();
         draw(); render(); return;
       }
       //  flood fill
@@ -10646,7 +10751,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         win = true;
         const secs = Math.floor((Date.now() - startTime) / 1000);
         if (!best || secs < parseInt(best, 10)) { best = String(secs); lsSet(KEY, best); }
-        if (SFX.enabled) SFX.win();
+        SFX.win();
       }
       draw(); render();
     }
@@ -10902,7 +11007,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         over = true;
         const redWins = turn === "b";
         msg = redWins ? (chk ? "🎉 将死！你赢了" : "🎉 黑方困毙，你赢了") : (chk ? "😵 被将死了，AI 赢" : "😵 你无子可动（困毙），AI 赢");
-        if (SFX.enabled) { if (redWins) SFX.win(); else SFX.lose(); }
+        { if (redWins) SFX.win(); else SFX.lose(); }
       } else if (chk) {
         msg = turn === "r" ? "⚠️ 将军！快应将" : "将军！";
         checkFlash = Date.now();
@@ -11224,7 +11329,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       }
       const msg = b > w ? "🎉 黑胜 " + b.toFixed(1) + " : " + w.toFixed(1) : "😅 白胜 " + w.toFixed(1) + " : " + b.toFixed(1);
       $("goScore").textContent = msg;
-      if (SFX.enabled) { if (b > w) SFX.win(); else SFX.lose(); }
+      { if (b > w) SFX.win(); else SFX.lose(); }
     }
     function onTap(x, y) {
       if (over || turn !== "black") return;
@@ -11443,7 +11548,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
     }
     function gameOver(winner) {
       over = true;
-      if (SFX.enabled) { if (winner === "p") SFX.win(); else SFX.lose(); }
+      { if (winner === "p") SFX.win(); else SFX.lose(); }
       draw(); render(winner === "p" ? "🎉 你赢了！" : "😅 AI 赢了");
     }
     const UNO_BG = { red: "#e5484d", yellow: "#f2b51d", green: "#3fa34d", blue: "#3d6fe0" };
@@ -11598,7 +11703,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
     function endGame(winner, how, from) {
       clearTimer(); phase = "over"; claim = null;
       result = { winner, how, from };
-      if (winner === 0) { stats.wins++; if (SFX.enabled) SFX.win(); }
+      if (winner === 0) { stats.wins++; SFX.win(); }
       else if (SFX.enabled && winner >= 0) SFX.lose();
       stats.games++; saveStats();
       if (winner < 0) msg = "😅 牌摸完了，流局";
@@ -11934,15 +12039,15 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       if (folded >= 0) {
         const w = other(folded); chips[w] += pot; won = w === 0 ? pot : -pot;
         msg = folded === 0 ? "你弃牌，输掉 " + contrib[0] : "🎉 AI 弃牌，你赢 +" + contrib[1];
-        if (SFX.enabled) { if (w === 0) SFX.win(); else SFX.lose(); }
+        { if (w === 0) SFX.win(); else SFX.lose(); }
       } else {
         while (comm.length < 5) comm.push(deck.pop());
         reveal = true;
         const pv = eval7(hole[0].concat(comm)), av = eval7(hole[1].concat(comm));
         const c = cmpHands(pv, av);
         winInfo = { you: HNAMES[pv[0]], ai: HNAMES[av[0]] };
-        if (c > 0) { chips[0] += pot; msg = "🎉 你赢 +" + (pot - contrib[0]) + "！" + HNAMES[pv[0]] + " 胜 " + HNAMES[av[0]]; if (SFX.enabled) SFX.win(); }
-        else if (c < 0) { chips[1] += pot; msg = "😅 你输 " + contrib[0] + "，" + HNAMES[av[0]] + " 胜 " + HNAMES[pv[0]]; if (SFX.enabled) SFX.lose(); }
+        if (c > 0) { chips[0] += pot; msg = "🎉 你赢 +" + (pot - contrib[0]) + "！" + HNAMES[pv[0]] + " 胜 " + HNAMES[av[0]]; if (SFX.enabled) SFX.chime(); }
+        else if (c < 0) { chips[1] += pot; msg = "😅 你输 " + contrib[0] + "，" + HNAMES[av[0]] + " 胜 " + HNAMES[pv[0]]; SFX.lose(); }
         else { const h = Math.floor(pot / 2); chips[0] += h; chips[1] += pot - h; msg = "🤝 平分底池，都是" + HNAMES[pv[0]]; }
       }
       pot = 0;
@@ -12150,7 +12255,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       if (isNew) save[k] = score;
       lsSet(KEY, JSON.stringify(save));
       judge = { rank, acc, isNew };
-      if (SFX.enabled && !useAudio) SFX.win();
+      SFX.win();
       render();
     }
     function hit(lane) {
@@ -12303,7 +12408,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       if (overlap <= 8) {
         over = true; running = false; overAt = Date.now();
         debris.push({ x: cur.x, y: cur.y, w: cur.w, vy: 0, vr: (Math.random() - 0.5) * 0.1, r: 0 });
-        if (SFX.enabled) SFX.lose();
+        SFX.lose();
         if (!raf) raf = requestAnimationFrame(step);
         draw(); render(); return;
       }
@@ -12469,7 +12574,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
             if (lives <= 0) {
               running = false;
               if (score > best) { best = score; saveBest(KEY, best); }
-              if (SFX.enabled) SFX.lose();
+              SFX.lose();
               draw(); render(); return;
             }
           }
@@ -12644,7 +12749,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       // 到出口？
       if (maze[Math.floor(py)][Math.floor(px)] === 2) {
         over = true;
-        if (SFX.enabled) SFX.win();
+        SFX.win();
         let nb = "";
         if (!mBest || steps < mBest) { mBest = steps; saveBest(MKEY, mBest); nb = " 🎉新纪录！"; }
         render("🎉 走出来了！用了 " + steps + " 步" + nb + " · 最好 " + mBest + " 步");
@@ -12778,7 +12883,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       $("skTimerLine").textContent = "⏱ " + secs + "s";
       timerId = setInterval(() => {
         secs--;
-        if (secs <= 0) { stopTimer(); $("skTimerLine").textContent = "⏱ 时间到！"; if (SFX.enabled) SFX.lose(); return; }
+        if (secs <= 0) { stopTimer(); $("skTimerLine").textContent = "⏱ 时间到！"; SFX.lose(); return; }
         $("skTimerLine").textContent = "⏱ " + secs + "s";
       }, 1000);
     }
@@ -12886,7 +12991,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         a.href = cv.toDataURL("image/png");
         if (typeof a.click === "function") a.click();
         $("memegenMsg").textContent = "已开始下载 ✅";
-        if (SFX.enabled) SFX.win();
+        if (SFX.enabled) SFX.chime();
       } catch (e) { $("memegenMsg").textContent = "下载失败，换个浏览器试试"; }
     });
     render();
@@ -12971,7 +13076,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         a.href = URL.createObjectURL(blob);
         a.download = "resume.html";
         if (typeof a.click === "function") a.click();
-        if (SFX.enabled) SFX.win();
+        if (SFX.enabled) SFX.chime();
       } catch (e) {}
     });
     $("resumeClearBtn").addEventListener("click", () => {

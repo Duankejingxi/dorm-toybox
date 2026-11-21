@@ -1991,3 +1991,61 @@ body.in-toy .wrap { max-width: 720px !important; margin-left: auto; margin-right
 .drawer-list .tile-emoji { font-size: 20px !important; }
 .drawer-list .tile-name { font-size: 13px !important; text-align: left !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .drawer-list .tile.active { border-color: #4f7cff !important; background: rgba(79, 124, 255, .18) !important; }
+
+/* ===================== v4.1 手感层 ===================== */
+:root { --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1); }
+.fx-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; }
+.fx-float {
+  position: fixed; z-index: 10000; pointer-events: none; transform: translate(-50%, -50%);
+  font-weight: 900; font-size: 22px; color: #ffe066; text-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+  animation: fxFloat .9s var(--ease-out) forwards; white-space: nowrap;
+}
+@keyframes fxFloat { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.6); } 18% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -190%) scale(1); } }
+.fx-pop { animation: fxPop .32s var(--ease-spring); }
+@keyframes fxPop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.fx-shake { animation: fxShake .42s cubic-bezier(.36, .07, .19, .97); }
+@keyframes fxShake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
+.fx-win { animation: fxWin .9s var(--ease-out); }
+@keyframes fxWin { 0% { box-shadow: 0 0 0 0 rgba(255, 212, 59, 0); } 25% { box-shadow: 0 0 0 3px rgba(255, 212, 59, .8), 0 0 40px rgba(255, 212, 59, .45); } 100% { box-shadow: 0 0 0 0 rgba(255, 212, 59, 0); } }
+
+/* 页面切换：进玩具时面板从下方浮上来，回主页时网格淡入 */
+.fx-enter { animation: fxEnter .34s var(--ease-out) both; }
+@keyframes fxEnter { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+.fx-enter-home .tile { animation: fxTileIn .38s var(--ease-out) both; }
+@keyframes fxTileIn { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+
+/* 按钮/方块：按下回缩、松手弹回（统一一套，盖掉以前几处互相打架的写法） */
+.btn, .tile, .seg-btn, .cat-tab, .recent-chip {
+  transition: transform .22s var(--ease-spring), background-color .15s ease, border-color .15s ease, box-shadow .2s ease, opacity .15s ease !important;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active:not(:disabled), .seg-btn:active, .cat-tab:active, .recent-chip:active { transform: scale(.94) !important; transition-duration: .06s !important; }
+.tile:active { transform: scale(.93) !important; transition-duration: .06s !important; }
+.btn:disabled { transform: none !important; }
+.gold-btn, .big-btn { box-shadow: 0 6px 16px -6px rgba(79, 124, 255, .7) !important; }
+.gold-btn:active, .big-btn:active { box-shadow: 0 2px 6px -2px rgba(79, 124, 255, .7) !important; }
+@media (hover: hover) {
+  .btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .tile:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, .22) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-enter, .fx-enter-home .tile, .fx-pop, .fx-shake, .fx-win, .fx-float { animation: none !important; }
+}
+.fx-enter-home .tile:nth-child(1) { animation-delay: 18ms; }
+.fx-enter-home .tile:nth-child(2) { animation-delay: 36ms; }
+.fx-enter-home .tile:nth-child(3) { animation-delay: 54ms; }
+.fx-enter-home .tile:nth-child(4) { animation-delay: 72ms; }
+.fx-enter-home .tile:nth-child(5) { animation-delay: 90ms; }
+.fx-enter-home .tile:nth-child(6) { animation-delay: 108ms; }
+.fx-enter-home .tile:nth-child(7) { animation-delay: 126ms; }
+.fx-enter-home .tile:nth-child(8) { animation-delay: 144ms; }
+.fx-enter-home .tile:nth-child(9) { animation-delay: 162ms; }
+.fx-enter-home .tile:nth-child(10) { animation-delay: 180ms; }
+.fx-enter-home .tile:nth-child(11) { animation-delay: 198ms; }
+.fx-enter-home .tile:nth-child(12) { animation-delay: 216ms; }
+.fx-enter-home .tile:nth-child(13) { animation-delay: 234ms; }
+.fx-enter-home .tile:nth-child(14) { animation-delay: 252ms; }
+.fx-enter-home .tile:nth-child(15) { animation-delay: 270ms; }
+.fx-enter-home .tile:nth-child(16) { animation-delay: 288ms; }
+.fx-enter-home .tile:nth-child(17) { animation-delay: 306ms; }
+.fx-enter-home .tile:nth-child(18) { animation-delay: 324ms; }

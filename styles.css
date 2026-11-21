@@ -2176,3 +2176,13 @@ body.in-toy .hero { background: rgba(13, 15, 26, .78); }
 .mj-opp.on { animation: mjTurn 1.2s ease-in-out infinite; }
 @keyframes mjTurn { 50% { box-shadow: 0 0 0 1px #4f7cff inset, 0 0 16px rgba(79, 124, 255, .45); } }
 .mj-actions .btn { animation: fxIn .3s var(--ease-spring); }
+.pk-card.deal { animation: pkDeal .38s var(--ease-out) both; }
+@keyframes pkDeal { from { transform: translate(0, -90px) rotate(-12deg) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.pk-card.flip { animation: pkFlip .42s var(--ease-out) both; }
+@keyframes pkFlip { 0% { transform: perspective(400px) rotateY(90deg); opacity: .4; } 100% { transform: perspective(400px) rotateY(0); opacity: 1; } }
+.pk-chips { transition: color .3s; }
+.uno-card.top.played { animation: unoPlay .34s var(--ease-spring); }
+@keyframes unoPlay { from { transform: translateY(60px) rotate(-18deg) scale(.7); opacity: 0; } to { transform: none; opacity: 1; } }
+.uno-card.deal { animation: pkDeal .34s var(--ease-out) both; }
+.uno-card.playable { transition: transform .2s var(--ease-spring), box-shadow .2s; }
+.uno-card.playable:active { transform: translateY(-14px) scale(1.06); }

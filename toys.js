@@ -11914,7 +11914,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       el.appendChild(corner); el.appendChild(mid);
       return el;
     }
-    let drewThisTurn = false;
+    let drewThisTurn = false, unoSeenTop = null, unoSeenCards = null;
     function draw() {
       const t = $("unoTop");
       if (t && !pendingWild) {
@@ -11929,7 +11929,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         const center = document.createElement("div"); center.className = "uno-center";
         const deckEl = document.createElement("div"); deckEl.className = "uno-card uno-deck"; { const n = document.createElement("b"); n.textContent = deck.length; n.style.color = "#fff"; deckEl.appendChild(n); deckEl.title = "牌堆剩 " + deck.length + " 张"; }
         center.appendChild(deckEl);
-        if (top) center.appendChild(unoCardEl(top, "top"));
+        if (top) { const tEl = unoCardEl(top, "top" + (top !== unoSeenTop ? " played" : "")); center.appendChild(tEl); unoSeenTop = top; }
         if (top && top.c !== "wild") { const cc = document.createElement("span"); cc.className = "uno-curcolor"; cc.style.background = UNO_BG[top.c]; cc.textContent = "当前 " + CNAMES[top.c]; center.appendChild(cc); }
         t.appendChild(center);
       }
@@ -11942,11 +11942,12 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
         order.forEach((i) => {
           const c = pHand[i];
           const ok = myTurn && canPlay(c) && (!drewThisTurn || i === pHand.length - 1);
-          const el = unoCardEl(c, myTurn ? (ok ? "playable" : "dim") : "");
+          const el = unoCardEl(c, (myTurn ? (ok ? "playable" : "dim") : "") + (unoSeenCards && !unoSeenCards.has(c) ? " deal" : ""));
           if (myTurn) el.addEventListener("click", () => { if (drewThisTurn && i !== pHand.length - 1) { render("摸到的那张才能出，或者点「不出」"); return; } pPlay(i); });
           h.appendChild(el);
         });
       }
+      unoSeenCards = new Set(pHand);
       const db = $("unoDrawBtn");
       if (db) { db.textContent = drewThisTurn ? "不出，结束回合 ▶" : "摸牌"; db.disabled = over || turn !== "p"; }
     }
@@ -12440,6 +12441,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       d.appendChild(r); d.appendChild(s);
       return d;
     }
+    let pkSeenHand = -1, pkSeenComm = 0, pkSeenReveal = false;
     function draw() {
       const t = $("pokerTable"); if (!t) return;
       t.innerHTML = "";
@@ -12447,14 +12449,19 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       const aiRow = row("pk-seat");
       aiRow.innerHTML = '<span class="pk-name">🤖 AI' + (button === 1 ? ' <em class="pk-btn">D</em>' : "") + '</span><span class="pk-chips">' + chips[1] + "</span>";
       const aiCards = row("pk-cards");
-      hole[1].forEach((c) => aiCards.appendChild(cardEl(c, !reveal)));
+      const isNewHand = pkSeenHand !== handNo, flip = reveal && !pkSeenReveal;
+      hole[1].forEach((c, i) => { const el = cardEl(c, !reveal); if (isNewHand) { el.classList.add("deal"); el.style.animationDelay = (i * 2 + 1) * 90 + "ms"; } else if (flip) { el.classList.add("flip"); el.style.animationDelay = i * 90 + "ms"; } aiCards.appendChild(el); });
       const aiBet = row("pk-bet"); aiBet.textContent = bets[1] ? "下注 " + bets[1] : (lastAi && !over ? lastAi : "");
       const board = row("pk-board");
-      for (let i = 0; i < 5; i++) { if (comm[i]) board.appendChild(cardEl(comm[i])); else { const e = document.createElement("span"); e.className = "pk-card slot"; board.appendChild(e); } }
+      for (let i = 0; i < 5; i++) {
+        if (comm[i]) { const el = cardEl(comm[i]); if (i >= pkSeenComm) { el.classList.add("flip"); el.style.animationDelay = (i - pkSeenComm) * 110 + "ms"; } board.appendChild(el); }
+        else { const e = document.createElement("span"); e.className = "pk-card slot"; board.appendChild(e); }
+      }
       const potEl = row("pk-pot"); potEl.textContent = "底池 " + potTotal();
       const meBet = row("pk-bet"); meBet.textContent = bets[0] ? "下注 " + bets[0] : "";
       const myCards = row("pk-cards");
-      hole[0].forEach((c) => myCards.appendChild(cardEl(c)));
+      hole[0].forEach((c, i) => { const el = cardEl(c); if (isNewHand) { el.classList.add("deal"); el.style.animationDelay = i * 2 * 90 + "ms"; } myCards.appendChild(el); });
+      pkSeenHand = handNo; pkSeenComm = comm.length; pkSeenReveal = reveal;
       const meRow = row("pk-seat");
       let hn = "";
       if (hole[0].length && comm.length >= 3) hn = " · " + HNAMES[eval7(hole[0].concat(comm))[0]];

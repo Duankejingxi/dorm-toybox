@@ -19,6 +19,7 @@
     const btn = document.createElement("button");
     btn.className = "tile";
     btn.setAttribute("data-toy", t.id);
+    btn.setAttribute("data-cat", t.cat || "other");
     btn.setAttribute("aria-label", "打开" + parts.name); // v2.0：无障碍
     const em = document.createElement("span");
     em.className = "tile-emoji";

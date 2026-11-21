@@ -2090,3 +2090,43 @@ button:focus:not(:focus-visible), .btn:focus:not(:focus-visible), .tile:focus:no
 .m3-moves small { color: var(--c-text2, #aab); }
 .m3-prog { flex: 1; height: 12px; border-radius: 999px; background: rgba(255, 255, 255, .08); overflow: hidden; }
 .m3-bar { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #ffd43b, #ff8787); transition: width .45s var(--ease-out); }
+
+/* ===================== v4.1 视觉升级 ===================== */
+:root { --c-bg: #0d0f1a; --c-card: #181b2b; --c-card2: #20243a; }
+body {
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(99, 102, 241, .22), transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, rgba(236, 72, 153, .14), transparent 60%),
+    radial-gradient(700px 600px at 50% 120%, rgba(34, 211, 238, .10), transparent 60%),
+    var(--c-bg) !important;
+  background-attachment: fixed !important;
+  font-variant-numeric: tabular-nums;
+}
+.hero h1 { background: linear-gradient(100deg, #fff 0%, #c7d2fe 55%, #f9a8d4 100%); -webkit-background-clip: text; background-clip: text; color: transparent !important; }
+.hero h1 .gold { color: inherit !important; background: none !important; -webkit-text-fill-color: transparent; }
+.panel {
+  background: linear-gradient(180deg, rgba(32, 36, 58, .92), rgba(22, 25, 41, .92)) !important;
+  border: 1px solid rgba(255, 255, 255, .08) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 18px 40px -18px rgba(0, 0, 0, .7) !important;
+  backdrop-filter: blur(6px);
+}
+.result-line { background: rgba(255, 255, 255, .045) !important; border: 1px solid rgba(255, 255, 255, .05); }
+/* 主页方块：图标放在按分类着色的圆角底座上 */
+.home-grid .tile, .drawer-list .tile { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .025)) !important; }
+.home-grid .tile-emoji {
+  display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px;
+  background: var(--cat-bg, rgba(255, 255, 255, .08)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 6px 14px -6px var(--cat-glow, transparent);
+}
+.tile[data-cat="game"] { --cat-bg: linear-gradient(145deg, rgba(99, 102, 241, .55), rgba(79, 70, 229, .25)); --cat-glow: rgba(99, 102, 241, .8); }
+.tile[data-cat="puzzle"] { --cat-bg: linear-gradient(145deg, rgba(16, 185, 129, .5), rgba(5, 150, 105, .22)); --cat-glow: rgba(16, 185, 129, .8); }
+.tile[data-cat="tool"] { --cat-bg: linear-gradient(145deg, rgba(245, 158, 11, .5), rgba(217, 119, 6, .22)); --cat-glow: rgba(245, 158, 11, .8); }
+.tile[data-cat="party"] { --cat-bg: linear-gradient(145deg, rgba(236, 72, 153, .5), rgba(219, 39, 119, .22)); --cat-glow: rgba(236, 72, 153, .8); }
+.home-grid .tile .tile-emoji { font-size: 28px !important; transition: transform .25s var(--ease-spring); }
+.home-grid .tile:active .tile-emoji { transform: scale(.88) rotate(-6deg); }
+@media (hover: hover) { .home-grid .tile:hover .tile-emoji { transform: scale(1.08) rotate(-4deg); } }
+#homePinnedGrid .tile { background: linear-gradient(160deg, rgba(99, 102, 241, .2), rgba(255, 255, 255, .03)) !important; border-color: rgba(129, 140, 248, .3) !important; }
+.cat-tab.active { background: linear-gradient(135deg, #6366f1, #4f7cff) !important; box-shadow: 0 6px 14px -6px rgba(99, 102, 241, .9); }
+.gold-btn, .big-btn { background: linear-gradient(135deg, #6366f1, #4f7cff) !important; }
+.seg-btn.active { background: linear-gradient(135deg, #6366f1, #4f7cff); }
+body.in-toy .hero { background: rgba(13, 15, 26, .78); }
+@media (min-width: 720px) { .home-grid .tile-emoji { width: 60px; height: 60px; } }

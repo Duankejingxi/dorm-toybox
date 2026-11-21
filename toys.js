@@ -13148,7 +13148,11 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       let moved = false; // r18：撞墙不移动时不响脚步声
       const nx = px + Math.cos(pa) * fwd * sp + Math.cos(pa + Math.PI / 2) * strafe * sp;
       const ny = py + Math.sin(pa) * fwd * sp + Math.sin(pa + Math.PI / 2) * strafe * sp;
-      if (maze[Math.floor(ny)] && maze[Math.floor(ny)][Math.floor(nx)] !== 1) { px = nx; py = ny; steps++; moved = true; } // r18：撞墙不算走，moved 供脚步声判断
+      // v4.2：贴墙滑行——斜着撞墙时沿墙走，不会整个卡住；离墙留 0.18 的余量，镜头不会贴进墙里
+      const R = 0.18, free = (x, y) => [[-R, -R], [R, -R], [-R, R], [R, R]].every(([ox, oy]) => maze[Math.floor(y + oy)] && maze[Math.floor(y + oy)][Math.floor(x + ox)] !== 1);
+      if (free(nx, py)) { if (nx !== px) moved = true; px = nx; }
+      if (free(px, ny)) { if (ny !== py) moved = true; py = ny; }
+      if (moved) steps++;
       // 到出口？
       if (maze[Math.floor(py)][Math.floor(px)] === 2) {
         over = true;
@@ -13207,17 +13211,25 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       else if (k === "a" || e.key === "ArrowLeft") { turn(-0.12); e.preventDefault(); }
       else if (k === "d" || e.key === "ArrowRight") { turn(0.12); e.preventDefault(); }
     });
+    // v4.2：手机操作——画面上左右拖动转视角，按住往上推前进、往下拉后退；下面的方向键按住持续走/转
     const cv = $("maze3dCanvas");
-    if (cv) cv.addEventListener("pointerdown", (e) => {
-      SFX.unlock();
-      const rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 320, height: 240 };
-      const x = (e.clientX - rect.left) / (rect.width || 320);
-      const y = (e.clientY - rect.top) / (rect.height || 240);
-      if (y < 0.4) move(1, 0);
-      else if (y > 0.6) move(-1, 0);
-      else if (x < 0.5) turn(-0.15);
-      else turn(0.15);
-    });
+    if (cv) {
+      let drag = null, loop = null;
+      const tick = () => {
+        loop = null; if (!drag) return;
+        const dy = drag.y - drag.y0;
+        if (Math.abs(dy) > 18) move(Math.max(-1, Math.min(1, -dy / 70)) * 0.5, 0);
+        loop = requestAnimationFrame(tick);
+      };
+      cv.addEventListener("pointerdown", (e) => { SFX.unlock(); e.preventDefault(); drag = { x: e.clientX, y: e.clientY, y0: e.clientY }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} if (!loop) loop = requestAnimationFrame(tick); });
+      cv.addEventListener("pointermove", (e) => { if (!drag) return; turn((e.clientX - drag.x) * 0.012); drag.x = e.clientX; drag.y = e.clientY; });
+      const end = () => { drag = null; if (loop) { cancelAnimationFrame(loop); loop = null; } };
+      cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+    }
+    holdRepeat($("m3dUp"), () => move(0.6, 0), 45);
+    holdRepeat($("m3dDown"), () => move(-0.6, 0), 45);
+    holdRepeat($("m3dLeft"), () => turn(-0.08), 30);
+    holdRepeat($("m3dRight"), () => turn(0.08), 30);
     $("maze3dResetBtn").addEventListener("click", reset);
     reset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({

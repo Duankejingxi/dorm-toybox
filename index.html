@@ -1364,9 +1364,10 @@
   </section>
   <section class="panel toy hidden" id="toy-maze3d">
     <h2>🌀 3D迷宫</h2>
-    <p class="hint">WASD/方向键走（手机点屏幕上下左右区），找到绿色出口。</p>
-    <canvas id="maze3dCanvas" width="320" height="240" style="width:100%;max-width:320px"></canvas>
+    <p class="hint">找到绿色出口。手机：在画面上左右拖动转视角，按住往上推前进、往下拉后退；也可以按住下面的方向键。电脑：WASD 或方向键。</p>
+    <canvas id="maze3dCanvas" width="320" height="240" style="width:100%;max-width:360px;touch-action:none"></canvas>
     <p class="result-line" id="maze3dMsg">找出口！</p>
+    <div class="pad-row"><button class="btn ghost-btn" id="m3dLeft" aria-label="左转">↺</button><button class="btn ghost-btn" id="m3dUp" aria-label="前进">▲</button><button class="btn ghost-btn" id="m3dDown" aria-label="后退">▼</button><button class="btn ghost-btn" id="m3dRight" aria-label="右转">↻</button></div>
     <div class="btn-row"><button class="btn ghost-btn small" id="maze3dResetBtn">重开 ↺</button></div>
   </section>
 
@@ -1439,7 +1440,7 @@
 
 </main>
 <footer>
-  <p>宿舍玩具盒 v4.1 · 纯前端小工具合集，打开就能玩</p>
+  <p>宿舍玩具盒 v4.2 · 纯前端小工具合集，打开就能玩</p>
   <p>开源在 GitHub，欢迎加新玩具、改文案、提 bug · MIT License</p>
 </footer>
 

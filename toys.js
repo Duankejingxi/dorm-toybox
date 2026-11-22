@@ -546,7 +546,11 @@
     strip.innerHTML = "";
     if (ids.length === 0) { wrap.classList.add("hidden"); return; }
     wrap.classList.remove("hidden");
-    ids.forEach((item) => {
+    // v4.2：最上面一张大卡片“继续玩”，一点直接回到上次那个
+    let cont = $("continueCard");
+    if (!cont) { cont = document.createElement("button"); cont.id = "continueCard"; cont.className = "continue-card"; wrap.insertBefore(cont, wrap.firstChild); cont.addEventListener("click", () => { const id = cont.getAttribute("data-toy"); if (id) showToy(id); }); }
+    { const t0 = TOYS.find((x) => x.id === ids[0].id); if (t0) { const p0 = splitLabel(t0.label); cont.setAttribute("data-toy", t0.id); cont.setAttribute("data-cat", t0.cat || "other"); cont.innerHTML = ""; const e = document.createElement("span"); e.className = "cc-emoji"; e.textContent = p0.emoji; const tx = document.createElement("span"); tx.className = "cc-text"; const a = document.createElement("small"); a.textContent = "继续玩 · " + relTime(ids[0].t || Date.now()); const b = document.createElement("b"); b.textContent = p0.name; tx.appendChild(a); tx.appendChild(b); const g = document.createElement("span"); g.className = "cc-go"; g.textContent = "▶"; cont.appendChild(e); cont.appendChild(tx); cont.appendChild(g); } }
+    ids.slice(1).forEach((item) => {
       const id = item.id;
       const t = TOYS.find((x) => x.id === id);
       if (!t) return;
@@ -13745,6 +13749,8 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
           const had = seen.has(el); seen.set(el, k);
           if (!had) return;
           el.classList.remove("fx-text"); void el.offsetWidth; el.classList.add("fx-text");
+          // v4.2：出现“新纪录”时飘一个奖杯
+          if (/新纪录/.test(el.textContent || "")) setTimeout(() => { FX.floatAt(el, "🏆 新纪录！", "#ffd43b"); const r = el.getBoundingClientRect(); FX.sparkle(r.left + r.width / 2, r.top, ["#ffd43b", "#fff"], 14); }, 250);
         });
       });
       document.querySelectorAll(".toy").forEach((p) => mo.observe(p, { subtree: true, childList: true, characterData: true }));

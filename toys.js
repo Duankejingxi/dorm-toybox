@@ -308,7 +308,7 @@
         g.gain.setValueAtTime(0.0001, t0);
         g.gain.exponentialRampToValueAtTime(vol || 0.15, t0 + 0.01);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        o.connect(g); g.connect(c.destination);
+        o.connect(g); g.connect(this._bus() || c.destination);
         o.start(t0); o.stop(t0 + dur + 0.05);
       } catch (e) { /* 忽略 */ }
     },
@@ -330,22 +330,45 @@
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
         let node = src;
         if (lowpass) { const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lowpass; src.connect(f); node = f; }
-        node.connect(g); g.connect(c.destination);
+        node.connect(g); g.connect(this._bus() || c.destination);
         src.start(t0);
       } catch (e) { /* 忽略 */ }
     },
-    click() { this._tone(600, 0.07, "square", 0.08); },
-    pop(pitch) { // pitch: 0~1，越高音越高（2048/连击用）
-      const f = 400 + (pitch || 0) * 600;
-      this._tone(f, 0.12, "sine", 0.16, 0, f * 1.5);
+    // v4.2：总线——轻压缩防止多个音叠在一起爆音，再加一点短回声让音色不那么“干”
+    _busNode: null,
+    _bus() {
+      if (this._busNode) return this._busNode;
+      const c = this.ctx(); if (!c) return null;
+      try {
+        const inG = c.createGain(); inG.gain.value = 0.9;
+        const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
+        const dl = c.createDelay(0.5); dl.delayTime.value = 0.11;
+        const fb = c.createGain(); fb.gain.value = 0.18;
+        const wet = c.createGain(); wet.gain.value = 0.16;
+        const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3200;
+        inG.connect(comp); inG.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(comp);
+        comp.connect(c.destination);
+        this._busNode = inG;
+        return inG;
+      } catch (e) { return null; }
     },
-    coin() { this._tone(880, 0.08, "square", 0.1); this._tone(1320, 0.18, "square", 0.1, 0.08); },
-    win() { [523, 659, 784].forEach((f, i) => this._tone(f, 0.16, "triangle", 0.16, i * 0.1)); },
-    lose() { [400, 300, 200].forEach((f, i) => this._tone(f, 0.2, "sawtooth", 0.1, i * 0.12)); },
-    hit() { this._noise(0.15, 0.25, 0, 1200); },
-    jump() { this._tone(300, 0.18, "sine", 0.14, 0, 700); },
-    shoot() { this._tone(1200, 0.12, "sawtooth", 0.08, 0, 300); },
-    chime() { [784, 1047].forEach((f, i) => this._tone(f, 0.14, "triangle", 0.12, i * 0.07)); },
+    // 柔和的“拨弦”：正弦 + 低音量三角泛音，快起音、指数衰减
+    _pluck(freq, dur, vol, when, slideTo) {
+      this._tone(freq, dur, "sine", vol, when, slideTo);
+      this._tone(freq * 2, dur * 0.6, "triangle", vol * 0.18, when, slideTo ? slideTo * 2 : 0);
+    },
+    click() { this._tone(1250, 0.035, "sine", 0.06, 0, 720); this._noise(0.012, 0.03, 0, 2600); },
+    pop(pitch) { // pitch: 0~1，越高音越高（2048/连击用）
+      const f = 380 + (pitch || 0) * 560;
+      this._pluck(f, 0.13, 0.15, 0, f * 1.6);
+    },
+    coin() { this._pluck(988, 0.09, 0.11); this._pluck(1319, 0.28, 0.12, 0.07); },
+    win() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this._pluck(f, 0.32 + i * 0.06, 0.14, i * 0.085)); this._tone(261.63, 0.6, "sine", 0.07, 0.02); },
+    lose() { this._tone(392, 0.22, "triangle", 0.11, 0, 330); this._tone(311, 0.38, "triangle", 0.11, 0.17, 233); },
+    hit() { this._tone(160, 0.16, "sine", 0.22, 0, 60); this._noise(0.1, 0.16, 0, 900); },
+    jump() { this._tone(300, 0.16, "sine", 0.12, 0, 640); },
+    shoot() { this._tone(980, 0.08, "triangle", 0.06, 0, 420); },
+    chime() { this._pluck(880, 0.18, 0.11); this._pluck(1318.5, 0.3, 0.1, 0.075); },
   };
   /* ========== v4.1：全局手感层 FX ==========
      胜负/得分的视觉+震动反馈统一放这里，SFX.win()/lose() 会自动带上，所以关了声音也有反馈。 */

@@ -595,7 +595,13 @@
     "fx": "fx",
     "bmi": "bmi",
   };
+  // v4.2：合并掉的重复玩具，旧链接/旧书签自动跳到新位置
+  const TOY_ALIAS = { puzzle: "slide15", breakout: "arkanoid" };
   function showToy(id) {
+    if (TOY_ALIAS[id]) {
+      const from = id; id = TOY_ALIAS[id];
+      if (from === "puzzle") setTimeout(() => { const b = $("slide15_3Btn"); if (b) b.click(); }, 0);
+    }
     const clickedId = id; // 用户实际点的入口（用于最近玩过和高亮）
     if (!TOYS.some((t) => t.id === id)) id = "wheel";
     // v3.0 第7轮：从主页进入时记住滚动位置（玩具间跳转不覆盖）
@@ -855,6 +861,7 @@
   window.addEventListener("hashchange", () => {
     const id = window.location.hash.slice(1);
     if (id === "" || id === "home") { if (currentToy) showHome(); return; }
+    if (TOY_ALIAS[id]) { showToy(id); return; }
     if (TOYS.some((t) => t.id === id) && id !== currentToy) showToy(id);
   });
 
@@ -13747,6 +13754,6 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
   // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。
   // v1.30 要求不变：必须在所有 toyInitFns 注册之后。
-  if (TOYS.some((t) => t.id === window.location.hash.slice(1))) showToy(window.location.hash.slice(1));
+  if (TOYS.some((t) => t.id === window.location.hash.slice(1)) || TOY_ALIAS[window.location.hash.slice(1)]) showToy(window.location.hash.slice(1));
   else showHome();
 })(); // IIFE 收尾（原 renderTimer() 调用已搬进 timer 段的初始化）

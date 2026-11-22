@@ -9794,23 +9794,45 @@
     let fruitBest = loadBest(FRUIT_KEY);
     let fruitScore = 0, fruitLives = 3, fruitItems = [];
     let fruitRunning = false, fruitOver = false, fruitStepId = null, fruitSpawnId = null;
+    // v4.2：刀光拖尾 + 切成两半飞开
+    let fruitTrail = [];
     function fruitDraw() {
       const cv = $("fruitsliceCanvas");
       if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, FRUIT_W, FRUIT_H);
-      ctx.font = "28px sans-serif";
-      ctx.textAlign = "center";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const now = performance.now();
       fruitItems.forEach((f) => {
         if (f.sliced) {
-          ctx.font = "20px sans-serif";
-          ctx.fillText("💥", f.x, f.y);
-          ctx.font = "28px sans-serif";
+          if (f.bomb) { ctx.font = "30px sans-serif"; ctx.fillText("💥", f.x, f.y); return; }
+          const k = (now - f.cutAt) / 1000, spread = 6 + k * 70, rot = k * 4;
+          for (const side of [-1, 1]) {
+            ctx.save();
+            ctx.translate(f.x + side * spread, f.y + k * k * 120); ctx.rotate(side * rot);
+            ctx.beginPath(); ctx.rect(side < 0 ? -30 : 0, -30, 30, 60); ctx.clip();
+            ctx.globalAlpha = Math.max(0, 1 - k * 1.2);
+            ctx.font = "36px sans-serif"; ctx.fillText(f.emoji, 0, 0);
+            ctx.restore();
+          }
         } else {
+          ctx.font = (f.bomb ? "32px" : "36px") + " sans-serif";
           ctx.fillText(f.emoji, f.x, f.y);
         }
       });
+      fruitTrail = fruitTrail.filter((p) => now - p.t < 160);
+      if (fruitTrail.length > 1) {
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        for (let i = 1; i < fruitTrail.length; i++) {
+          const a = fruitTrail[i - 1], b = fruitTrail[i], w = 1 + (i / fruitTrail.length) * 7;
+          ctx.strokeStyle = "rgba(180,230,255," + (0.35 + 0.65 * i / fruitTrail.length) + ")"; ctx.lineWidth = w;
+          ctx.shadowColor = "#7fd4ff"; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      }
+      ctx.textBaseline = "alphabetic";
     }
     function fruitSpawn() {
       if (!fruitRunning || fruitOver) return;
@@ -9830,7 +9852,7 @@
       fruitItems.forEach((f) => {
         f.x += f.vx; f.y += f.vy; f.vy += 0.25; // 重力
       });
-      fruitItems = fruitItems.filter((f) => f.y < FRUIT_H + 40 && !(f.sliced && f.y > FRUIT_H));
+      fruitItems = fruitItems.filter((f) => f.y < FRUIT_H + 40 && !(f.sliced && performance.now() - f.cutAt > 900));
       fruitRender();
     }
     function fruitSliceAt(x, y) {
@@ -9838,8 +9860,8 @@
       fruitItems.forEach((f) => {
         if (fruitOver) return; // R24：终局那一刀里，炸弹已引爆就别再切后面的——原来同刀的水果还加分、同刀的第二颗炸弹还扣命，命能掉到 -1
         if (f.sliced) return;
-        if (Math.hypot(f.x - x, f.y - y) < 26) {
-          f.sliced = true;
+        if (Math.hypot(f.x - x, f.y - y) < 28) {
+          f.sliced = true; f.cutAt = performance.now();
           if (f.bomb) {
             fruitLives--;
             SFX.lose();
@@ -9898,18 +9920,24 @@
         y: (e.clientY - rect.top) * FRUIT_H / (rect.height || FRUIT_H),
       };
     }
-    $("fruitsliceCanvas").addEventListener("pointermove", (e) => {
-      if (!e.buttons) return;
-      const p = fruitCanvasPos(e);
-      fruitSliceAt(p.x, p.y);
-    });
-    $("fruitsliceCanvas").addEventListener("pointerdown", (e) => {
-      const p = fruitCanvasPos(e);
-      fruitSliceAt(p.x, p.y);
-    });
-    $("fruitsliceCanvas").addEventListener("touchstart", (e) => { e.preventDefault(); const t = e.touches[0]; const p = fruitCanvasPos(t); fruitSliceAt(p.x, p.y); }, { passive: false });
-    $("fruitsliceCanvas").addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.touches[0]; const p = fruitCanvasPos(t); fruitSliceAt(p.x, p.y); }, { passive: false });
-    $("fruitsliceStartBtn").addEventListener("click", fruitStart);
+    // v4.2：按整段滑动轨迹判定（每 8 像素采样一次），快速划过也能切中；同时记录刀光
+    let fruitLast = null;
+    const fruitCut = (p) => {
+      fruitTrail.push({ x: p.x, y: p.y, t: performance.now() });
+      if (fruitLast) {
+        const d = Math.hypot(p.x - fruitLast.x, p.y - fruitLast.y), n = Math.max(1, Math.ceil(d / 8));
+        for (let i = 1; i <= n; i++) fruitSliceAt(fruitLast.x + (p.x - fruitLast.x) * i / n, fruitLast.y + (p.y - fruitLast.y) * i / n);
+      } else fruitSliceAt(p.x, p.y);
+      fruitLast = p;
+      if (!fruitRunning) fruitDraw();
+    };
+    const fcv = $("fruitsliceCanvas");
+    fcv.addEventListener("pointerdown", (e) => { fruitLast = null; try { fcv.setPointerCapture(e.pointerId); } catch (er) {} fruitCut(fruitCanvasPos(e)); });
+    fcv.addEventListener("pointermove", (e) => { if (!e.buttons) return; fruitCut(fruitCanvasPos(e)); });
+    fcv.addEventListener("pointerup", () => { fruitLast = null; });
+    fcv.addEventListener("pointercancel", () => { fruitLast = null; });
+    fcv.addEventListener("touchmove", (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+$("fruitsliceStartBtn").addEventListener("click", fruitStart);
     $("fruitsliceResetBtn").addEventListener("click", fruitReset);
     fruitReset();
     Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({

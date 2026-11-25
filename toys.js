@@ -9228,58 +9228,109 @@
     let shooterScore = 0, shooterLives = 3, shooterShipX = 170;
     let shooterBullets = [], shooterEnemies = [];
     let shooterRunning = false, shooterOver = false, shooterStepId = null, shooterFireId = null, shooterSpawnId = null;
+    // v4.3：星空背景、尾焰、激光子弹、三种敌人（不同血量）、越打越难、⭐ 双发道具、受伤无敌闪烁
+    const ENEMY = [
+      { emo: "👾", hp: 1, pts: 10, sp: [1, 2.2] },
+      { emo: "👽", hp: 2, pts: 20, sp: [2, 3] },
+      { emo: "🛸", hp: 3, pts: 40, sp: [0.8, 1.3] },
+    ];
+    let stars = [], items = [], dblUntil = 0, invulnUntil = 0, spawnAcc = 0, tickN = 0;
+    for (let i = 0; i < 46; i++) stars.push({ x: Math.random() * SHOOT_W, y: Math.random() * SHOOT_H, z: 0.3 + Math.random() * 1.2 });
     function shooterDraw() {
       const cv = $("shooterCanvas");
       if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d");
       if (!ctx) return;
+      const now = performance.now();
       ctx.clearRect(0, 0, SHOOT_W, SHOOT_H);
-      ctx.font = "28px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("🚀", shooterShipX, 285);
-      ctx.font = "22px sans-serif";
-      shooterBullets.forEach((b) => ctx.fillText("•", b.x, b.y));
-      shooterEnemies.forEach((e) => ctx.fillText("👾", e.x, e.y));
+      for (const st of stars) { ctx.globalAlpha = 0.35 + st.z * 0.4; ctx.fillStyle = "#cfd8ff"; ctx.fillRect(st.x, st.y, st.z * 1.6, st.z * 1.6 + (shooterRunning ? st.z * 3 : 0)); }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      // 子弹：发光激光
+      ctx.shadowColor = "#7fd4ff"; ctx.shadowBlur = 8; ctx.strokeStyle = "#b9ecff"; ctx.lineWidth = 3; ctx.lineCap = "round";
+      ctx.beginPath(); shooterBullets.forEach((b) => { ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, b.y + 12); }); ctx.stroke();
+      ctx.shadowBlur = 0;
+      // 敌人
+      shooterEnemies.forEach((e) => {
+        const def = ENEMY[e.t || 0];
+        ctx.font = (e.t === 2 ? 30 : 26) + "px sans-serif";
+        if (e.flash && now - e.flash < 90) { ctx.globalAlpha = 0.45; }
+        ctx.fillText(def.emo, e.x, e.y);
+        ctx.globalAlpha = 1;
+        if (def.hp > 1) { const w = 22; ctx.fillStyle = "rgba(255,255,255,.2)"; ctx.fillRect(e.x - w / 2, e.y - 20, w, 3); ctx.fillStyle = "#ff6b6b"; ctx.fillRect(e.x - w / 2, e.y - 20, w * e.hp / def.hp, 3); }
+      });
+      items.forEach((it) => { ctx.font = "22px sans-serif"; ctx.fillText("⭐", it.x, it.y + Math.sin(now / 150) * 2); });
+      // 飞船 + 尾焰；受伤后无敌时闪烁
+      const blink = now < invulnUntil && Math.floor(now / 90) % 2 === 0;
+      if (!blink) {
+        if (shooterRunning) { const fl = 6 + Math.random() * 6; const g = ctx.createLinearGradient(0, 292, 0, 292 + fl); g.addColorStop(0, "#ffd43b"); g.addColorStop(1, "rgba(255,107,107,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(shooterShipX - 5, 290); ctx.lineTo(shooterShipX + 5, 290); ctx.lineTo(shooterShipX, 292 + fl); ctx.fill(); }
+        ctx.font = "30px sans-serif"; ctx.fillText("🚀", shooterShipX, 274);
+        if (now < dblUntil) { ctx.strokeStyle = "rgba(255,212,59,.6)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(shooterShipX, 274, 20, 0, 7); ctx.stroke(); }
+      }
+      ctx.textBaseline = "alphabetic";
     }
     function shooterStep() {
       if (!shooterRunning || shooterOver) return;
-      shooterBullets.forEach((b) => { b.y -= 6; });
-      shooterBullets = shooterBullets.filter((b) => b.y > 0);
-      shooterEnemies.forEach((e) => { e.y += e.speed; });
+      tickN++;
+      const now = performance.now();
+      stars.forEach((st) => { st.y += st.z * 1.6; if (st.y > SHOOT_H) { st.y = -2; st.x = Math.random() * SHOOT_W; } });
+      shooterBullets.forEach((b) => { b.y -= 7; });
+      shooterBullets = shooterBullets.filter((b) => b.y > -12);
+      shooterEnemies.forEach((e) => { e.y += e.speed; if (e.t === 1) e.x += Math.sin((e.y + e.seed) / 22) * 1.4; });
+      // 越打越难：刷怪间隔从 900ms 逐步缩到 320ms
+      spawnAcc += 16;
+      if (spawnAcc >= Math.max(320, 900 - shooterScore * 1.6)) { spawnAcc = 0; shooterSpawn(); }
       // 子弹打怪兽
       shooterBullets = shooterBullets.filter((b) => {
         const hit = shooterEnemies.findIndex((e) => Math.abs(e.x - b.x) < 20 && Math.abs(e.y - b.y) < 20);
-        if (hit !== -1) {
-          cvFX("shooterCanvas", shooterEnemies[hit].x, shooterEnemies[hit].y, ["#ff6b6b", "#ffd43b", "#fff"], 14);
+        if (hit === -1) return true;
+        const e = shooterEnemies[hit];
+        e.hp = (e.hp || 1) - 1; e.flash = now;
+        if (e.hp <= 0) {
+          const def = ENEMY[e.t || 0];
+          cvFX("shooterCanvas", e.x, e.y, ["#ff6b6b", "#ffd43b", "#fff"], e.t === 2 ? 22 : 14);
+          { const cv = $("shooterCanvas"), r = cv.getBoundingClientRect(); FX.float("+" + def.pts, r.left + e.x * r.width / SHOOT_W, r.top + e.y * r.height / SHOOT_H, e.t === 2 ? "#ffd43b" : "#fff"); }
+          if (Math.random() < (e.t === 2 ? 0.5 : 0.06)) items.push({ x: e.x, y: e.y });
           shooterEnemies.splice(hit, 1);
-          shooterScore += 10;
+          shooterScore += def.pts;
           SFX.hit();
-          return false;
-        }
-        return true;
+        } else SFX._tone(700, 0.04, "sine", 0.05);
+        return false;
+      });
+      // 道具
+      items.forEach((it) => { it.y += 1.6; });
+      items = items.filter((it) => {
+        if (Math.abs(it.x - shooterShipX) < 22 && Math.abs(it.y - 270) < 22) { dblUntil = now + 6000; SFX.chime(); FX.floatAt($("shooterCanvas"), "⭐ 双发 6 秒", "#ffd43b"); return false; }
+        return it.y < SHOOT_H + 20;
       });
       // 怪兽撞飞船 / 掉出底边
       shooterEnemies = shooterEnemies.filter((e) => {
         if (shooterOver) return false; // R24：同一帧两怪同撞，第一只已撞毁终局，第二只别再扣命——原来命掉到 -1
-        if (Math.abs(e.x - shooterShipX) < 24 && Math.abs(e.y - 270) < 24) {
+        if (now >= invulnUntil && Math.abs(e.x - shooterShipX) < 24 && Math.abs(e.y - 270) < 24) {
           shooterLives--;
+          invulnUntil = now + 1500;
           SFX.lose();
           $("shooterStatus").textContent = "💥 被撞了！还剩 " + shooterLives + " 条命。";
           if (shooterLives <= 0) shooterEnd("💔 飞船被撞毁了。");
           return false;
         }
-        return e.y <= SHOOT_H;
+        return e.y <= SHOOT_H + 20;
       });
       shooterRender();
     }
     function shooterFire() {
       if (!shooterRunning || shooterOver) return;
-      shooterBullets.push({ x: shooterShipX, y: 260 });
+      if (performance.now() < dblUntil) { shooterBullets.push({ x: shooterShipX - 9, y: 256 }, { x: shooterShipX + 9, y: 256 }); }
+      else shooterBullets.push({ x: shooterShipX, y: 256 });
       SFX.shoot();
     }
     function shooterSpawn() {
       if (!shooterRunning || shooterOver) return;
-      shooterEnemies.push({ x: 20 + Math.floor(Math.random() * (SHOOT_W - 40)), y: -20, speed: 1 + Math.random() * 1.5 });
+      const r = Math.random(), lvl = shooterScore;
+      const t = lvl > 300 && r < 0.18 ? 2 : lvl > 120 && r < 0.45 ? 1 : 0;
+      const def = ENEMY[t];
+      const boost = Math.min(1.2, lvl / 600);
+      shooterEnemies.push({ x: 20 + Math.floor(Math.random() * (SHOOT_W - 40)), y: -20, speed: def.sp[0] + Math.random() * (def.sp[1] - def.sp[0]) + boost, t, hp: def.hp, seed: Math.random() * 100 });
     }
     function shooterRender() {
       $("shooterScore").textContent = "得分 " + shooterScore + " · 命 " + shooterLives + " · 最好 " + shooterBest;
@@ -9305,14 +9356,14 @@
       if (shooterFireId) clearInterval(shooterFireId);
       if (shooterSpawnId) clearInterval(shooterSpawnId);
       shooterStepId = setInterval(shooterStep, 16);
-      shooterFireId = setInterval(shooterFire, 300);
-      shooterSpawnId = setInterval(shooterSpawn, 900);
+      shooterFireId = setInterval(shooterFire, 260);
     }
     function shooterReset() {
       [shooterStepId, shooterFireId, shooterSpawnId].forEach((id) => { if (id) clearInterval(id); });
       shooterStepId = shooterFireId = shooterSpawnId = null;
       shooterScore = 0; shooterLives = 3; shooterShipX = 170;
       shooterBullets = []; shooterEnemies = []; shooterRunning = false; shooterOver = false;
+      items = []; dblUntil = 0; invulnUntil = 0; spawnAcc = 0;
       $("shooterStatus").textContent = "点开始，怪兽就下来了。";
       shooterRender();
     }

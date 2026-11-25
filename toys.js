@@ -32,7 +32,24 @@
     btn._q = (parts.emoji + parts.name + (t.py || "") + (t.label || "")).toLowerCase(); // v1.30 搜索缓存；v2.0 加拼音首字母
     btn._name = parts.name.toLowerCase(); // v3.0 第5轮：搜索相关性排序用
     btn._cat = t.cat || ""; // v2.0：分类筛选
-    btn.addEventListener("click", () => { showToy(t.id); closeDrawer(); });
+    // v4.3：长按收藏/取消收藏（鼠标按住也行）
+    let lpTimer = null, lpStart = null;
+    const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button > 0) return;
+      lpStart = { x: e.clientX, y: e.clientY }; btn._lp = false; lpCancel();
+      lpTimer = setTimeout(() => {
+        lpTimer = null; btn._lp = true;
+        const added = toggleFav(t.id);
+        FX.buzz(added ? [20, 40, 20] : 15);
+        FX.floatAt(btn, added ? "⭐ 已收藏" : "已取消收藏", added ? "#ffd43b" : "#fff");
+        btn.classList.add("lp-done"); setTimeout(() => btn.classList.remove("lp-done"), 300);
+      }, 480);
+    });
+    btn.addEventListener("pointermove", (e) => { if (lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) lpCancel(); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, lpCancel));
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    btn.addEventListener("click", () => { if (btn._lp) { btn._lp = false; return; } showToy(t.id); closeDrawer(); });
     return btn;
   }
   function drawerLabel(text) {
@@ -89,8 +106,32 @@
   /* v1.27：主页——置顶 8 个 + 全部游戏，点一下就玩（复用抽屉的方块样式） */
   const homePinnedGrid = $("homePinnedGrid");
   const homeAllGrid = $("homeAllGrid");
-  PINNED_IDS.map((id) => TOYS.find((t) => t.id === id)).filter(Boolean).forEach((t) => homePinnedGrid.appendChild(makeTile(t)));
+  // v4.3：收藏夹——有收藏时最上面显示“我的收藏”，没有时显示默认推荐
+  const FAV_KEY = "dorm-toybox-fav-v1";
+  function getFavs() { try { const v = JSON.parse(lsGet(FAV_KEY, "[]")); return Array.isArray(v) ? v.filter((id) => TOYS.some((t) => t.id === id)) : []; } catch (e) { return []; } }
+  function renderPinned() {
+    const favs = getFavs();
+    homePinnedGrid.innerHTML = "";
+    (favs.length ? favs : PINNED_IDS).map((id) => TOYS.find((t) => t.id === id)).filter(Boolean).forEach((t) => homePinnedGrid.appendChild(makeTile(t)));
+    const ti = $("pinnedTitle"), tip = $("pinnedTip");
+    if (ti) ti.textContent = favs.length ? "⭐ 我的收藏" : "📌 置顶推荐";
+    if (tip) tip.textContent = favs.length ? "长按可以取消收藏" : "长按任意玩具可以收藏，收藏的会排在这里";
+    markFavTiles();
+  }
+  function markFavTiles() {
+    const favs = getFavs();
+    document.querySelectorAll(".tile[data-toy]").forEach((b) => b.classList.toggle("fav", favs.includes(b.getAttribute("data-toy"))));
+  }
+  function toggleFav(id) {
+    const f = getFavs(), i = f.indexOf(id);
+    if (i >= 0) f.splice(i, 1); else f.push(id);
+    lsSet(FAV_KEY, JSON.stringify(f.slice(0, 30)));
+    renderPinned();
+    return i < 0;
+  }
+  renderPinned();
   TOYS.forEach((t) => homeAllGrid.appendChild(makeTile(t)));
+  markFavTiles();
   function allHomeTiles() {
     return [...homePinnedGrid.querySelectorAll(".tile"), ...homeAllGrid.querySelectorAll(".tile")];
   }

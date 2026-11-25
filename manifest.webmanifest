@@ -1,0 +1,22 @@
+{
+  "name": "宿舍玩具盒",
+  "short_name": "玩具盒",
+  "description": "80 多个小游戏和小工具：宿舍夜话、社团破冰、课间摸鱼都够用。打开就能玩，断网也能玩。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0f1a",
+  "theme_color": "#0d0f1a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "命运大转盘", "url": "./#wheel", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "2048", "url": "./#game2048", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "番茄钟", "url": "./#timer", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

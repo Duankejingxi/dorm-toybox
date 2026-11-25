@@ -13785,6 +13785,13 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
     }
   } catch (e) { /* 忽略 */ }
 
+  // v4.3：离线缓存（可以“添加到主屏幕”当 App 用，断网也能玩）。本地 file:// 打开时不注册
+  try {
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+      window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+    }
+  } catch (e) { /* 忽略 */ }
+
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
   // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。
   // v1.30 要求不变：必须在所有 toyInitFns 注册之后。

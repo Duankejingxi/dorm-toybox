@@ -2233,3 +2233,7 @@ html:has(body.in-toy) { overscroll-behavior-y: none; }
 .cc-text b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cc-go { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #fff; color: #4f46e5; font-size: 14px; flex: none; }
 #recentWrap h2 { font-size: 14px !important; color: var(--c-text2); }
+/* v4.3：从主屏幕全屏打开（App 模式）时避开刘海和底部横条 */
+body:not(.in-toy) .hero { padding-top: calc(28px + env(safe-area-inset-top, 0px)) !important; }
+footer { padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px)); }
+.hero, .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

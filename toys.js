@@ -8236,10 +8236,16 @@
       jumpCharX = newX;
       const ch = $("jumpChar");
       ch.classList.remove("charging"); // v1.32：松手回弹
+      // v4.3：抛物线弧线 + 空中翻一圈；距离越远跳得越高
+      const oldX = parseFloat(ch.style.left) || 0, hgt = 40 + Math.min(70, Math.abs(newX - oldX) * 0.45);
       ch.style.left = newX + "px";
-      ch.style.bottom = "120px";
+      ch.style.bottom = "56px";
+      if (ch.animate && !FX.reduce) {
+        const dx = oldX - newX, kf = [];
+        for (let i = 0; i <= 10; i++) { const t = i / 10; kf.push({ transform: "translate(" + (dx * (1 - t)) + "px," + (-4 * hgt * t * (1 - t)) + "px) rotate(" + (-360 * t) + "deg)", offset: t }); }
+        ch.animate(kf, { duration: 420, easing: "linear" });
+      }
       SFX.jump();
-      setTimeout(() => { ch.style.bottom = "56px"; }, 160);
       jumpPower = 0;
       // v3.1：力气太小、中心还落在脚下这个台子上，就原地蹦一下，不扣分也不死；
       // 以前这里只认下一个台子，轻点一下就直接掉下去摔死，还能在同一个台子上反复轻跳刷分。
@@ -8255,11 +8261,11 @@
           jumpBest = jumpScore;
           saveBest(JUMP_KEY, jumpBest);
         }
-        if (isCenter) {
-          SFX.chime();
-          jumpPerfect(ch); // v1.32：Perfect! 飘字
-        } else { SFX.pop(0.4); }
+        setTimeout(() => { // v4.3：落地那一刻再出提示和音效（原来起跳瞬间就弹，人还在空中）
+          if (isCenter) { SFX.chime(); jumpPerfect(ch); } else SFX.pop(0.4);
+        }, 400);
         $("jumpStatus").textContent = isCenter ? "🎯 正中心！+2 分！" : "稳稳落下，+1 分。";
+        setTimeout(() => { const pb = $("jumpPlatB"); pb.classList.remove("land"); void pb.offsetWidth; pb.classList.add("land"); FX.buzz(isCenter ? 20 : 10); }, 400);
         // 场景左移：落脚的台子变成起点，再生成下一个；左移完成前不接受新的蓄力，
         // 不然能在 350ms 的窗口里对着同一个台子再跳一次刷分
         jumpBusy = true;
@@ -8270,13 +8276,12 @@
           jumpCharX = 20 + Math.floor((jumpPlatA.w - 32) / 2);
           jumpPlatB = jumpNewPlatB();
           jumpRender();
+          { const pb = $("jumpPlatB"); pb.classList.remove("drop"); void pb.offsetWidth; pb.classList.add("drop"); }
           jumpBusy = false;
-        }, 350);
+        }, 520); // v4.3：等弧线落地（0.42 秒）再挪场景
       } else {
         jumpOver = true; jumpOverAt = Date.now();
-        ch.style.bottom = "-40px";
-        SFX.lose();
-        $("jumpStatus").textContent = "💔 掉下去了！得分 " + jumpScore + "，点再来一局。";
+        setTimeout(() => { ch.style.bottom = "-40px"; SFX.lose(); $("jumpStatus").textContent = "💔 掉下去了！得分 " + jumpScore + "，点再来一局。"; }, 400);
       }
       jumpRender();
     }

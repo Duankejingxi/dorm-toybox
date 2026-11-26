@@ -507,7 +507,7 @@
   // 胜负自动带上视觉和震动；声音仍只在开声音时响（_tone 里判断）
   (function () {
     const w = SFX.win.bind(SFX), l = SFX.lose.bind(SFX), h = SFX.hit.bind(SFX);
-    SFX.win = function () { FX.celebrate(); w(); };
+    SFX.win = function () { FX.celebrate(); w(); try { if (typeof Daily !== "undefined" && currentToy) Daily.onWin(currentToy); } catch (e) {} };
     SFX.lose = function () { FX.fail(); l(); };
     SFX.hit = function () { FX.buzz(30); h(); };
     const c = SFX.chime.bind(SFX);
@@ -591,6 +591,7 @@
     let cont = $("continueCard");
     if (!cont) { cont = document.createElement("button"); cont.id = "continueCard"; cont.className = "continue-card"; wrap.insertBefore(cont, wrap.firstChild); cont.addEventListener("click", () => { const id = cont.getAttribute("data-toy"); if (id) showToy(id); }); }
     { const t0 = TOYS.find((x) => x.id === ids[0].id); if (t0) { const p0 = splitLabel(t0.label); cont.setAttribute("data-toy", t0.id); cont.setAttribute("data-cat", t0.cat || "other"); cont.innerHTML = ""; const e = document.createElement("span"); e.className = "cc-emoji"; e.textContent = p0.emoji; const tx = document.createElement("span"); tx.className = "cc-text"; const a = document.createElement("small"); a.textContent = "继续玩 · " + relTime(ids[0].t || Date.now()); const b = document.createElement("b"); b.textContent = p0.name; tx.appendChild(a); tx.appendChild(b); const g = document.createElement("span"); g.className = "cc-go"; g.textContent = "▶"; cont.appendChild(e); cont.appendChild(tx); cont.appendChild(g); } }
+    { const h = wrap.querySelector("h2"); if (h) h.classList.toggle("hidden", ids.length < 2); strip.classList.toggle("hidden", ids.length < 2); }
     ids.slice(1).forEach((item) => {
       const id = item.id;
       const t = TOYS.find((x) => x.id === id);
@@ -692,6 +693,7 @@
     currentToy = id;
     currentClicked = clickedId;
     setToyChrome(clickedId);
+    try { Daily.banner(id); } catch (e) {}
     if (toyEnterResume[id]) toyEnterResume[id]();
     showHowtoBar(clickedId); // v1.33：新手引导（首次打开显示怎么玩）
     if (window.location.hash !== "#" + clickedId) window.location.hash = clickedId;
@@ -839,6 +841,7 @@
     $("toy-home").classList.remove("hidden");
     if (fromToy) { const hp = $("toy-home"); hp.classList.remove("fx-enter-home"); void hp.offsetWidth; hp.classList.add("fx-enter-home"); setTimeout(() => hp.classList.remove("fx-enter-home"), 450); }
     renderRecent();
+    try { Daily.render(); } catch (e) {}
     allTiles().forEach((b) => b.classList.remove("active"));
     allHomeTiles().forEach((b) => b.classList.remove("active"));
     currentToy = null;
@@ -8400,7 +8403,7 @@
       if (i === spotdiffOdd) {
         spotdiffScore += 10;
         spotdiffLevel++;
-        SFX.win();
+        SFX.chime(); // v4.4：每找到一个只是过一小关，不放满屏彩带
         // v1.32：圆圈标记动画，看清后再进下一关
         const cells = $("spotdiffGrid").children;
         if (cells[i] && cells[i].classList) cells[i].classList.add("found");
@@ -10735,7 +10738,7 @@ $("fruitsliceStartBtn").addEventListener("click", fruitStart);
       if (!s1.alive || !s2.alive) {
         running = false;
         winner = !s1.alive && !s2.alive ? "平局！" : !s1.alive ? (aiMode ? "🤖 AI 获胜！" : "P2 🔵 获胜！") : "P1 🟢 获胜！";
-        SFX.win();
+        if (aiMode && !s1.alive) SFX.lose(); else SFX.win(); // v4.4：单人模式 AI 赢了不该放胜利彩带
       }
       draw(); render();
     }
@@ -12819,7 +12822,7 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       if (isNew) save[k] = score;
       lsSet(KEY, JSON.stringify(save));
       judge = { rank, acc, isNew };
-      SFX.win();
+      if (rank === "S" || rank === "A" || rank === "B" || isNew) SFX.win(); else SFX.chime();
       render();
     }
     function hit(lane) {
@@ -13888,6 +13891,96 @@ Object.defineProperties(__toyboxHandle, Object.getOwnPropertyDescriptors({
       window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
     }
   } catch (e) { /* 忽略 */ }
+
+  /* ========== v4.4：轻提示条（底部弹出，自动消失） ========== */
+  function toast(html, ms) {
+    try {
+      let box = $("toastBox");
+      if (!box) { box = document.createElement("div"); box.id = "toastBox"; box.className = "toast-box"; box.setAttribute("role", "status"); document.body.appendChild(box); }
+      const t = document.createElement("div"); t.className = "toast"; t.textContent = html;
+      box.appendChild(t);
+      setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, ms || 2400);
+    } catch (e) {}
+  }
+  /* ========== v4.4：每日挑战 ==========
+     每天按日期固定出 3 题（简单/中等/棋牌各一），在对应游戏里赢一次就算完成；三题全完成累计连续天数。 */
+  const Daily = (function () {
+    const KEY = "dorm-toybox-daily-v1";
+    const POOLS = [
+      [["tictactoe", "井字棋赢电脑一局"], ["memory", "记忆翻牌通关一次"], ["guess", "数字炸弹拆弹成功"], ["schulte", "舒尔特方格完成一局"], ["onestroke", "一笔画过一关"], ["maze", "走迷宫过一关"], ["slide15", "数字华容道拼好一次"], ["linkup", "连连看全部消完"], ["reaction", "反应测试完成 5 轮挑战"]],
+      [["sokoban", "推箱子过一关"], ["match3", "消消乐过一关"], ["mines", "扫雷排完一局"], ["sudoku", "数独解开一盘"], ["arkanoid", "打砖块过一关"], ["pong", "乒乓赢电脑一局"], ["rhythm", "音游拿到 B 以上"], ["flappy", "像素鸟刷新自己的纪录"], ["maze3d", "3D 迷宫走出来"], ["snake2", "双人贪吃蛇赢过 AI"]],
+      [["chess", "象棋赢 AI 一局（简单也算）"], ["gomoku", "五子棋赢电脑一局"], ["uno", "UNO 赢电脑一局"], ["mahjong", "麻将胡一次"], ["poker", "德州扑克赢下一手"], ["go", "围棋 9 路赢电脑"]],
+    ];
+    const dayStr = (d) => { d = d || new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
+    const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    function tasks(day) {
+      const h = hash("toybox" + day);
+      return POOLS.map((pool, i) => { const [toy, text] = pool[(h >>> (i * 7)) % pool.length]; return { toy, text }; });
+    }
+    function load() {
+      let d; try { d = JSON.parse(lsGet(KEY, "{}")) || {}; } catch (e) { d = {}; }
+      const today = dayStr();
+      if (d.date !== today) { d.date = today; d.done = []; }
+      d.done = Array.isArray(d.done) ? d.done : [];
+      d.streak = d.streak | 0; d.total = d.total | 0;
+      // 断了一天以上，连续天数清零（显示用）
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      if (d.lastFull && d.lastFull !== today && d.lastFull !== dayStr(y)) d.streak = 0;
+      return d;
+    }
+    function save(d) { lsSet(KEY, JSON.stringify(d)); }
+    function onWin(toy) {
+      const d = load(), list = tasks(d.date);
+      const t = list.find((x) => x.toy === toy);
+      if (!t || d.done.includes(toy)) return;
+      d.done.push(toy); d.total++;
+      const all = list.every((x) => d.done.includes(x.toy));
+      if (all) { d.streak = (d.streak | 0) + 1; d.lastFull = d.date; }
+      save(d);
+      setTimeout(() => {
+        if (all) { toast("🔥 今日挑战全部完成！连续 " + d.streak + " 天"); FX.celebrate(document.body); }
+        else toast("🎯 今日挑战完成：" + t.text + "（" + d.done.length + "/3）");
+        render(); banner(currentToy);
+      }, 900);
+    }
+    function render() {
+      const box = $("dailyCard"); if (!box) return;
+      const d = load(), list = tasks(d.date);
+      box.innerHTML = "";
+      const head = document.createElement("div"); head.className = "daily-head";
+      const n = list.filter((x) => d.done.includes(x.toy)).length;
+      head.innerHTML = "";
+      const h1 = document.createElement("b"); h1.textContent = "🎯 今日挑战 " + n + "/3";
+      const h2 = document.createElement("span"); h2.className = "daily-streak"; h2.textContent = d.streak ? "🔥 连续 " + d.streak + " 天" : "全做完开始连续打卡";
+      head.appendChild(h1); head.appendChild(h2); box.appendChild(head);
+      const bar = document.createElement("div"); bar.className = "daily-bar"; const fill = document.createElement("i"); fill.style.width = (n / 3 * 100) + "%"; bar.appendChild(fill); box.appendChild(bar);
+      list.forEach((x) => {
+        const toyDef = TOYS.find((t) => t.id === x.toy); if (!toyDef) return;
+        const row = document.createElement("button"); row.className = "daily-row" + (d.done.includes(x.toy) ? " done" : "");
+        const em = document.createElement("span"); em.className = "daily-emo"; em.textContent = splitLabel(toyDef.label).emoji;
+        const tx = document.createElement("span"); tx.className = "daily-text"; tx.textContent = x.text;
+        const ck = document.createElement("span"); ck.className = "daily-check"; ck.textContent = d.done.includes(x.toy) ? "✓" : "›";
+        row.appendChild(em); row.appendChild(tx); row.appendChild(ck);
+        row.addEventListener("click", () => showToy(x.toy));
+        box.appendChild(row);
+      });
+    }
+    // 进入某个今日挑战的游戏时，顶部提示一条
+    function banner(toy) {
+      document.querySelectorAll(".daily-banner").forEach((b) => b.remove());
+      if (!toy) return;
+      const d = load(), t = tasks(d.date).find((x) => x.toy === toy);
+      if (!t) return;
+      const panel = $("toy-" + toy); if (!panel) return;
+      const b = document.createElement("div"); b.className = "daily-banner" + (d.done.includes(toy) ? " done" : "");
+      b.textContent = d.done.includes(toy) ? "✅ 今日挑战已完成：" + t.text : "🎯 今日挑战：" + t.text;
+      panel.insertBefore(b, panel.firstChild);
+    }
+    return { onWin, render, banner, tasks, load };
+  })();
+  Daily.render();
+  __toyboxHandle.dailyWin = (toy) => Daily.onWin(toy); // 测试用
+  __toyboxHandle.dailyTasks = () => Daily.tasks(Daily.load().date).map((x) => x.toy);
 
   // R14：深链移到最后执行。原来在 const __toyboxHandle 声明之前，46 个玩具的初始化会碰 TDZ
   // （Cannot access '__toyboxHandle' before initialization），整个脚本中断、深链失效、游戏点开是死的。

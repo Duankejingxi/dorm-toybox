@@ -1,7 +1,7 @@
 /* 宿舍玩具盒 · 离线缓存
    核心文件：先用缓存秒开，同时后台去网络拉新版（下次打开就是新的）。
    奶蛙图片包等大文件：第一次用到时再缓存。跨域请求（汇率、翻译接口）不经过缓存。 */
-const VERSION = "toybox-v4.3-1";
+const VERSION = "toybox-v4.4-1";
 const CORE = ["./", "./index.html", "./styles.css", "./data.js", "./toys.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png", "./icons/favicon-64.png"];
 

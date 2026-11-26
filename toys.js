@@ -10647,23 +10647,41 @@ $("fruitsliceStartBtn").addEventListener("click", fruitStart);
       const cv = $("flappyCanvas"); if (!cv || !cv.getContext) return;
       const ctx = cv.getContext("2d"); if (!ctx || !ctx.fillRect) return;
       try {
-        // 天空
-        ctx.fillStyle = "#70c5ce"; ctx.fillRect(0, 0, W, H);
-        // 云
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        const cx = (frame * 0.5) % (W + 100) - 50;
-        ctx.beginPath(); ctx.arc(cx, 60, 22, 0, 7); ctx.arc(cx + 22, 55, 18, 0, 7); ctx.fill();
-        // 水管
+        // v4.4：渐变天空 + 远山/城市剪影/云三层视差 + 立体水管 + 滚动地面
+        const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, "#4fb3d9"); sky.addColorStop(0.7, "#9de0ef"); sky.addColorStop(1, "#c9f0f5");
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+        const par = (speed, period) => -((frame * speed) % period);
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        for (let i = 0; i < 4; i++) { const cx = ((i * 110 + par(0.25, W + 120)) % (W + 120) + W + 120) % (W + 120) - 60, cy = 50 + (i % 2) * 40; ctx.beginPath(); ctx.arc(cx, cy, 16, 0, 7); ctx.arc(cx + 18, cy - 6, 20, 0, 7); ctx.arc(cx + 38, cy, 15, 0, 7); ctx.fill(); }
+        ctx.fillStyle = "#86cfa3";
+        ctx.beginPath(); ctx.moveTo(0, H - 24);
+        for (let x = 0; x <= W + 40; x += 40) { const ox = x + par(0.5, 80); ctx.quadraticCurveTo(ox + 20, H - 70 - (Math.floor((x - ox) / 40) % 2) * 10, ox + 40, H - 24); }
+        ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+        ctx.fillStyle = "rgba(70,130,120,.55)";
+        for (let x = par(0.9, 60) - 60; x < W + 60; x += 30) { const hgt = 26 + ((Math.abs(Math.round(x / 30)) * 37) % 30); ctx.fillRect(x, H - 24 - hgt, 24, hgt); }
         for (const p of pipes) {
-          ctx.fillStyle = "#5cb85c";
+          const g = ctx.createLinearGradient(p.x, 0, p.x + PW, 0); g.addColorStop(0, "#4caf50"); g.addColorStop(0.35, "#8be28f"); g.addColorStop(1, "#2e7d32");
+          ctx.fillStyle = g;
           ctx.fillRect(p.x, 0, PW, p.gapY);
           ctx.fillRect(p.x, p.gapY + GAP, PW, H - p.gapY - GAP);
-          ctx.fillStyle = "#4a9a4a";
-          ctx.fillRect(p.x - 3, p.gapY - 18, PW + 6, 18);
-          ctx.fillRect(p.x - 3, p.gapY + GAP, PW + 6, 18);
+          const g2 = ctx.createLinearGradient(p.x - 4, 0, p.x + PW + 4, 0); g2.addColorStop(0, "#43a047"); g2.addColorStop(0.35, "#a5eea8"); g2.addColorStop(1, "#1b5e20");
+          ctx.fillStyle = g2;
+          ctx.fillRect(p.x - 4, p.gapY - 20, PW + 8, 20);
+          ctx.fillRect(p.x - 4, p.gapY + GAP, PW + 8, 20);
+          ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 1.5;
+          ctx.strokeRect(p.x - 4, p.gapY - 20, PW + 8, 20); ctx.strokeRect(p.x - 4, p.gapY + GAP, PW + 8, 20);
         }
-        // 地面
         ctx.fillStyle = "#ded895"; ctx.fillRect(0, H - 24, W, 24);
+        ctx.fillStyle = "#c9c27a"; for (let x = par(SPEED, 24) - 24; x < W + 24; x += 24) { ctx.beginPath(); ctx.moveTo(x, H - 24); ctx.lineTo(x + 12, H - 24); ctx.lineTo(x + 4, H - 12); ctx.lineTo(x - 8, H - 12); ctx.fill(); }
+        ctx.fillStyle = "#7cb342"; ctx.fillRect(0, H - 26, W, 4);
+        if (running || score > 0) {
+          ctx.font = "900 40px sans-serif"; ctx.textAlign = "center";
+          ctx.lineWidth = 5; ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.strokeText(String(score), W / 2, 58);
+          ctx.fillStyle = "#fff"; ctx.fillText(String(score), W / 2, 58);
+        } else {
+          ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#fff";
+          ctx.lineWidth = 4; ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.strokeText("👆 点一下起飞", W / 2, H / 2 + 60); ctx.fillText("👆 点一下起飞", W / 2, H / 2 + 60);
+        }
         if (!running && (score > 0 || pipes.length > 0)) {
           ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, 0, W, H);
           ctx.fillStyle = "#fff"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
@@ -10676,16 +10694,19 @@ $("fruitsliceStartBtn").addEventListener("click", fruitStart);
         ctx.save();
         ctx.translate(bird.x + BW / 2, bird.y + BH / 2);
         ctx.rotate(bird.rot);
-        ctx.fillStyle = "#fbd343";
-        ctx.beginPath(); ctx.ellipse(0, 0, BW / 2, BH / 2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#fbd343"; ctx.strokeStyle = "rgba(120,70,0,.55)"; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.ellipse(0, 0, BW / 2, BH / 2, 0, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#fde68a"; ctx.beginPath(); ctx.ellipse(-2, 5, BW / 3.2, BH / 4.5, 0, 0, 7); ctx.fill();
         ctx.fillStyle = "#fff";
         ctx.beginPath(); ctx.arc(8, -5, 6, 0, 7); ctx.fill();
         ctx.fillStyle = "#222";
         ctx.beginPath(); ctx.arc(10, -5, 2.5, 0, 7); ctx.fill();
         ctx.fillStyle = "#fb8c00";
         ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(24, -4); ctx.lineTo(24, 4); ctx.fill();
-        ctx.fillStyle = "#fbd343";
-        ctx.beginPath(); ctx.ellipse(-6, 2, 10, 5, -0.4, 0, 7); ctx.fill();
+        // 翅膀上下扇（往上飞时扇得快）
+        const flapA = Math.sin(frame * (bird.vy < 0 ? 0.9 : 0.35)) * 0.6;
+        ctx.fillStyle = "#f9c22e"; ctx.strokeStyle = "rgba(120,70,0,.5)"; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(-6, 2, 10, 5, -0.4 + flapA, 0, 7); ctx.fill(); ctx.stroke();
         ctx.restore();
       } catch (e) {}
     }

@@ -5716,12 +5716,25 @@
     const SNAKE_KEY = "dorm-toybox-snake-best-v1";
     const SNAKE_GRID = 16, SNAKE_CELL = 20; // 画布 320x320，16x16 格
     let snakeBody = [], snakeDir = { x: 1, y: 0 }, snakeNextDir = null, snakeFood = null, snakeScore = 0, snakeTimer = null, snakeState = "idle", snakeFoodCount = 0;
-    function snakeBest() { try { return parseInt(localStorage.getItem(SNAKE_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
-    function snakeSaveBest() { try { if (snakeScore > snakeBest()) localStorage.setItem(SNAKE_KEY, String(snakeScore)); } catch (e) { /* 忽略 */ } }
+    const snakeKey = () => SNAKE_KEY + (typeof snakeMode !== "undefined" && snakeMode !== "classic" ? "-" + snakeMode : "");
+    function snakeBest() { try { return parseInt(localStorage.getItem(snakeKey()) || "0", 10) || 0; } catch (e) { return 0; } }
+    function snakeSaveBest() { try { if (snakeScore > snakeBest()) localStorage.setItem(snakeKey(), String(snakeScore)); } catch (e) { /* 忽略 */ } }
     const snakeCanvas = $("snakeCanvas");
     const snakeCtx = snakeCanvas.getContext ? snakeCanvas.getContext("2d") : null;
     // v4.1：平滑插值移动 + 圆润蛇身 + 蛇头眼睛 + 呼吸食物
     let snakePrev = [], snakeLastStep = 0, snakeStepMs = 220, snakeRaf = null, snakeTurnQ = [];
+    // v4.4：模式（经典/穿墙/障碍）+ 金苹果
+    const SNAKE_MODE_KEY = "dorm-toybox-snake-mode-v1";
+    let snakeMode = ["classic", "wrap", "walls"].includes(lsGet(SNAKE_MODE_KEY, "classic")) ? lsGet(SNAKE_MODE_KEY, "classic") : "classic";
+    let snakeWalls = new Set(), snakeGold = null, snakeEaten = 0;
+    function snakeBuildWalls() {
+      snakeWalls = new Set();
+      if (snakeMode !== "walls") return;
+      // 几段固定形状的墙，避开出生行（第 8 行）和前两颗固定食物
+      const segs = [[3, 3, 1, 0, 4], [12, 3, 0, 1, 4], [3, 12, 1, 0, 4], [12, 9, 0, 1, 4], [7, 5, 1, 0, 3]];
+      segs.forEach(([x, y, dx, dy, n]) => { for (let i = 0; i < n; i++) snakeWalls.add((x + dx * i) + "," + (y + dy * i)); });
+      ["8,8", "8,11", "5,8", "4,8", "3,8", "6,8", "7,8"].forEach((k) => snakeWalls.delete(k));
+    }
     function snakeLoop() { snakeRaf = null; snakeDraw(); if (snakeState === "running") snakeRaf = requestAnimationFrame(snakeLoop); }
     function snakeKick() { if (!snakeRaf) snakeRaf = requestAnimationFrame(snakeLoop); }
     function snakeDraw() {
@@ -5729,6 +5742,18 @@
       const C = SNAKE_CELL, ctx = snakeCtx, now = performance.now();
       for (let y = 0; y < SNAKE_GRID; y++) for (let x = 0; x < SNAKE_GRID; x++) {
         ctx.fillStyle = (x + y) % 2 ? "#12142a" : "#151833"; ctx.fillRect(x * C, y * C, C, C);
+      }
+      snakeWalls.forEach((k) => {
+        const [wx, wy] = k.split(",").map(Number);
+        const g = ctx.createLinearGradient(0, wy * C, 0, wy * C + C); g.addColorStop(0, "#7c6f9b"); g.addColorStop(1, "#4b4266");
+        ctx.fillStyle = g; ctx.fillRect(wx * C + 1, wy * C + 1, C - 2, C - 2);
+        ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fillRect(wx * C + 1, wy * C + 1, C - 2, 3);
+      });
+      if (snakeGold) {
+        const left = Math.max(0, 1 - (now - snakeGold.t) / 5000), gx = snakeGold.x * C + C / 2, gy = snakeGold.y * C + C / 2;
+        ctx.shadowColor = "#ffd43b"; ctx.shadowBlur = 18;
+        ctx.fillStyle = "#ffd43b"; ctx.beginPath(); ctx.arc(gx, gy, C * 0.38 * (1 + Math.sin(now / 90) * 0.1), 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gx, gy, C * 0.52, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
       }
       if (snakeFood) {
         const pulse = 1 + Math.sin(now / 180) * 0.08, fx = snakeFood.x * C + C / 2, fy = snakeFood.y * C + C / 2;
@@ -5741,12 +5766,13 @@
       if (!snakeBody.length) return;
       const k = snakeState === "running" ? Math.max(0, Math.min(1, (now - snakeLastStep) / snakeStepMs)) : 1;
       const pts = snakeBody.map((s, i) => {
-        const p = snakePrev[i] || snakePrev[snakePrev.length - 1] || s;
-        // 穿墙不会发生（撞墙即死），直接线性插值
+        let p = snakePrev[i] || snakePrev[snakePrev.length - 1] || s;
+        if (Math.abs(p.x - s.x) > 1 || Math.abs(p.y - s.y) > 1) p = s; // 穿墙那一步不插值，免得横穿整个画面
         return { x: (p.x + (s.x - p.x) * k) * C + C / 2, y: (p.y + (s.y - p.y) * k) * C + C / 2 };
       });
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       for (let i = pts.length - 1; i > 0; i--) {
+        if (Math.abs(pts[i].x - pts[i - 1].x) > C * 1.5 || Math.abs(pts[i].y - pts[i - 1].y) > C * 1.5) continue;
         const t = i / Math.max(1, pts.length - 1);
         ctx.strokeStyle = "hsl(" + (145 - t * 25) + ",62%," + (52 - t * 16) + "%)";
         ctx.lineWidth = C * (0.78 - t * 0.18);
@@ -5768,11 +5794,11 @@
       if (snakeFoodCount === 2) { snakeFood = { x: 8, y: 11 }; return; } // 第二颗固定在正下方，转向后能吃到
       let p;
       do { p = { x: Math.floor(Math.random() * SNAKE_GRID), y: Math.floor(Math.random() * SNAKE_GRID) }; }
-      while (snakeBody.some((s) => s.x === p.x && s.y === p.y));
+      while (snakeBody.some((s) => s.x === p.x && s.y === p.y) || snakeWalls.has(p.x + "," + p.y));
       snakeFood = p;
     }
     function snakeReset() {
-      snakePrev = []; snakeTurnQ = []; snakeStepMs = 220;
+      snakePrev = []; snakeTurnQ = []; snakeStepMs = 220; snakeGold = null; snakeEaten = 0; snakeBuildWalls();
       snakeBody = [{ x: 5, y: 8 }, { x: 4, y: 8 }, { x: 3, y: 8 }]; // R14：出生点左移，零操作撞墙从 1.2 秒放宽到 2.4 秒，新手有时间反应
       snakeDir = { x: 1, y: 0 }; snakeNextDir = null; snakeScore = 0; snakeFoodCount = 0;
       snakePlaceFood();
@@ -5785,13 +5811,23 @@
       snakePrev = snakeBody.map((p) => ({ x: p.x, y: p.y }));
       snakeLastStep = performance.now();
       const head = { x: snakeBody[0].x + snakeDir.x, y: snakeBody[0].y + snakeDir.y };
+      if (snakeMode === "wrap") { head.x = (head.x + SNAKE_GRID) % SNAKE_GRID; head.y = (head.y + SNAKE_GRID) % SNAKE_GRID; }
+      if (snakeWalls.has(head.x + "," + head.y)) { snakeGameOver(); return; }
+      if (snakeGold && performance.now() - snakeGold.t > 5000) snakeGold = null;
+      if (snakeGold && head.x === snakeGold.x && head.y === snakeGold.y) {
+        snakeGold = null; snakeScore += 3; snakeUpdateScore(); SFX.coin(); FX.buzz([15, 30, 15]);
+        const r = snakeCanvas.getBoundingClientRect(), sc = r.width / 320;
+        FX.sparkle(r.left + (head.x + 0.5) * SNAKE_CELL * sc, r.top + (head.y + 0.5) * SNAKE_CELL * sc, ["#ffd43b", "#fff"], 18);
+        FX.float("+3", r.left + (head.x + 0.5) * SNAKE_CELL * sc, r.top + head.y * SNAKE_CELL * sc, "#ffd43b");
+      }
       // R26：头撞进尾巴当前格不算撞自己——尾巴本步会挪走；只有吃豆那步尾巴不动，才算撞
       const snakeWillEat = snakeFood && head.x === snakeFood.x && head.y === snakeFood.y;
       const snakeBodyToCheck = snakeWillEat ? snakeBody : snakeBody.slice(0, -1);
       if (head.x < 0 || head.y < 0 || head.x >= SNAKE_GRID || head.y >= SNAKE_GRID || snakeBodyToCheck.some((s) => s.x === head.x && s.y === head.y)) { snakeGameOver(); return; }
       snakeBody.unshift(head);
       if (snakeFood && head.x === snakeFood.x && head.y === snakeFood.y) {
-        snakeScore++;
+        snakeScore++; snakeEaten++;
+        if (snakeEaten % 5 === 0) { let p, g = 0; do { p = { x: Math.floor(Math.random() * SNAKE_GRID), y: Math.floor(Math.random() * SNAKE_GRID) }; } while (g++ < 200 && (snakeBody.some((q) => q.x === p.x && q.y === p.y) || snakeWalls.has(p.x + "," + p.y) || (snakeFood && snakeFood.x === p.x && snakeFood.y === p.y))); snakeGold = { x: p.x, y: p.y, t: performance.now() }; }
         SFX.pop(Math.min(1, snakeScore / 30));
         { const r = snakeCanvas.getBoundingClientRect(), sc = r.width / 320; const px = r.left + (head.x + 0.5) * SNAKE_CELL * sc, py = r.top + (head.y + 0.5) * SNAKE_CELL * sc;
           FX.sparkle(px, py, ["#ff6b6b", "#ffd43b", "#fff"], 12); FX.float("+1", px, py - 10, "#ffd43b"); FX.buzz(8); }
@@ -5860,6 +5896,15 @@
     });
     snakeCanvas.addEventListener("pointerup", () => { snakeSwipe = null; });
     snakeCanvas.addEventListener("pointercancel", () => { snakeSwipe = null; });
+    document.querySelectorAll("#snakeModes [data-mode]").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-mode") === snakeMode);
+      b.addEventListener("click", () => {
+        if (snakeState === "running") return;
+        snakeMode = b.getAttribute("data-mode"); lsSet(SNAKE_MODE_KEY, snakeMode);
+        document.querySelectorAll("#snakeModes [data-mode]").forEach((x) => x.classList.toggle("active", x === b));
+        snakeState = "idle"; snakeReset(); $("snakeStatus").textContent = { classic: "经典：撞墙或咬到自己就结束。", wrap: "穿墙：从一边出去会从对边回来，只怕咬到自己。", walls: "障碍：场上有砖墙，别撞上。" }[snakeMode];
+      });
+    });
     snakeReset();
     toyLeaveCleanup.snake = () => { snakePause(); }; // 退出就停，不然切走还在走
 

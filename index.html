@@ -746,7 +746,8 @@
   <!-- 贪吃蛇 -->
   <section class="panel toy hidden" id="toy-snake">
     <h2>🐍 贪吃蛇</h2>
-    <p class="hint">方向键、屏幕按钮或者手指滑动都能控制。吃到红点长一节，撞墙或者咬到自己就结束。第一颗红点就在你正前方，先吃一口找找感觉。</p>
+    <p class="hint">方向键、屏幕按钮或者手指滑动都能控制。吃到红点长一节；每吃 5 个会出现限时 5 秒的金苹果，值 3 分。三种模式：经典（撞墙就输）、穿墙（从对边钻出来）、障碍（场上有砖墙）。</p>
+    <div class="seg" id="snakeModes"><button class="seg-btn" data-mode="classic">经典</button><button class="seg-btn" data-mode="wrap">穿墙</button><button class="seg-btn" data-mode="walls">障碍</button></div>
     <canvas id="snakeCanvas" width="320" height="320"></canvas>
     <p class="result-line" id="snakeScore">得分 0 · 最高 0</p>
     <p class="result-line" id="snakeStatus">点开始，蛇就动起来。</p>
